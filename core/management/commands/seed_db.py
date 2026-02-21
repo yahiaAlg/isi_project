@@ -638,14 +638,14 @@ class Command(BaseCommand):
             FormationCategory,
             Participant,
             Session,
+            Trainer,
+            TrainingRoom,
         )
         from resources.models import (
             Equipment,
             EquipmentBooking,
             EquipmentUsage,
             MaintenanceLog,
-            Trainer,
-            TrainingRoom,
         )
         from clients.models import Client, ClientContact
         from accounts.models import UserProfile
@@ -759,7 +759,8 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------ #
 
     def _seed_resources(self):
-        from resources.models import Equipment, MaintenanceLog, Trainer, TrainingRoom
+        from formations.models import Trainer, TrainingRoom
+        from resources.models import Equipment, MaintenanceLog
 
         self._log("Seeding trainers…")
         for t in TRAINERS:
@@ -812,8 +813,9 @@ class Command(BaseCommand):
             FormationCategory,
             Participant,
             Session,
+            Trainer,
+            TrainingRoom,
         )
-        from resources.models import Trainer, TrainingRoom
 
         self._log("Seeding formation categories…")
         cat_map = {}

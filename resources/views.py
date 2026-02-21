@@ -9,13 +9,12 @@ from django.utils import timezone
 from core.utils import admin_required, login_and_active_required
 from resources.forms import *
 from resources.forms import _BookingForm
+from formations.models import Trainer, TrainingRoom
 from resources.models import (
     Equipment,
     EquipmentBooking,
     EquipmentUsage,
     MaintenanceLog,
-    Trainer,
-    TrainingRoom,
 )
 from resources.utils import (
     booking_conflicts_for_period,

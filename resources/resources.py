@@ -11,7 +11,7 @@ from formations.models import (
     Participant,
     Session,
 )
-from resources.models import Trainer, TrainingRoom
+from formations.models import Trainer, TrainingRoom
 
 
 class FormationCategoryResource(resources.ModelResource):

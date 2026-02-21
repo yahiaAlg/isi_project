@@ -5,11 +5,9 @@ Forms for resources app.
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-
+from formations.models import Trainer, TrainingRoom
 from .models import (
     EquipmentBooking,
-    Trainer,
-    TrainingRoom,
     Equipment,
     EquipmentUsage,
     MaintenanceLog,
