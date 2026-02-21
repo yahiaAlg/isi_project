@@ -20,7 +20,6 @@ from financial.forms import (
     InvoiceItemForm,
     PaymentForm,
     ReportFilterForm,
-    VoidInvoiceForm,
 )
 from financial.models import (
     CreditNote,

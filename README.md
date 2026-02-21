@@ -5,10 +5,12 @@ A Django backend implementation for an Industrial Safety Institute management sy
 ## Features
 
 ### Business Lines
+
 - **Formations** - Professional safety training & certification
 - **Études** - Industrial safety consulting & study projects
 
 ### Core Modules
+
 - **Clients** - Client records, contact info, activity history
 - **Formations** - Training catalog, sessions, enrollments, attestations
 - **Études** - Study projects, phases, deliverables
@@ -17,14 +19,15 @@ A Django backend implementation for an Industrial Safety Institute management sy
 - **Reporting** - Dashboard, KPIs, revenue reports
 
 ### User Roles
+
 - **Administrateur** - Full access to all modules and financials
 - **Réceptionniste** - Data entry access only (clients, enrollments, basic project info)
 
 ## Project Structure
 
 ```
-isi_backend/
-├── isi_backend/          # Project settings
+config/
+├── config/          # Project settings
 │   ├── settings.py
 │   ├── urls.py
 │   ├── wsgi.py
@@ -72,27 +75,32 @@ isi_backend/
 ## Installation
 
 1. Create a virtual environment:
+
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
 2. Install dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 3. Run migrations:
+
 ```bash
 python manage.py migrate
 ```
 
 4. Create a superuser:
+
 ```bash
 python manage.py createsuperuser
 ```
 
 5. Run the development server:
+
 ```bash
 python manage.py runserver
 ```
@@ -110,6 +118,7 @@ After creating the superuser, access the Django admin at `/admin/` and configure
 ### TVA Rate
 
 The default TVA rate is 19% (Algerian standard). This can be configured in:
+
 - `settings.py` - `TVA_RATE` setting
 - Individual business line settings in `BureauEtudeInfo` and `FormationInfo`
 
@@ -125,6 +134,7 @@ The default TVA rate is 19% (Algerian standard). This can be configured in:
 ## API Endpoints
 
 ### Accounts
+
 - `GET/POST /accounts/login/` - Login
 - `POST /accounts/logout/` - Logout
 - `GET /accounts/users/` - User list (admin only)
@@ -132,6 +142,7 @@ The default TVA rate is 19% (Algerian standard). This can be configured in:
 - `GET/POST /accounts/users/<id>/edit/` - Edit user (admin only)
 
 ### Clients
+
 - `GET /clients/` - Client list
 - `GET/POST /clients/create/` - Create client
 - `GET /clients/<id>/` - Client detail
@@ -139,6 +150,7 @@ The default TVA rate is 19% (Algerian standard). This can be configured in:
 - `POST /clients/<id>/delete/` - Delete client (admin only)
 
 ### Formations
+
 - `GET /formations/` - Formation catalog
 - `GET /formations/sessions/` - Session list
 - `GET /formations/sessions/<id>/` - Session detail
@@ -147,6 +159,7 @@ The default TVA rate is 19% (Algerian standard). This can be configured in:
 - `GET /formations/participants/<id>/attestation/` - View attestation
 
 ### Financial
+
 - `GET /financial/invoices/` - Invoice list (admin only)
 - `GET /financial/invoices/<id>/` - Invoice detail (admin only)
 - `GET /financial/invoices/<id>/print/` - Printable invoice (admin only)
@@ -154,6 +167,7 @@ The default TVA rate is 19% (Algerian standard). This can be configured in:
 - `GET /financial/expenses/` - Expense list (admin only)
 
 ### Reporting
+
 - `GET /` - Dashboard
 - `GET /reporting/revenue/` - Revenue report (admin only)
 - `GET /reporting/margins/` - Margins report (admin only)
@@ -170,15 +184,19 @@ Use `@media print` CSS rules for print optimization.
 ## Development Notes
 
 ### Function-Based Views
+
 All views are implemented as function-based views following Django best practices.
 
 ### Post-Redirect-Get Pattern
+
 All POST requests redirect to a GET request to prevent duplicate submissions.
 
 ### Minimal AJAX
+
 AJAX is used sparingly via `JsonResponse` only when explicitly required.
 
 ### Role-Based Access
+
 Views check `request.user.profile.is_admin` to restrict access to financial data.
 
 ## License

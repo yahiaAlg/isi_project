@@ -1,5 +1,5 @@
 # =============================================================================
-# isi_project/settings.py
+# config/settings.py
 # =============================================================================
 
 from pathlib import Path
@@ -74,9 +74,9 @@ if DEBUG:
 
 # ── URL & WSGI ────────────────────────────────────────────────────────────── #
 
-ROOT_URLCONF = "isi_project.urls"
+ROOT_URLCONF = "config.urls"
 
-WSGI_APPLICATION = "isi_project.wsgi.application"
+WSGI_APPLICATION = "config.wsgi.application"
 
 
 # ── Templates ─────────────────────────────────────────────────────────────── #

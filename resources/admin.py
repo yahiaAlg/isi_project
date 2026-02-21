@@ -3,13 +3,15 @@
 # =============================================================================
 
 from django.contrib import admin
+from formations.models import (
+    Trainer,
+    TrainingRoom,
+)
 from resources.models import (
     Equipment,
     EquipmentBooking,
     EquipmentUsage,
     MaintenanceLog,
-    Trainer,
-    TrainingRoom,
 )
 
 

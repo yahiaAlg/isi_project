@@ -109,6 +109,104 @@ class Formation(TimeStampedModel):
         ).count()
 
 
+class Trainer(TimeStampedModel):
+    """
+    An external trainer engaged on a per-session basis.
+    """
+
+    first_name = models.CharField(max_length=100, verbose_name="Prénom")
+    last_name = models.CharField(max_length=100, verbose_name="Nom")
+    specialty = models.CharField(max_length=255, blank=True, verbose_name="Spécialité")
+    daily_rate = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0, verbose_name="Tarif journalier (DA)"
+    )
+    phone = models.CharField(max_length=50, blank=True, verbose_name="Téléphone")
+    email = models.EmailField(blank=True, verbose_name="Email")
+
+    # ---- Qualifications ---------------------------------------------- #
+    certifications = models.TextField(
+        blank=True, verbose_name="Certifications et habilitations"
+    )
+    cv = models.FileField(upload_to="trainers/cvs/", blank=True, verbose_name="CV")
+
+    notes = models.TextField(blank=True, verbose_name="Notes")
+    is_active = models.BooleanField(default=True, verbose_name="Actif")
+
+    class Meta:
+        verbose_name = "Formateur"
+        verbose_name_plural = "Formateurs"
+        ordering = ["last_name", "first_name"]
+
+    def __str__(self):
+        return self.full_name
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+    @property
+    def session_count(self):
+        return self.sessions.count()
+
+    @property
+    def total_earnings(self):
+        """
+        Total fee owed/paid based on actual session duration in days.
+
+        Previously this was `session_count × daily_rate` which is wrong:
+        it assumes every session lasts exactly 1 day.  We now sum the
+        duration (date_end − date_start + 1) for each session.
+        """
+        sessions = self.sessions.all()
+        total_days = sum((s.date_end - s.date_start).days + 1 for s in sessions)
+        return total_days * self.daily_rate
+
+    @property
+    def upcoming_sessions(self):
+        return self.sessions.filter(date_start__gte=timezone.now().date()).order_by(
+            "date_start"
+        )
+
+
+class TrainingRoom(TimeStampedModel):
+    """
+    An internal training room with capacity management.
+    """
+
+    name = models.CharField(max_length=255, verbose_name="Nom")
+    capacity = models.PositiveIntegerField(default=20, verbose_name="Capacité")
+    location = models.CharField(max_length=255, blank=True, verbose_name="Emplacement")
+    description = models.TextField(blank=True, verbose_name="Description")
+    # Equipment permanently installed in this room
+    has_projector = models.BooleanField(default=False, verbose_name="Projecteur")
+    has_whiteboard = models.BooleanField(default=False, verbose_name="Tableau blanc")
+    has_ac = models.BooleanField(default=False, verbose_name="Climatisation")
+    is_active = models.BooleanField(default=True, verbose_name="Active")
+
+    class Meta:
+        verbose_name = "Salle de formation"
+        verbose_name_plural = "Salles de formation"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def session_count(self):
+        return self.sessions.count()
+
+    def is_available(self, date_start, date_end, exclude_session=None):
+        """Return True if the room is free for the given date range."""
+        qs = self.sessions.filter(
+            status__in=["planned", "in_progress"],
+            date_start__lte=date_end,
+            date_end__gte=date_start,
+        )
+        if exclude_session:
+            qs = qs.exclude(pk=exclude_session.pk)
+        return not qs.exists()
+
+
 class Session(TimeStampedModel):
     """
     A scheduled instance of a training program.
@@ -145,7 +243,7 @@ class Session(TimeStampedModel):
     date_end = models.DateField(verbose_name="Date de fin")
 
     trainer = models.ForeignKey(
-        "resources.Trainer",
+        "Trainer",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -153,7 +251,7 @@ class Session(TimeStampedModel):
         verbose_name="Formateur",
     )
     room = models.ForeignKey(
-        "resources.TrainingRoom",
+        "TrainingRoom",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

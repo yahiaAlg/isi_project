@@ -1,11 +1,11 @@
 """
-ASGI config for isi_backend project.
+ASGI config for config project.
 """
 
 import os
 
 from django.core.asgi import get_asgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'isi_backend.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 application = get_asgi_application()
