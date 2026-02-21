@@ -1,30 +1,19 @@
-"""
-Context processors for core app.
-"""
-from .models import InstituteInfo, BureauEtudeInfo, FormationInfo
+# =============================================================================
+# core/context_processors.py
+# (small companion file — injected into every template context)
+# =============================================================================
 
 
 def institute_info(request):
     """
-    Add institute information to template context.
+    Inject the InstituteInfo singleton into every template so headers,
+    footers, and printed documents always have access to institute details
+    without each view having to fetch it manually.
     """
+    from core.models import InstituteInfo
+
     try:
-        institute = InstituteInfo.get_instance()
-    except:
-        institute = None
-    
-    try:
-        bureau_etude = BureauEtudeInfo.get_instance()
-    except:
-        bureau_etude = None
-    
-    try:
-        formation_info = FormationInfo.get_instance()
-    except:
-        formation_info = None
-    
-    return {
-        'INSTITUTE': institute,
-        'BUREAU_ETUDE': bureau_etude,
-        'FORMATION_INFO': formation_info,
-    }
+        info = InstituteInfo.get_instance()
+    except Exception:
+        info = None
+    return {"institute": info}

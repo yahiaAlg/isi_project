@@ -1,3 +1,33 @@
-Django>=4.2,<5.0
-django-import-export>=3.3.0
-python-dateutil>=2.8.2
+# =============================================================================
+# requirements.txt
+# =============================================================================
+#
+# Django ISI — Industrial Safety Institute Management System
+# Python 3.11+
+#
+# Install: pip install -r requirements.txt
+# =============================================================================
+
+# ── Core ─────────────────────────────────────────────────────────────────── #
+Django
+
+# ── Database ─────────────────────────────────────────────────────────────── #
+# Default: SQLite (dev). Swap to psycopg2-binary for PostgreSQL in production.
+# psycopg2-binary
+
+# ── Image handling (avatar, logo, signature uploads) ─────────────────────── #
+Pillow
+
+# ── Import/Export (participant bulk import, data export) ─────────────────── #
+django-import-export
+openpyxl
+tablib
+
+# ── Static files (production) ────────────────────────────────────────────── #
+whitenoise
+
+# ── Environment variable management ──────────────────────────────────────── #
+python-decouple
+
+# ── Dev / debug tooling (remove or pin to dev deps in production) ─────────── #
+django-debug-toolbar
