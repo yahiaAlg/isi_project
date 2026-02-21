@@ -3,6 +3,9 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
+from formations.models import TrainingRoom
+
+from formations.models import Trainer
 
 from formations.models import (
     Attestation,
@@ -148,10 +151,8 @@ class SessionForm(forms.ModelForm):
         # Only show active formations in dropdown
         self.fields["formation"].queryset = Formation.objects.filter(is_active=True)
         # Rooms from resources
-        from resources.models import TrainingRoom
 
         self.fields["room"].queryset = TrainingRoom.objects.filter(is_active=True)
-        from resources.models import Trainer
 
         self.fields["trainer"].queryset = Trainer.objects.filter(is_active=True)
         self.fields["client"].required = False

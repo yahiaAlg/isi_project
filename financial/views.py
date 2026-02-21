@@ -80,7 +80,7 @@ def invoice_list(request):
     return render(
         request,
         "financial/invoice_list.html",
-        {"page_obj": page_obj, "filter_form": form},
+        {"page_obj": page_obj, "filter_form": form, "today": timezone.now().date()},
     )
 
 
@@ -187,7 +187,7 @@ def invoice_create_from_project(request, project_pk):
 @admin_required
 def invoice_edit(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
-    if invoice.status == Invoice.STATUS_VOID:
+    if invoice.status == Invoice.STATUS_VOIDED:
         messages.error(request, "Une facture annulée ne peut pas être modifiée.")
         return redirect("financial:invoice_detail", pk=pk)
 
@@ -207,13 +207,13 @@ def invoice_edit(request, pk):
 @admin_required
 def invoice_void(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
-    if invoice.status == Invoice.STATUS_VOID:
+    if invoice.status == Invoice.STATUS_VOIDED:
         messages.error(request, "Cette facture est déjà annulée.")
         return redirect("financial:invoice_detail", pk=pk)
 
     form = VoidInvoiceForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        invoice.status = Invoice.STATUS_VOID
+        invoice.status = Invoice.STATUS_VOIDED
         reason = form.cleaned_data.get("reason", "")
         if reason:
             invoice.notes = (invoice.notes + "\nAnnulation: " + reason).strip()
@@ -326,7 +326,7 @@ def item_delete(request, invoice_pk, pk):
 @admin_required
 def payment_add(request, invoice_pk):
     invoice = get_object_or_404(Invoice, pk=invoice_pk)
-    if invoice.status in [Invoice.STATUS_PAID, Invoice.STATUS_VOID]:
+    if invoice.status in [Invoice.STATUS_PAID, Invoice.STATUS_VOIDED]:
         messages.error(request, "Cette facture ne peut plus recevoir de paiement.")
         return redirect("financial:invoice_detail", pk=invoice_pk)
 

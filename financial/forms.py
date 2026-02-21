@@ -1,10 +1,18 @@
 # financial/forms.py
+# =============================================================================
+# All forms for the financial module.
+# ISIFormMixin auto-applies Bootstrap 5 CSS classes (form-control /
+# form-select / form-check-input) to every widget so that templates can use
+# {{ form.field_name }} directly without manual class injection.
+# =============================================================================
 
 from decimal import Decimal
 
 from django import forms
 from django.core.exceptions import ValidationError
 
+from clients.models import Client
+from core.form_mixins import ISIFormMixin
 from financial.models import (
     CreditNote,
     Expense,
@@ -16,12 +24,12 @@ from financial.models import (
 )
 
 
-# ======================================================================= #
-# Invoices
-# ======================================================================= #
+# ---------------------------------------------------------------------------
+# Invoice forms
+# ---------------------------------------------------------------------------
 
 
-class InvoiceForm(forms.ModelForm):
+class InvoiceForm(ISIFormMixin, forms.ModelForm):
     class Meta:
         model = Invoice
         fields = [
@@ -49,79 +57,56 @@ class InvoiceForm(forms.ModelForm):
         widgets = {
             "invoice_date": forms.DateInput(attrs={"type": "date"}),
             "due_date": forms.DateInput(attrs={"type": "date"}),
-            "notes": forms.Textarea(attrs={"rows": 2}),
-            "footer_text": forms.Textarea(attrs={"rows": 2}),
+            "notes": forms.Textarea(attrs={"rows": 3}),
+            "footer_text": forms.Textarea(attrs={"rows": 3}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Only active clients in the dropdown
+        self.fields["client"].queryset = Client.objects.filter(is_active=True).order_by(
+            "name"
+        )
+        self.fields["due_date"].required = False
         self.fields["session"].required = False
         self.fields["study_project"].required = False
-        self.fields["due_date"].required = False
+        self.fields["notes"].required = False
         self.fields["footer_text"].required = False
-        # Limit sessions to invoiceable ones (completed, not yet invoiced)
-        from formations.models import Session
-
-        self.fields["session"].queryset = Session.objects.filter(
-            status=Session.STATUS_COMPLETED
-        )
-        from etudes.models import StudyProject
-
-        self.fields["study_project"].queryset = StudyProject.objects.filter(
-            status=StudyProject.STATUS_COMPLETED
-        )
-
-    def clean_tva_rate(self):
-        rate = self.cleaned_data.get("tva_rate")
-        if rate is not None and not (0 <= rate <= 1):
-            raise ValidationError("Le taux TVA doit être compris entre 0 et 1.")
-        return rate
 
     def clean(self):
-        cleaned_data = super().clean()
-        inv_type = cleaned_data.get("invoice_type")
-        session = cleaned_data.get("session")
-        project = cleaned_data.get("study_project")
-
+        cleaned = super().clean()
+        inv_type = cleaned.get("invoice_type")
+        session = cleaned.get("session")
+        project = cleaned.get("study_project")
+        # Soft validation: warn when type/link mismatch
         if inv_type == Invoice.TYPE_FORMATION and project:
             self.add_error(
                 "study_project",
-                "Une facture Formation ne doit pas être liée à un projet.",
+                "Une facture Formation ne devrait pas être liée à un projet.",
             )
         if inv_type == Invoice.TYPE_ETUDE and session:
             self.add_error(
-                "session", "Une facture Étude ne doit pas être liée à une session."
+                "session",
+                "Une facture Étude ne devrait pas être liée à une session.",
             )
-        if session and project:
-            self.add_error(
-                "study_project",
-                "Liez la facture à une session ou à un projet, pas les deux.",
-            )
-
-        due = cleaned_data.get("due_date")
-        invoice_date = cleaned_data.get("invoice_date")
-        if due and invoice_date and due < invoice_date:
-            self.add_error(
-                "due_date", "L'échéance doit être postérieure à la date de facturation."
-            )
-        return cleaned_data
+        return cleaned
 
 
-class InvoiceFilterForm(forms.Form):
+class InvoiceFilterForm(ISIFormMixin, forms.Form):
     q = forms.CharField(
         label="Recherche",
         required=False,
         widget=forms.TextInput(attrs={"placeholder": "Référence, client…"}),
     )
-    invoice_type = forms.ChoiceField(
-        label="Type",
-        required=False,
-        choices=[("", "Tous")] + Invoice.TYPE_CHOICES,
-    )
     status = forms.ChoiceField(
         label="Statut",
         required=False,
         choices=[("", "Tous")] + Invoice.STATUS_CHOICES,
+    )
+    invoice_type = forms.ChoiceField(
+        label="Type",
+        required=False,
+        choices=[("", "Tous")] + Invoice.TYPE_CHOICES,
     )
     date_from = forms.DateField(
         label="Du",
@@ -133,76 +118,54 @@ class InvoiceFilterForm(forms.Form):
         required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
     )
-    overdue_only = forms.BooleanField(label="En retard uniquement", required=False)
-
-
-class InvoiceVoidForm(forms.Form):
-    reason = forms.CharField(
-        label="Motif d'annulation",
-        widget=forms.Textarea(attrs={"rows": 3}),
+    client = forms.ModelChoiceField(
+        label="Client",
+        required=False,
+        queryset=Client.objects.filter(is_active=True).order_by("name"),
+        empty_label="Tous les clients",
     )
 
 
-# ======================================================================= #
-# Invoice line items
-# ======================================================================= #
+# ---------------------------------------------------------------------------
+# Invoice line-item form
+# ---------------------------------------------------------------------------
 
 
-class InvoiceItemForm(forms.ModelForm):
+class InvoiceItemForm(ISIFormMixin, forms.ModelForm):
     class Meta:
         model = InvoiceItem
         fields = [
             "description",
             "quantity",
-            "unit",
             "unit_price_ht",
             "discount_percent",
             "order",
-            "session",
-            "project_phase",
         ]
         labels = {
-            "description": "Désignation",
-            "quantity": "Quantité",
-            "unit": "Unité",
-            "unit_price_ht": "Prix unitaire HT (DA)",
+            "description": "Description",
+            "quantity": "Qté",
+            "unit_price_ht": "P.U. HT (DA)",
             "discount_percent": "Remise (%)",
             "order": "Ordre",
-            "session": "Session liée",
-            "project_phase": "Phase liée",
+        }
+        widgets = {
+            "description": forms.TextInput(
+                attrs={"placeholder": "Intitulé de la prestation"}
+            ),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["unit"].required = False
-        self.fields["session"].required = False
-        self.fields["project_phase"].required = False
-
-    def clean_quantity(self):
-        qty = self.cleaned_data.get("quantity")
-        if qty is not None and qty <= 0:
-            raise ValidationError("La quantité doit être strictement positive.")
-        return qty
-
-    def clean_unit_price_ht(self):
-        price = self.cleaned_data.get("unit_price_ht")
-        if price is not None and price < 0:
-            raise ValidationError("Le prix unitaire ne peut pas être négatif.")
-        return price
-
-    def clean_discount_percent(self):
-        d = self.cleaned_data.get("discount_percent", Decimal("0"))
-        if d is not None and not (0 <= d <= 100):
-            raise ValidationError("La remise doit être comprise entre 0 et 100 %.")
-        return d
+        self.fields["discount_percent"].required = False
+        self.fields["order"].required = False
 
 
-# ======================================================================= #
-# Payments
-# ======================================================================= #
+# ---------------------------------------------------------------------------
+# Payment forms
+# ---------------------------------------------------------------------------
 
 
-class PaymentForm(forms.ModelForm):
+class PaymentForm(ISIFormMixin, forms.ModelForm):
     class Meta:
         model = Payment
         fields = ["date", "amount", "method", "status", "reference", "notes"]
@@ -219,41 +182,18 @@ class PaymentForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
 
-    def __init__(self, *args, invoice=None, **kwargs):
-        self.invoice = invoice
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["reference"].required = False
         self.fields["notes"].required = False
 
-    def clean_amount(self):
-        amount = self.cleaned_data.get("amount")
-        if amount is not None and amount <= 0:
-            raise ValidationError("Le montant doit être positif.")
-        return amount
 
-    def clean(self):
-        cleaned_data = super().clean()
-        if self.invoice and cleaned_data.get("amount"):
-            amount = cleaned_data["amount"]
-            already_paid = self.invoice.amount_paid
-            # Subtract own amount when editing
-            if self.instance.pk:
-                already_paid -= self.instance.amount or Decimal("0")
-            if (already_paid + amount) > self.invoice.amount_ttc:
-                self.add_error(
-                    "amount",
-                    f"Ce paiement dépasserait le total de la facture "
-                    f"({self.invoice.amount_ttc:,.2f} DA).",
-                )
-        return cleaned_data
+# ---------------------------------------------------------------------------
+# Credit note form
+# ---------------------------------------------------------------------------
 
 
-# ======================================================================= #
-# Credit notes
-# ======================================================================= #
-
-
-class CreditNoteForm(forms.ModelForm):
+class CreditNoteForm(ISIFormMixin, forms.ModelForm):
     class Meta:
         model = CreditNote
         fields = [
@@ -265,11 +205,11 @@ class CreditNoteForm(forms.ModelForm):
             "notes",
         ]
         labels = {
-            "date": "Date de l'avoir",
+            "date": "Date",
             "reason": "Motif",
             "amount_ht": "Montant HT (DA)",
             "tva_rate": "Taux TVA",
-            "is_full_reversal": "Annulation totale de la facture",
+            "is_full_reversal": "Annulation totale",
             "notes": "Notes",
         }
         widgets = {
@@ -278,63 +218,24 @@ class CreditNoteForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
 
-    def __init__(self, *args, invoice=None, **kwargs):
-        self.invoice = invoice
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["notes"].required = False
-        if invoice:
-            self.fields["tva_rate"].initial = invoice.tva_rate
+        self.fields["tva_rate"].initial = Decimal("0.19")
 
     def clean_amount_ht(self):
         amount = self.cleaned_data.get("amount_ht")
         if amount is not None and amount <= 0:
             raise ValidationError("Le montant doit être positif.")
-        if self.invoice and amount and amount > self.invoice.amount_ht:
-            raise ValidationError(
-                f"Le montant HT de l'avoir ({amount:,.2f} DA) ne peut pas dépasser "
-                f"celui de la facture ({self.invoice.amount_ht:,.2f} DA)."
-            )
         return amount
 
-    def clean(self):
-        cleaned_data = super().clean()
-        if cleaned_data.get("is_full_reversal") and self.invoice:
-            # Force amount to match original invoice
-            cleaned_data["amount_ht"] = self.invoice.amount_ht
-        return cleaned_data
+
+# ---------------------------------------------------------------------------
+# Expense forms
+# ---------------------------------------------------------------------------
 
 
-# ======================================================================= #
-# Expenses
-# ======================================================================= #
-
-
-class ExpenseCategoryForm(forms.ModelForm):
-    class Meta:
-        model = ExpenseCategory
-        fields = ["name", "description", "is_direct_cost", "color"]
-        labels = {
-            "name": "Catégorie",
-            "description": "Description",
-            "is_direct_cost": "Coût direct",
-            "color": "Couleur",
-        }
-        widgets = {
-            "description": forms.Textarea(attrs={"rows": 2}),
-            "color": forms.TextInput(attrs={"type": "color"}),
-        }
-
-    def clean_name(self):
-        name = self.cleaned_data.get("name", "").strip()
-        qs = ExpenseCategory.objects.filter(name__iexact=name)
-        if self.instance.pk:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise ValidationError("Cette catégorie existe déjà.")
-        return name
-
-
-class ExpenseForm(forms.ModelForm):
+class ExpenseForm(ISIFormMixin, forms.ModelForm):
     class Meta:
         model = Expense
         fields = [
@@ -356,7 +257,7 @@ class ExpenseForm(forms.ModelForm):
             "category": "Catégorie",
             "description": "Description",
             "amount": "Montant (DA)",
-            "supplier": "Fournisseur",
+            "supplier": "Fournisseur / bénéficiaire",
             "payment_reference": "Réf. paiement",
             "allocated_to_session": "Session",
             "allocated_to_project": "Projet",
@@ -367,60 +268,20 @@ class ExpenseForm(forms.ModelForm):
         }
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
-            "notes": forms.Textarea(attrs={"rows": 2}),
+            "notes": forms.Textarea(attrs={"rows": 3}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["allocated_to_session"].required = False
-        self.fields["allocated_to_project"].required = False
         self.fields["supplier"].required = False
         self.fields["payment_reference"].required = False
+        self.fields["allocated_to_session"].required = False
+        self.fields["allocated_to_project"].required = False
         self.fields["receipt"].required = False
         self.fields["notes"].required = False
-        # Limit project choices to active ones
-        from etudes.models import StudyProject
-
-        self.fields["allocated_to_project"].queryset = StudyProject.objects.filter(
-            status=StudyProject.STATUS_IN_PROGRESS
-        )
-        from formations.models import Session
-
-        self.fields["allocated_to_session"].queryset = Session.objects.filter(
-            status__in=[
-                Session.STATUS_PLANNED,
-                Session.STATUS_IN_PROGRESS,
-                Session.STATUS_COMPLETED,
-            ]
-        )
-
-    def clean_amount(self):
-        amount = self.cleaned_data.get("amount")
-        if amount is not None and amount <= 0:
-            raise ValidationError("Le montant doit être positif.")
-        return amount
-
-    def clean(self):
-        cleaned_data = super().clean()
-        session = cleaned_data.get("allocated_to_session")
-        project = cleaned_data.get("allocated_to_project")
-        overhead = cleaned_data.get("is_overhead")
-        filled = sum([bool(session), bool(project), bool(overhead)])
-        if filled == 0:
-            raise ValidationError(
-                "Imputez la dépense à une session, un projet, ou cochez 'Frais généraux'."
-            )
-        if filled > 1:
-            raise ValidationError(
-                "Une dépense ne peut être imputée qu'à un seul centre de coût."
-            )
-        # If receipt uploaded, clear the missing flag
-        if cleaned_data.get("receipt"):
-            cleaned_data["receipt_missing"] = False
-        return cleaned_data
 
 
-class ExpenseFilterForm(forms.Form):
+class ExpenseFilterForm(ISIFormMixin, forms.Form):
     q = forms.CharField(
         label="Recherche",
         required=False,
@@ -447,30 +308,36 @@ class ExpenseFilterForm(forms.Form):
         required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
     )
-    needs_action = forms.BooleanField(label="Action requise uniquement", required=False)
 
 
-class ExpenseApprovalForm(forms.Form):
-    approval_status = forms.ChoiceField(
-        label="Décision",
-        choices=[
-            (Expense.APPROVAL_APPROVED, "Approuver"),
-            (Expense.APPROVAL_REJECTED, "Refuser"),
-        ],
-    )
-    approval_notes = forms.CharField(
-        label="Notes",
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 2}),
-    )
+class ExpenseCategoryForm(ISIFormMixin, forms.ModelForm):
+    class Meta:
+        model = ExpenseCategory
+        fields = ["name", "description", "is_direct_cost", "color"]
+        labels = {
+            "name": "Nom",
+            "description": "Description",
+            "is_direct_cost": "Coût direct",
+            "color": "Couleur (hex)",
+        }
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 2}),
+            "color": forms.TextInput(
+                attrs={"type": "color", "style": "height:38px;padding:4px 6px;"}
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["description"].required = False
 
 
-# ======================================================================= #
-# Financial periods
-# ======================================================================= #
+# ---------------------------------------------------------------------------
+# Financial period forms
+# ---------------------------------------------------------------------------
 
 
-class FinancialPeriodForm(forms.ModelForm):
+class FinancialPeriodForm(ISIFormMixin, forms.ModelForm):
     class Meta:
         model = FinancialPeriod
         fields = ["name", "period_type", "date_start", "date_end", "notes"]
@@ -487,25 +354,37 @@ class FinancialPeriodForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["notes"].required = False
+
     def clean(self):
-        cleaned_data = super().clean()
-        start = cleaned_data.get("date_start")
-        end = cleaned_data.get("date_end")
-        if start and end and end <= start:
-            self.add_error(
-                "date_end", "La date de fin doit être postérieure à la date de début."
+        cleaned = super().clean()
+        date_start = cleaned.get("date_start")
+        date_end = cleaned.get("date_end")
+        if date_start and date_end and date_end < date_start:
+            raise ValidationError(
+                "La date de fin doit être postérieure à la date de début."
             )
-        return cleaned_data
+        return cleaned
 
 
-class ReportFilterForm(forms.Form):
-    """Shared date-range filter for all financial reports."""
+# ---------------------------------------------------------------------------
+# Reporting filter form
+# ---------------------------------------------------------------------------
+
+
+class ReportFilterForm(ISIFormMixin, forms.Form):
+    """
+    Used by financial analytics views.
+    Either select a named FinancialPeriod OR specify a manual date range.
+    """
 
     period = forms.ModelChoiceField(
         label="Période",
         required=False,
-        queryset=FinancialPeriod.objects.all(),
-        empty_label="Période personnalisée",
+        queryset=FinancialPeriod.objects.order_by("-date_start"),
+        empty_label="— Période personnalisée —",
     )
     date_from = forms.DateField(
         label="Du",
@@ -518,23 +397,29 @@ class ReportFilterForm(forms.Form):
         widget=forms.DateInput(attrs={"type": "date"}),
     )
     invoice_type = forms.ChoiceField(
-        label="Ligne métier",
+        label="Type",
         required=False,
-        choices=[("", "Toutes")] + Invoice.TYPE_CHOICES,
+        choices=[("", "Formation + Étude")] + Invoice.TYPE_CHOICES,
     )
 
     def clean(self):
-        cleaned_data = super().clean()
-        period = cleaned_data.get("period")
-        date_from = cleaned_data.get("date_from")
-        date_to = cleaned_data.get("date_to")
-        # When no period selected, manual dates are required
-        if not period and not (date_from and date_to):
-            raise ValidationError(
-                "Sélectionnez une période ou renseignez les dates de début et de fin."
-            )
-        if date_from and date_to and date_to < date_from:
-            self.add_error(
-                "date_to", "La date de fin doit être postérieure à la date de début."
-            )
-        return cleaned_data
+        cleaned = super().clean()
+        period = cleaned.get("period")
+        date_from = cleaned.get("date_from")
+        date_to = cleaned.get("date_to")
+        # If no period selected, both manual dates are required
+        if not period:
+            if not date_from:
+                self.add_error(
+                    "date_from",
+                    "Sélectionnez une période ou saisissez une date de début.",
+                )
+            if not date_to:
+                self.add_error(
+                    "date_to", "Sélectionnez une période ou saisissez une date de fin."
+                )
+            if date_from and date_to and date_to < date_from:
+                raise ValidationError(
+                    "La date de fin doit être postérieure à la date de début."
+                )
+        return cleaned

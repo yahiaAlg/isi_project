@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}Factures{% endblock %}
+
+{% block breadcrumb %}
+<i class="bi bi-house-fill" style="font-size:12px;"></i>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+{% endblock %}
+{% block breadcrumb_active %}Factures{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'financial:invoice_create' %}" class="topbar-btn primary">
+  <i class="bi bi-plus-lg"></i> Nouvelle facture
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>Factures</h1>
+      <p>Gérez vos factures formations et études</p>
+    </div>
+  </div>
+
+  <!-- ── Filter bar ─────────────────────────────────────────── -->
+  <div class="isi-card mb-4">
+    <div class="isi-card-body" style="padding:16px 24px;">
+      <form method="get" id="filter-form" novalidate>
+        <div class="row g-3 align-items-end">
+
+          <div class="col-lg-3 col-md-6">
+            <label class="form-label">Recherche</label>
+            <div class="input-icon-wrap">
+              <i class="bi bi-search"></i>
+              <input type="text" name="q" class="form-control"
+                     value="{{ filter_form.q.value|default:'' }}"
+                     placeholder="Référence, client…">
+            </div>
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Type</label>
+            <select name="invoice_type" class="form-select">
+              {% for val, label in filter_form.invoice_type.field.choices %}
+              <option value="{{ val }}" {% if filter_form.invoice_type.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Statut</label>
+            <select name="status" class="form-select">
+              {% for val, label in filter_form.status.field.choices %}
+              <option value="{{ val }}" {% if filter_form.status.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Du</label>
+            <input type="date" name="date_from" class="form-control"
+                   value="{{ filter_form.date_from.value|default:'' }}">
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Au</label>
+            <input type="date" name="date_to" class="form-control"
+                   value="{{ filter_form.date_to.value|default:'' }}">
+          </div>
+
+          <div class="col-lg-1 col-md-3 col-sm-6">
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-amber flex-grow-1">
+                <i class="bi bi-funnel-fill"></i>
+              </button>
+              <a href="{% url 'financial:invoice_list' %}" class="btn btn-ghost" title="Réinitialiser">
+                <i class="bi bi-x-lg"></i>
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Results card ───────────────────────────────────────── -->
+  <div class="isi-card">
+    <div class="isi-card-header">
+      <div class="card-icon amber"><i class="bi bi-receipt-cutoff"></i></div>
+      <h3>
+        Liste des factures
+        {% if page_obj.paginator.count %}
+        <span style="font-size:13px;font-weight:400;color:var(--text-muted);margin-left:8px;">
+          — {{ page_obj.paginator.count }} résultat{{ page_obj.paginator.count|pluralize }}
+        </span>
+        {% endif %}
+      </h3>
+    </div>
+
+    {% if page_obj.object_list %}
+    <div style="overflow-x:auto;">
+      <table class="isi-table">
+        <thead>
+          <tr>
+            <th>Référence</th>
+            <th>Client</th>
+            <th>Type</th>
+            <th>Date</th>
+            <th>Échéance</th>
+            <th style="text-align:right;">Montant TTC</th>
+            <th style="text-align:right;">Solde dû</th>
+            <th>Statut</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for invoice in page_obj.object_list %}
+          <tr>
+            <td>
+              <a href="{% url 'financial:invoice_detail' invoice.pk %}"
+                 style="font-family:var(--font-head);font-weight:700;font-size:15px;
+                        color:var(--text-primary);text-decoration:none;letter-spacing:.3px;">
+                {{ invoice.reference }}
+              </a>
+            </td>
+            <td>
+              <span style="font-weight:600;color:var(--text-primary);">{{ invoice.client.name }}</span>
+            </td>
+            <td>
+              {% if invoice.invoice_type == 'formation' %}
+                <span class="isi-badge blue"><i class="bi bi-mortarboard-fill"></i> Formation</span>
+              {% else %}
+                <span class="isi-badge purple"><i class="bi bi-diagram-3-fill"></i> Étude</span>
+              {% endif %}
+            </td>
+            <td>
+              <span style="color:var(--text-muted);font-size:13px;">{{ invoice.invoice_date|date:"d/m/Y" }}</span>
+            </td>
+            <td>
+              {% if invoice.due_date %}
+                <span style="font-size:13px;
+                  {% if invoice.status == 'unpaid' and invoice.due_date < today %}color:var(--danger);font-weight:600;{% else %}color:var(--text-muted);{% endif %}">
+                  {{ invoice.due_date|date:"d/m/Y" }}
+                </span>
+              {% else %}
+                <span style="color:var(--text-muted);font-size:13px;">—</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">
+              <span style="font-weight:600;font-family:var(--font-head);font-size:15px;">
+                {{ invoice.amount_ttc|floatformat:2 }}
+              </span>
+              <span style="font-size:11px;color:var(--text-muted);"> DA</span>
+            </td>
+            <td style="text-align:right;">
+              {% if invoice.amount_remaining > 0 %}
+              <span style="font-weight:600;color:var(--danger);font-family:var(--font-head);font-size:15px;">
+                {{ invoice.amount_remaining|floatformat:2 }}
+              </span>
+              <span style="font-size:11px;color:var(--text-muted);"> DA</span>
+              {% else %}
+              <span style="color:var(--success);">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if invoice.status == 'paid' %}
+                <span class="isi-badge green"><i class="bi bi-check-circle-fill"></i> Payée</span>
+              {% elif invoice.status == 'partially_paid' %}
+                <span class="isi-badge amber"><i class="bi bi-circle-half"></i> Part. payée</span>
+              {% elif invoice.status == 'unpaid' %}
+                <span class="isi-badge red"><i class="bi bi-clock-fill"></i> Impayée</span>
+              {% elif invoice.status == 'voided' %}
+                <span class="isi-badge gray"><i class="bi bi-slash-circle-fill"></i> Annulée</span>
+              {% else %}
+                <span class="isi-badge gray">{{ invoice.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <div style="display:flex;justify-content:flex-end;gap:6px;">
+                <a href="{% url 'financial:invoice_detail' invoice.pk %}"
+                   class="btn btn-ghost btn-sm" title="Voir le détail">
+                  <i class="bi bi-eye-fill"></i>
+                </a>
+                {% if invoice.status != 'voided' %}
+                <a href="{% url 'financial:invoice_edit' invoice.pk %}"
+                   class="btn btn-ghost btn-sm" title="Modifier">
+                  <i class="bi bi-pencil-fill"></i>
+                </a>
+                {% endif %}
+                <a href="{% url 'financial:invoice_print' invoice.pk %}"
+                   class="btn btn-ghost btn-sm" title="Imprimer" target="_blank">
+                  <i class="bi bi-printer-fill"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div style="padding:16px 24px;border-top:1px solid var(--card-border);
+                display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div style="font-size:13px;color:var(--text-muted);">
+        Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }}
+        — {{ page_obj.paginator.count }} facture{{ page_obj.paginator.count|pluralize }}
+      </div>
+      <div style="display:flex;gap:4px;">
+        {% if page_obj.has_previous %}
+        <a href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}"
+           class="btn btn-ghost btn-sm"><i class="bi bi-chevron-left"></i></a>
+        {% endif %}
+        {% for num in page_obj.paginator.page_range %}
+          {% if page_obj.number == num %}
+          <button class="btn btn-amber btn-sm" disabled>{{ num }}</button>
+          {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+          <a href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ num }}"
+             class="btn btn-ghost btn-sm">{{ num }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <a href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.next_page_number }}"
+           class="btn btn-ghost btn-sm"><i class="bi bi-chevron-right"></i></a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="isi-card-body text-center" style="padding:60px 24px;">
+      <div style="font-size:52px;color:#e2e8f0;margin-bottom:16px;">
+        <i class="bi bi-receipt-cutoff"></i>
+      </div>
+      {% if filter_form.q.value or filter_form.status.value or filter_form.invoice_type.value %}
+        <p style="color:var(--text-muted);font-size:15px;margin:0 0 16px;">
+          Aucune facture ne correspond à vos critères.
+        </p>
+        <a href="{% url 'financial:invoice_list' %}" class="btn btn-ghost">
+          <i class="bi bi-x-lg"></i> Réinitialiser les filtres
+        </a>
+      {% else %}
+        <p style="color:var(--text-muted);font-size:15px;margin:0 0 16px;">
+          Aucune facture enregistrée pour le moment.
+        </p>
+        <a href="{% url 'financial:invoice_create' %}" class="btn btn-amber">
+          <i class="bi bi-plus-lg"></i> Créer la première facture
+        </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

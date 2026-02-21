@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }}{% endblock %}
+
+{% block breadcrumb %}
+<i class="bi bi-house-fill" style="font-size:12px;"></i>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+<a href="{% url 'formations:session_list' %}" style="color:var(--text-muted);text-decoration:none;">Sessions</a>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+{% endblock %}
+{% block breadcrumb_active %}{{ action }}{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>{{ action }}</h1>
+      <p>{% if session %}Modifier les paramètres de la session{% else %}Planifier une nouvelle session de formation{% endif %}</p>
+    </div>
+    <a href="{% if session %}{% url 'formations:session_detail' session.pk %}{% else %}{% url 'formations:session_list' %}{% endif %}" class="btn btn-ghost">
+      <i class="bi bi-arrow-left"></i> Retour
+    </a>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="row g-4">
+
+      <!-- Main -->
+      <div class="col-lg-8">
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-calendar3-fill"></i></div>
+            <h3>Planification</h3>
+          </div>
+          <div class="isi-card-body">
+
+            <div class="form-section-title">Formation</div>
+            <div class="row g-3 mb-4">
+              <div class="col-md-8">
+                <label class="form-label" for="{{ form.formation.id_for_label }}">
+                  Formation <span style="color:var(--danger);">*</span>
+                </label>
+                <select name="{{ form.formation.html_name }}" id="{{ form.formation.id_for_label }}"
+                        class="form-select {% if form.formation.errors %}is-invalid{% endif %}">
+                  <option value="">— Sélectionner une formation —</option>
+                  {% for f in form.formation.field.queryset %}
+                  <option value="{{ f.pk }}" {% if form.formation.value|stringformat:"s" == f.pk|stringformat:"s" %}selected{% endif %}>
+                    {{ f.title }}
+                  </option>
+                  {% endfor %}
+                </select>
+                {% if form.formation.errors %}
+                <div class="invalid-feedback d-block">{{ form.formation.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.client.id_for_label }}">Client</label>
+                <select name="{{ form.client.html_name }}" id="{{ form.client.id_for_label }}"
+                        class="form-select {% if form.client.errors %}is-invalid{% endif %}">
+                  <option value="">— Optionnel —</option>
+                  {% for c in form.client.field.queryset %}
+                  <option value="{{ c.pk }}" {% if form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>
+                    {{ c.name }}
+                  </option>
+                  {% endfor %}
+                </select>
+                {% if form.client.errors %}
+                <div class="invalid-feedback d-block">{{ form.client.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="section-divider"></div>
+            <div class="form-section-title">Dates</div>
+            <div class="row g-3 mb-4">
+              <div class="col-sm-6">
+                <label class="form-label" for="{{ form.date_start.id_for_label }}">
+                  Date de début <span style="color:var(--danger);">*</span>
+                </label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-calendar-event-fill"></i>
+                  <input type="date" name="{{ form.date_start.html_name }}" id="{{ form.date_start.id_for_label }}"
+                         class="form-control {% if form.date_start.errors %}is-invalid{% endif %}"
+                         value="{{ form.date_start.value|default:'' }}">
+                </div>
+                {% if form.date_start.errors %}
+                <div class="invalid-feedback d-block">{{ form.date_start.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label" for="{{ form.date_end.id_for_label }}">
+                  Date de fin <span style="color:var(--danger);">*</span>
+                </label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-calendar-event-fill"></i>
+                  <input type="date" name="{{ form.date_end.html_name }}" id="{{ form.date_end.id_for_label }}"
+                         class="form-control {% if form.date_end.errors %}is-invalid{% endif %}"
+                         value="{{ form.date_end.value|default:'' }}">
+                </div>
+                {% if form.date_end.errors %}
+                <div class="invalid-feedback d-block">{{ form.date_end.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="section-divider"></div>
+            <div class="form-section-title">Lieu et intervenant</div>
+            <div class="row g-3 mb-4">
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.trainer.id_for_label }}">Formateur</label>
+                <select name="{{ form.trainer.html_name }}" id="{{ form.trainer.id_for_label }}"
+                        class="form-select {% if form.trainer.errors %}is-invalid{% endif %}">
+                  <option value="">— Optionnel —</option>
+                  {% for t in form.trainer.field.queryset %}
+                  <option value="{{ t.pk }}" {% if form.trainer.value|stringformat:"s" == t.pk|stringformat:"s" %}selected{% endif %}>
+                    {{ t.first_name }} {{ t.last_name }}
+                  </option>
+                  {% endfor %}
+                </select>
+                {% if form.trainer.errors %}
+                <div class="invalid-feedback d-block">{{ form.trainer.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.room.id_for_label }}">Salle</label>
+                <select name="{{ form.room.html_name }}" id="{{ form.room.id_for_label }}"
+                        class="form-select {% if form.room.errors %}is-invalid{% endif %}">
+                  <option value="">— Optionnel —</option>
+                  {% for r in form.room.field.queryset %}
+                  <option value="{{ r.pk }}" {% if form.room.value|stringformat:"s" == r.pk|stringformat:"s" %}selected{% endif %}>
+                    {{ r.name }} ({{ r.capacity }} places)
+                  </option>
+                  {% endfor %}
+                </select>
+                {% if form.room.errors %}
+                <div class="invalid-feedback d-block">{{ form.room.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="{{ form.external_location.id_for_label }}">Lieu externe</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-geo-alt-fill"></i>
+                  <input type="text" name="{{ form.external_location.html_name }}" id="{{ form.external_location.id_for_label }}"
+                         class="form-control"
+                         value="{{ form.external_location.value|default:'' }}"
+                         placeholder="Adresse ou nom du site externe (si hors salle interne)">
+                </div>
+              </div>
+            </div>
+
+            <div class="section-divider"></div>
+            <div class="form-section-title">Notes</div>
+            <div class="mb-4">
+              <textarea name="{{ form.notes.html_name }}" id="{{ form.notes.id_for_label }}"
+                        class="form-control" rows="3"
+                        placeholder="Informations complémentaires sur la session…">{{ form.notes.value|default:'' }}</textarea>
+            </div>
+
+          </div>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger mb-4">
+          <i class="bi bi-exclamation-circle-fill"></i>
+          <div>{{ form.non_field_errors|join:"<br>" }}</div>
+        </div>
+        {% endif %}
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-amber">
+            <i class="bi bi-check-lg"></i>
+            {% if session %}Enregistrer les modifications{% else %}Planifier la session{% endif %}
+          </button>
+          <a href="{% if session %}{% url 'formations:session_detail' session.pk %}{% else %}{% url 'formations:session_list' %}{% endif %}"
+             class="btn btn-ghost">Annuler</a>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="col-lg-4">
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon green"><i class="bi bi-people-fill"></i></div>
+            <h3>Capacité et tarif</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.capacity.id_for_label }}">
+                Capacité <span style="color:var(--danger);">*</span>
+              </label>
+              <input type="number" name="{{ form.capacity.html_name }}" id="{{ form.capacity.id_for_label }}"
+                     class="form-control {% if form.capacity.errors %}is-invalid{% endif %}"
+                     value="{{ form.capacity.value|default:'' }}" min="1">
+              {% if form.capacity.errors %}
+              <div class="invalid-feedback d-block">{{ form.capacity.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div>
+              <label class="form-label" for="{{ form.price_per_participant.id_for_label }}">Prix / participant (DA)</label>
+              <input type="number" name="{{ form.price_per_participant.html_name }}" id="{{ form.price_per_participant.id_for_label }}"
+                     class="form-control {% if form.price_per_participant.errors %}is-invalid{% endif %}"
+                     value="{{ form.price_per_participant.value|default:'' }}" min="0" step="100"
+                     placeholder="Laisser vide = prix formation">
+              {% if form.price_per_participant.errors %}
+              <div class="invalid-feedback d-block">{{ form.price_per_participant.errors|join:", " }}</div>
+              {% endif %}
+              <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
+                Si vide, le prix de base de la formation est utilisé.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </form>
+</div>
+{% endblock %}

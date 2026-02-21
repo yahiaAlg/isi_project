@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Facture {{ invoice.reference }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --accent: #f59e0b;
+      --accent-dark: #d97706;
+      --text-primary: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --font-head: 'Barlow Condensed', sans-serif;
+      --font-body: 'Barlow', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: var(--text-primary);
+      background: #fff;
+      line-height: 1.5;
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 16mm 18mm;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    .doc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 24px;
+      padding-bottom: 20px;
+      border-bottom: 3px solid var(--accent);
+    }
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 44px; height: 44px;
+      background: var(--accent);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; color: #0f172a;
+    }
+    .brand-name {
+      font-family: var(--font-head);
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      color: var(--text-primary);
+    }
+    .brand-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .doc-title-block {
+      text-align: right;
+    }
+    .doc-title {
+      font-family: var(--font-head);
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      line-height: 1;
+    }
+    .doc-ref {
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-top: 4px;
+    }
+    .doc-date {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ── Institute / Client info ── */
+    .parties-row {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+    .party-block {
+      flex: 1;
+    }
+    .party-label {
+      font-family: var(--font-head);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .party-name {
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+    .party-detail {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ── Meta row ── */
+    .meta-row {
+      display: flex;
+      gap: 0;
+      margin-bottom: 24px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .meta-cell {
+      flex: 1;
+      padding: 10px 14px;
+      border-right: 1px solid var(--border);
+    }
+    .meta-cell:last-child { border-right: none; }
+    .meta-cell-label {
+      font-family: var(--font-head);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+    .meta-cell-value {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    /* ── Items table ── */
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+    }
+    .items-table thead tr {
+      background: var(--text-primary);
+      color: #fff;
+    }
+    .items-table thead th {
+      font-family: var(--font-head);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 9px 12px;
+    }
+    .items-table thead th:last-child,
+    .items-table thead th:nth-child(3),
+    .items-table thead th:nth-child(4),
+    .items-table thead th:nth-child(5) {
+      text-align: right;
+    }
+    .items-table tbody tr {
+      border-bottom: 1px solid var(--border);
+    }
+    .items-table tbody tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    .items-table tbody td {
+      padding: 9px 12px;
+      font-size: 12.5px;
+    }
+    .items-table tbody td:nth-child(3),
+    .items-table tbody td:nth-child(4),
+    .items-table tbody td:nth-child(5),
+    .items-table tbody td:last-child {
+      text-align: right;
+    }
+
+    /* ── Totals ── */
+    .totals-block {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 24px;
+    }
+    .totals-inner {
+      min-width: 240px;
+    }
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12.5px;
+    }
+    .totals-row:last-child {
+      border-bottom: none;
+      padding-top: 10px;
+    }
+    .totals-row.grand {
+      background: var(--accent);
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin-top: 6px;
+    }
+    .totals-row.grand span {
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .totals-row span:first-child {
+      color: var(--text-muted);
+    }
+    .totals-row.grand span:first-child {
+      color: #0f172a;
+    }
+
+    /* ── Payment status ── */
+    .payment-status {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding: 14px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .payment-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .pill-paid { background: rgba(16,185,129,.12); color: #065f46; }
+    .pill-unpaid { background: rgba(239,68,68,.12); color: #991b1b; }
+    .pill-partial { background: rgba(245,158,11,.12); color: #92400e; }
+
+    /* ── Footer ── */
+    .doc-footer {
+      margin-top: auto;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+    .ids-row {
+      display: flex;
+      gap: 24px;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ── Registration IDs ── */
+    .id-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-size: 11px;
+      font-family: monospace;
+    }
+    .id-label {
+      font-family: var(--font-head);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--text-muted);
+    }
+
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .no-print { display: none !important; }
+      .page { padding: 10mm 14mm; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Print / Back button (screen only) -->
+<div class="no-print" style="position:fixed;top:16px;right:16px;display:flex;gap:8px;z-index:100;">
+  <a href="{% url 'financial:invoice_detail' invoice.pk %}"
+     style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;
+            background:#fff;border:1px solid #e2e8f0;border-radius:8px;
+            font-family:'Barlow',sans-serif;font-size:13px;color:#64748b;
+            text-decoration:none;">
+    ← Retour
+  </a>
+  <button onclick="window.print()"
+          style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;
+                 background:#f59e0b;border:none;border-radius:8px;cursor:pointer;
+                 font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;color:#0f172a;">
+    🖨 Imprimer
+  </button>
+</div>
+
+<div class="page">
+
+  <!-- ── Document header ── -->
+  <div class="doc-header">
+    <div class="brand-logo">
+      {% if institute.logo %}
+      <img src="{{ institute.logo.url }}" alt="Logo"
+           style="height:50px;max-width:120px;object-fit:contain;">
+      {% else %}
+      <div class="brand-icon">🛡</div>
+      {% endif %}
+      <div>
+        <div class="brand-name">{{ institute.name|default:"ISI" }}</div>
+        <div class="brand-sub">Institut de Sécurité Industrielle</div>
+        {% if institute.address %}
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+          {{ institute.address }} — {{ institute.city }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="doc-title-block">
+      <div class="doc-title">Facture</div>
+      <div class="doc-ref">{{ invoice.reference }}</div>
+      <div class="doc-date">
+        Émise le {{ invoice.invoice_date|date:"d/m/Y" }}
+        {% if invoice.due_date %}
+        &nbsp;·&nbsp; Échéance : {{ invoice.due_date|date:"d/m/Y" }}
+        {% endif %}
+      </div>
+      <div style="margin-top:8px;">
+        {% if invoice.status == 'paid' %}
+        <span class="payment-pill pill-paid">✓ Payée</span>
+        {% elif invoice.status == 'partially_paid' %}
+        <span class="payment-pill pill-partial">⬤ Partiellement payée</span>
+        {% elif invoice.status == 'unpaid' %}
+        <span class="payment-pill pill-unpaid">⏱ Impayée</span>
+        {% elif invoice.status == 'void' %}
+        <span class="payment-pill" style="background:#f1f5f9;color:#64748b;">✕ Annulée</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Parties ── -->
+  <div class="parties-row">
+    <div class="party-block">
+      <div class="party-label">Émetteur</div>
+      <div class="party-name">{{ business_info.name|default:institute.name }}</div>
+      <div class="party-detail">
+        {{ business_info.address|default:institute.address }}<br>
+        {{ institute.postal_code }} {{ institute.city }}<br>
+        {% if business_info.phone or institute.phone %}
+        Tél : {{ business_info.phone|default:institute.phone }}<br>
+        {% endif %}
+        {% if business_info.email or institute.email %}
+        {{ business_info.email|default:institute.email }}
+        {% endif %}
+      </div>
+    </div>
+    <div class="party-block">
+      <div class="party-label">Client</div>
+      <div class="party-name">{{ invoice.client.name }}</div>
+      <div class="party-detail">
+        {% if invoice.client.address %}{{ invoice.client.address }}<br>{% endif %}
+        {% if invoice.client.postal_code or invoice.client.city %}
+          {{ invoice.client.postal_code }} {{ invoice.client.city }}<br>
+        {% endif %}
+        {% if invoice.client.phone %}Tél : {{ invoice.client.phone }}<br>{% endif %}
+        {% if invoice.client.email %}{{ invoice.client.email }}{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Registration IDs ── -->
+  {% if institute.nif or institute.nis or institute.registration_number %}
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+    {% if institute.registration_number %}
+    <div>
+      <span class="id-label">RC</span>
+      <span class="id-chip">{{ institute.registration_number }}</span>
+    </div>
+    {% endif %}
+    {% if institute.nif %}
+    <div>
+      <span class="id-label">NIF</span>
+      <span class="id-chip">{{ institute.nif }}</span>
+    </div>
+    {% endif %}
+    {% if institute.nis %}
+    <div>
+      <span class="id-label">NIS</span>
+      <span class="id-chip">{{ institute.nis }}</span>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ── Meta info ── -->
+  <div class="meta-row">
+    <div class="meta-cell">
+      <div class="meta-cell-label">Type</div>
+      <div class="meta-cell-value">
+        {% if invoice.invoice_type == 'formation' %}Formation{% else %}Étude{% endif %}
+      </div>
+    </div>
+    <div class="meta-cell">
+      <div class="meta-cell-label">Date</div>
+      <div class="meta-cell-value">{{ invoice.invoice_date|date:"d/m/Y" }}</div>
+    </div>
+    {% if invoice.due_date %}
+    <div class="meta-cell">
+      <div class="meta-cell-label">Échéance</div>
+      <div class="meta-cell-value">{{ invoice.due_date|date:"d/m/Y" }}</div>
+    </div>
+    {% endif %}
+    {% if invoice.session %}
+    <div class="meta-cell">
+      <div class="meta-cell-label">Session</div>
+      <div class="meta-cell-value" style="font-size:12px;">{{ invoice.session }}</div>
+    </div>
+    {% endif %}
+    {% if invoice.study_project %}
+    <div class="meta-cell">
+      <div class="meta-cell-label">Projet</div>
+      <div class="meta-cell-value" style="font-size:12px;">{{ invoice.study_project.title }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Line items ── -->
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="width:40%;">Désignation</th>
+        <th style="text-align:right;width:8%;">Qté</th>
+        <th style="width:8%;">Unité</th>
+        <th style="text-align:right;width:14%;">PU HT (DA)</th>
+        <th style="text-align:right;width:9%;">Remise</th>
+        <th style="text-align:right;width:14%;">Total HT (DA)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in invoice.items.all %}
+      <tr>
+        <td>{{ item.description }}</td>
+        <td style="text-align:right;">{{ item.quantity|floatformat:2 }}</td>
+        <td>{{ item.unit|default:"—" }}</td>
+        <td style="text-align:right;">{{ item.unit_price_ht|floatformat:2 }}</td>
+        <td style="text-align:right;">
+          {% if item.discount_percent %}{{ item.discount_percent }}%{% else %}—{% endif %}
+        </td>
+        <td style="text-align:right;font-weight:700;">{{ item.total_ht|floatformat:2 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- ── Totals ── -->
+  <div class="totals-block">
+    <div class="totals-inner">
+      <div class="totals-row">
+        <span>Total HT</span>
+        <span style="font-weight:600;">{{ invoice.amount_ht|floatformat:2 }} DA</span>
+      </div>
+      <div class="totals-row">
+        <span>TVA ({{ invoice.tva_rate|floatformat:0 }}%)</span>
+        <span style="font-weight:600;">{{ invoice.amount_tva|floatformat:2 }} DA</span>
+      </div>
+      <div class="totals-row grand">
+        <span>Net à payer TTC</span>
+        <span>{{ invoice.amount_ttc|floatformat:2 }} DA</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Bank details ── -->
+  {% if institute.bank_name %}
+  <div style="padding:12px 16px;background:#f8fafc;border:1px solid var(--border);
+              border-radius:8px;margin-bottom:20px;font-size:12px;">
+    <div style="font-family:var(--font-head);font-size:11px;font-weight:700;
+                text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);
+                margin-bottom:6px;">
+      Coordonnées bancaires
+    </div>
+    <div style="color:var(--text-primary);">
+      Banque : <strong>{{ institute.bank_name }}</strong>
+      {% if institute.bank_account %} — Compte : <strong>{{ institute.bank_account }}</strong>{% endif %}
+      {% if institute.bank_rib %} — RIB : <strong>{{ institute.bank_rib }}</strong>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Footer / Footer text ── -->
+  <div class="doc-footer">
+    {{ invoice.footer_text|default:institute.invoice_footer_text|linebreaksbr }}
+    {% if institute.director_name %}
+    <div style="text-align:right;margin-top:32px;">
+      {% if institute.director_signature %}
+      <img src="{{ institute.director_signature.url }}" alt="Signature"
+           style="height:50px;max-width:120px;object-fit:contain;margin-bottom:4px;display:block;margin-left:auto;">
+      {% else %}
+      <div style="height:40px;"></div>
+      {% endif %}
+      <div style="font-weight:600;color:var(--text-primary);">{{ institute.director_name }}</div>
+      <div style="font-size:11px;color:var(--text-muted);">{{ institute.director_title }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+</div><!-- .page -->
+</body>
+</html>

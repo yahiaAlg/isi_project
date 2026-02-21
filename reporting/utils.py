@@ -134,7 +134,7 @@ def session_fill_rate_report(date_from=None, date_to=None):
         qs = qs.filter(date_end__lte=date_to)
 
     return qs.annotate(
-        participant_count=Count("participants"),
+        participants_ann=Count("participants"),
         fill_pct=ExpressionWrapper(
             Count("participants") * 100.0 / F("capacity"),
             output_field=FloatField(),

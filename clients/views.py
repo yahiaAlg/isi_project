@@ -3,6 +3,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -28,14 +29,10 @@ def client_list(request):
 
         if q:
             qs = qs.filter(
-                __import__("django.db.models", fromlist=["Q"]).Q(name__icontains=q)
-                | __import__("django.db.models", fromlist=["Q"]).Q(city__icontains=q)
-                | __import__("django.db.models", fromlist=["Q"]).Q(
-                    activity_sector__icontains=q
-                )
-                | __import__("django.db.models", fromlist=["Q"]).Q(
-                    contact_name__icontains=q
-                )
+                Q(name__icontains=q)
+                | Q(city__icontains=q)
+                | Q(activity_sector__icontains=q)
+                | Q(contact_name__icontains=q)
             )
         if client_type:
             qs = qs.filter(client_type=client_type)

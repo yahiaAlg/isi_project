@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }} — Dépense{% endblock %}
+
+{% block breadcrumb %}
+<i class="bi bi-house-fill" style="font-size:12px;"></i>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+<a href="{% url 'financial:expense_list' %}" style="color:var(--text-muted);text-decoration:none;">Dépenses</a>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+{% endblock %}
+{% block breadcrumb_active %}{{ action }}{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>{{ action }}</h1>
+      <p>{% if expense %}Modification de la dépense{% else %}Enregistrement d'une nouvelle dépense{% endif %}</p>
+    </div>
+    <a href="{% url 'financial:expense_list' %}" class="btn btn-ghost">
+      <i class="bi bi-arrow-left"></i> Retour
+    </a>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <div class="row g-4">
+
+      <!-- ── Main form ─────────────────────────────────────── -->
+      <div class="col-lg-8">
+
+        <!-- Informations générales -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon red" style="background:rgba(239,68,68,.12);color:var(--danger);">
+              <i class="bi bi-credit-card-fill"></i>
+            </div>
+            <h3>Informations générales</h3>
+          </div>
+          <div class="isi-card-body">
+
+            <div class="form-section-title">Détails</div>
+            <div class="row g-3 mb-4">
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.date.id_for_label }}">Date *</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-calendar-fill"></i>
+                  <input type="date" name="{{ form.date.html_name }}"
+                         id="{{ form.date.id_for_label }}"
+                         class="form-control {% if form.date.errors %}is-invalid{% endif %}"
+                         value="{{ form.date.value|default:'' }}">
+                </div>
+                {% if form.date.errors %}
+                <div class="invalid-feedback d-block">{{ form.date.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.category.id_for_label }}">Catégorie *</label>
+                <select name="{{ form.category.html_name }}"
+                        id="{{ form.category.id_for_label }}"
+                        class="form-select {% if form.category.errors %}is-invalid{% endif %}">
+                  <option value="">— Sélectionner —</option>
+                  {% for choice in form.category.field.choices %}
+                    {% if choice.0 %}
+                    <option value="{{ choice.0 }}" {% if form.category.value|stringformat:"s" == choice.0|stringformat:"s" %}selected{% endif %}>{{ choice.1 }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                {% if form.category.errors %}
+                <div class="invalid-feedback d-block">{{ form.category.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-12">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description *</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-card-text"></i>
+                  <input type="text" name="{{ form.description.html_name }}"
+                         id="{{ form.description.id_for_label }}"
+                         class="form-control {% if form.description.errors %}is-invalid{% endif %}"
+                         value="{{ form.description.value|default:'' }}"
+                         placeholder="Objet de la dépense…">
+                </div>
+                {% if form.description.errors %}
+                <div class="invalid-feedback d-block">{{ form.description.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.amount.id_for_label }}">Montant (DA) *</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-cash-coin"></i>
+                  <input type="number" name="{{ form.amount.html_name }}"
+                         id="{{ form.amount.id_for_label }}"
+                         class="form-control {% if form.amount.errors %}is-invalid{% endif %}"
+                         value="{{ form.amount.value|default:'' }}"
+                         step="0.01" min="0" placeholder="0.00">
+                </div>
+                {% if form.amount.errors %}
+                <div class="invalid-feedback d-block">{{ form.amount.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.supplier.id_for_label }}">Fournisseur / bénéficiaire</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-shop"></i>
+                  <input type="text" name="{{ form.supplier.html_name }}"
+                         id="{{ form.supplier.id_for_label }}"
+                         class="form-control"
+                         value="{{ form.supplier.value|default:'' }}"
+                         placeholder="Nom du fournisseur…">
+                </div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.payment_reference.id_for_label }}">Référence de paiement</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-hash"></i>
+                  <input type="text" name="{{ form.payment_reference.html_name }}"
+                         id="{{ form.payment_reference.id_for_label }}"
+                         class="form-control"
+                         value="{{ form.payment_reference.value|default:'' }}"
+                         placeholder="N° virement, chèque…">
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Imputation -->
+            <div class="section-divider"></div>
+            <div class="form-section-title">Imputation</div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;">
+              <i class="bi bi-info-circle" style="color:var(--accent);"></i>
+              Imputez la dépense à un seul centre de coût.
+            </div>
+
+            <div class="row g-3">
+
+              <div class="col-md-5">
+                <label class="form-label" for="{{ form.allocated_to_session.id_for_label }}">Session</label>
+                <select name="{{ form.allocated_to_session.html_name }}"
+                        id="{{ form.allocated_to_session.id_for_label }}"
+                        class="form-select {% if form.allocated_to_session.errors %}is-invalid{% endif %}">
+                  <option value="">———</option>
+                  {% for choice in form.allocated_to_session.field.choices %}
+                    {% if choice.0 %}
+                    <option value="{{ choice.0 }}" {% if form.allocated_to_session.value|stringformat:"s" == choice.0|stringformat:"s" %}selected{% endif %}>{{ choice.1 }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                {% if form.allocated_to_session.errors %}
+                <div class="invalid-feedback d-block">{{ form.allocated_to_session.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-5">
+                <label class="form-label" for="{{ form.allocated_to_project.id_for_label }}">Projet</label>
+                <select name="{{ form.allocated_to_project.html_name }}"
+                        id="{{ form.allocated_to_project.id_for_label }}"
+                        class="form-select {% if form.allocated_to_project.errors %}is-invalid{% endif %}">
+                  <option value="">———</option>
+                  {% for choice in form.allocated_to_project.field.choices %}
+                    {% if choice.0 %}
+                    <option value="{{ choice.0 }}" {% if form.allocated_to_project.value|stringformat:"s" == choice.0|stringformat:"s" %}selected{% endif %}>{{ choice.1 }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                {% if form.allocated_to_project.errors %}
+                <div class="invalid-feedback d-block">{{ form.allocated_to_project.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-flex align-items-center" style="height:38px;gap:10px;">
+                  <input class="form-check-input" type="checkbox"
+                         name="{{ form.is_overhead.html_name }}"
+                         id="{{ form.is_overhead.id_for_label }}"
+                         {% if form.is_overhead.value %}checked{% endif %}
+                         style="width:18px;height:18px;flex-shrink:0;">
+                  <label for="{{ form.is_overhead.id_for_label }}"
+                         style="font-size:13px;font-weight:500;margin:0;cursor:pointer;">
+                    Généraux
+                  </label>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Imputation error -->
+            {% if form.non_field_errors %}
+            <div style="margin-top:12px;">
+              {% for error in form.non_field_errors %}
+              <div style="color:var(--danger);font-size:13px;display:flex;gap:8px;align-items:flex-start;padding:10px 12px;background:rgba(239,68,68,.06);border-radius:8px;border-left:3px solid var(--danger);">
+                <i class="bi bi-exclamation-circle-fill" style="margin-top:1px;flex-shrink:0;"></i>
+                {{ error }}
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+          </div>
+        </div>
+
+        <!-- Justificatif -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-file-earmark-fill"></i></div>
+            <h3>Justificatif</h3>
+          </div>
+          <div class="isi-card-body">
+
+            {% if expense and expense.receipt %}
+            <div style="text-align:center;margin-bottom:16px;padding:12px;background:#f8fafc;
+                        border-radius:8px;border:1px solid var(--card-border);">
+              <a href="{{ expense.receipt.url }}" target="_blank"
+                 style="color:var(--accent);font-size:13px;display:inline-flex;align-items:center;gap:8px;font-weight:500;">
+                <i class="bi bi-file-earmark-fill" style="font-size:16px;"></i>
+                Voir le justificatif actuel
+              </a>
+            </div>
+            {% endif %}
+
+            <div class="row g-3">
+              <div class="col-md-8">
+                <label class="form-label" for="{{ form.receipt.id_for_label }}">Fichier justificatif</label>
+                <input type="file" name="{{ form.receipt.html_name }}"
+                       id="{{ form.receipt.id_for_label }}"
+                       class="form-control"
+                       accept=".pdf,.jpg,.jpeg,.png">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-flex align-items-center" style="height:38px;gap:10px;">
+                  <input class="form-check-input" type="checkbox"
+                         name="{{ form.receipt_missing.html_name }}"
+                         id="{{ form.receipt_missing.id_for_label }}"
+                         {% if form.receipt_missing.value %}checked{% endif %}
+                         style="width:18px;height:18px;flex-shrink:0;">
+                  <label for="{{ form.receipt_missing.id_for_label }}"
+                         style="font-size:13px;font-weight:500;margin:0;cursor:pointer;">
+                    Justificatif manquant
+                  </label>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                <textarea name="{{ form.notes.html_name }}"
+                          id="{{ form.notes.id_for_label }}"
+                          class="form-control"
+                          rows="3"
+                          placeholder="Remarques, contexte…">{{ form.notes.value|default:'' }}</textarea>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Submit row -->
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-amber">
+            <i class="bi bi-check-lg"></i>
+            {% if expense %}Enregistrer les modifications{% else %}Créer la dépense{% endif %}
+          </button>
+          <a href="{% url 'financial:expense_list' %}" class="btn btn-ghost">
+            <i class="bi bi-x-lg"></i> Annuler
+          </a>
+        </div>
+
+      </div><!-- /col-lg-8 -->
+
+      <!-- ── Side panel ────────────────────────────────────── -->
+      <div class="col-lg-4">
+
+        {% if expense %}
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-info-circle-fill"></i></div>
+            <h3>Statut</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="row g-3">
+              <div class="col-12">
+                <div class="stat-label mb-1">Approbation</div>
+                <div style="margin-top:4px;">
+                  {% if expense.approval_status == 'approved' %}
+                    <span class="isi-badge green"><i class="bi bi-check-circle-fill"></i> Approuvée</span>
+                  {% elif expense.approval_status == 'rejected' %}
+                    <span class="isi-badge red"><i class="bi bi-x-circle-fill"></i> Refusée</span>
+                  {% else %}
+                    <span class="isi-badge amber"><i class="bi bi-clock-fill"></i> En attente</span>
+                  {% endif %}
+                </div>
+              </div>
+              {% if expense.approved_by %}
+              <div class="col-12">
+                <div class="stat-label mb-1">Approuvée par</div>
+                <div style="font-weight:500;font-size:13.5px;">{{ expense.approved_by }}</div>
+              </div>
+              {% endif %}
+              <div class="col-12">
+                <div class="stat-label mb-1">Montant</div>
+                <div class="stat-value" style="font-size:22px;">{{ expense.amount|floatformat:0 }}</div>
+                <div style="font-size:11px;color:var(--text-muted);">DA</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="isi-card">
+          <div class="isi-card-header">
+            <div class="card-icon blue"><i class="bi bi-info-circle-fill"></i></div>
+            <h3>Aide</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="mb-3 p-3" style="background:rgba(59,130,246,.08);border-radius:8px;">
+              <div style="font-weight:600;font-size:13px;color:#1e40af;margin-bottom:4px;">
+                <i class="bi bi-mortarboard-fill"></i> Session
+              </div>
+              <p style="font-size:12.5px;color:#1e3a8a;margin:0;line-height:1.5;">
+                Dépense directement liée à une session de formation.
+              </p>
+            </div>
+            <div class="mb-3 p-3" style="background:rgba(139,92,246,.08);border-radius:8px;">
+              <div style="font-weight:600;font-size:13px;color:#5b21b6;margin-bottom:4px;">
+                <i class="bi bi-diagram-3-fill"></i> Projet
+              </div>
+              <p style="font-size:12.5px;color:#4c1d95;margin:0;line-height:1.5;">
+                Dépense imputable à un projet d'étude.
+              </p>
+            </div>
+            <div class="p-3" style="background:rgba(100,116,139,.08);border-radius:8px;">
+              <div style="font-weight:600;font-size:13px;color:#334155;margin-bottom:4px;">
+                <i class="bi bi-building-fill"></i> Frais généraux
+              </div>
+              <p style="font-size:12.5px;color:#475569;margin:0;line-height:1.5;">
+                Coût non imputable à un service ou projet précis.
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /col-lg-4 -->
+
+    </div>
+  </form>
+
+</div>
+{% endblock %}

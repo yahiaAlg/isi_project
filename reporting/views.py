@@ -660,7 +660,7 @@ def sessions_report(request):
     sessions = (
         Session.objects.filter(date_start__gte=date_from, date_end__lte=date_to)
         .select_related("formation", "client", "trainer")
-        .annotate(participant_count=Count("participants"))
+        .annotate(participants_ann=Count("participants"))
         .order_by("-date_start")
     )
     return render(
@@ -670,7 +670,7 @@ def sessions_report(request):
             "sessions": sessions,
             "by_status": sessions.values("status").annotate(count=Count("pk")),
             "total": sessions.count(),
-            "total_participants": sum(s.participant_count for s in sessions),
+            "total_participants": sum(s.participants_ann for s in sessions),
             "date_from": date_from,
             "date_to": date_to,
         },
@@ -704,7 +704,7 @@ def catalog_performance(request):
 
     date_from, date_to = _parse_date_range(request)
     formations = Formation.objects.annotate(
-        session_count=Count(
+        session_count_ann=Count(
             "sessions",
             filter=Q(
                 sessions__date_start__gte=date_from, sessions__date_end__lte=date_to
@@ -718,7 +718,7 @@ def catalog_performance(request):
                 sessions__status=Session.STATUS_COMPLETED,
             ),
         ),
-    ).order_by("-session_count")
+    ).order_by("-session_count_ann")
 
     data = []
     for f in formations:
@@ -731,7 +731,7 @@ def catalog_performance(request):
         data.append(
             {
                 "formation": f,
-                "session_count": f.session_count,
+                "session_count": f.session_count_ann,
                 "total_participants": f.total_participants,
                 "revenue": sum(s.total_revenue for s in completed),
                 "avg_fill": (

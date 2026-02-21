@@ -1,0 +1,29 @@
+header"><div class="card-icon red"><i class="bi bi-clock-fill"></i></div><h3>Phases en retard</h3></div>
+        <div style="overflow-x:auto;"><table class="isi-table">
+          <thead><tr><th>Phase</th><th>Projet</th><th>Échéance</th></tr></thead>
+          <tbody>{% for ph in overdue_phases %}<tr>
+            <td style="font-weight:600;">{{ ph.name|truncatechars:24 }}</td>
+            <td style="color:#64748b;font-size:13px;">{{ ph.project.title|truncatechars:22 }}</td>
+            <td><span class="isi-badge red"><i class="bi bi-clock-fill"></i> {{ ph.due_date|date:"d/m/Y" }}</span></td>
+          </tr>{% endfor %}</tbody>
+        </table></div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const phaseData = [{% for s in by_status %}{ status: "{{ s.status }}", count: {{ s.count }} },{% endfor %}];
+const pLabels = { pending: 'En attente', in_progress: 'En cours', completed: 'Terminée', blocked: 'Bloquée' };
+const pColors = { pending: '#94a3b8', in_progress: '#3b82f6', completed: '#10b981', blocked: '#ef4444' };
+if (phaseData.length) {
+  new Chart(document.getElementById('chartPhases'), {
+    type: 'doughnut',
+    data: { labels: phaseData.map(d => pLabels[d.status] || d.status), datasets: [{ data: phaseData.map(d => d.count), backgroundColor: phaseData.map(d => pColors[d.status] || '#94a3b8'), borderWidth: 0, hoverOffset: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '58%', plugins: { legend: { position: 'bottom', labels: { color: '#64748b', font: { family: 'Barlow', size: 11 }, padding: 10, boxWidth: 12 } } } }
+  });
+}
+</script>
+{% endblock %}

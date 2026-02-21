@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Rapport des dépenses{% endblock %}
+
+{% block breadcrumb %}
+<i class="bi bi-house-fill" style="font-size:12px;"></i>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+<a href="{% url 'financial:analytics' %}" style="color:var(--text-muted);text-decoration:none;">Analytique</a>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+{% endblock %}
+{% block breadcrumb_active %}Rapport des dépenses{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>Rapport des dépenses</h1>
+      <p>
+        {% if date_from and date_to %}
+        {{ date_from|date:"d/m/Y" }} — {{ date_to|date:"d/m/Y" }}
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="isi-card mb-4">
+    <div class="isi-card-body" style="padding:16px 24px;">
+      <form method="get" novalidate>
+        <div class="row g-3 align-items-end">
+          <div class="col-lg-3 col-md-6">
+            <label class="form-label">{{ form.period.label }}</label>
+            {{ form.period }}
+          </div>
+          <div class="col-lg-2 col-md-3">
+            <label class="form-label">{{ form.date_from.label }}</label>
+            {{ form.date_from }}
+          </div>
+          <div class="col-lg-2 col-md-3">
+            <label class="form-label">{{ form.date_to.label }}</label>
+            {{ form.date_to }}
+          </div>
+          <div class="col-lg-3">
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-amber flex-grow-1">
+                <i class="bi bi-funnel-fill"></i> Appliquer
+              </button>
+              <a href="{% url 'financial:expense_report' %}" class="btn btn-ghost">
+                <i class="bi bi-x-lg"></i>
+              </a>
+            </div>
+          </div>
+          {% if form.non_field_errors %}
+          <div class="col-12">
+            {% for error in form.non_field_errors %}
+            <div style="color:var(--danger);font-size:12.5px;">
+              <i class="bi bi-exclamation-circle-fill"></i> {{ error }}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- KPI row -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-3">
+      <div class="isi-card">
+        <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+          <div class="card-icon red" style="background:rgba(239,68,68,.12);color:var(--danger);
+                    width:48px;height:48px;font-size:22px;border-radius:12px;">
+            <i class="bi bi-credit-card-fill"></i>
+          </div>
+          <div>
+            <div class="stat-value" style="color:var(--danger);">{{ total|floatformat:0 }}</div>
+            <div class="stat-label">Total dépenses (DA)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-3">
+      <div class="isi-card">
+        <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+          <div class="card-icon blue" style="width:48px;height:48px;font-size:22px;border-radius:12px;">
+            <i class="bi bi-mortarboard-fill"></i>
+          </div>
+          <div>
+            <div class="stat-value">{{ by_session|floatformat:0 }}</div>
+            <div class="stat-label">Sessions (DA)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-3">
+      <div class="isi-card">
+        <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+          <div class="card-icon purple" style="width:48px;height:48px;font-size:22px;border-radius:12px;">
+            <i class="bi bi-diagram-3-fill"></i>
+          </div>
+          <div>
+            <div class="stat-value">{{ by_project|floatformat:0 }}</div>
+            <div class="stat-label">Projets (DA)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-3">
+      <div class="isi-card">
+        <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+          <div class="card-icon amber" style="width:48px;height:48px;font-size:22px;border-radius:12px;">
+            <i class="bi bi-building-fill"></i>
+          </div>
+          <div>
+            <div class="stat-value">{{ overhead|floatformat:0 }}</div>
+            <div class="stat-label">Frais généraux (DA)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- By category table + chart -->
+    <div class="col-lg-7">
+      <div class="isi-card mb-4">
+        <div class="isi-card-header">
+          <div class="card-icon amber"><i class="bi bi-tag-fill"></i></div>
+          <h3>Répartition par catégorie</h3>
+        </div>
+        {% if by_category %}
+        <div style="overflow-x:auto;">
+          <table class="isi-table">
+            <thead>
+              <tr>
+                <th>Catégorie</th>
+                <th style="text-align:right;">Montant (DA)</th>
+                <th style="text-align:right;">Part</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in by_category %}
+              <tr>
+                <td>
+                  <span style="font-weight:600;">{{ row.category__name|default:"Non catégorisé" }}</span>
+                </td>
+                <td style="text-align:right;font-family:var(--font-head);font-weight:700;font-size:15px;">
+                  {{ row.total|floatformat:2 }} DA
+                </td>
+                <td style="text-align:right;">
+                  {% if total > 0 %}
+                  <span class="isi-badge gray">{% widthratio row.total total 100 %}%</span>
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div style="padding:12px 24px;border-top:1px solid var(--card-border);text-align:right;">
+          <span style="font-family:var(--font-head);font-size:16px;font-weight:700;">
+            Total : {{ total|floatformat:2 }} DA
+          </span>
+        </div>
+        {% else %}
+        <div class="isi-card-body text-center" style="padding:40px 24px;">
+          <div style="font-size:40px;color:#e2e8f0;margin-bottom:12px;">
+            <i class="bi bi-tag"></i>
+          </div>
+          <p style="color:var(--text-muted);font-size:14px;margin:0;">
+            Aucune dépense sur cette période.
+          </p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="col-lg-5">
+      <div class="isi-card">
+        <div class="isi-card-header">
+          <div class="card-icon purple"><i class="bi bi-pie-chart-fill"></i></div>
+          <h3>Répartition visuelle</h3>
+        </div>
+        <div class="isi-card-body" style="padding:20px;display:flex;justify-content:center;align-items:center;">
+          {% if by_category %}
+          <canvas id="expenseChart" style="max-height:280px;max-width:280px;"></canvas>
+          {% else %}
+          <div class="text-center" style="padding:40px 0;">
+            <i class="bi bi-pie-chart" style="font-size:40px;color:#e2e8f0;"></i>
+            <p style="color:var(--text-muted);margin:10px 0 0;font-size:14px;">
+              Aucune donnée.
+            </p>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Center breakdown pills -->
+        {% if total > 0 %}
+        <div style="padding:14px 20px;border-top:1px solid var(--card-border);">
+          <div class="row g-2 text-center">
+            <div class="col-4">
+              <div class="stat-label mb-1">Sessions</div>
+              <div style="font-weight:700;font-size:13px;color:#3b82f6;">
+                {% if total > 0 %}{% widthratio by_session total 100 %}%{% else %}0%{% endif %}
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="stat-label mb-1">Projets</div>
+              <div style="font-weight:700;font-size:13px;color:#8b5cf6;">
+                {% if total > 0 %}{% widthratio by_project total 100 %}%{% else %}0%{% endif %}
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="stat-label mb-1">Généraux</div>
+              <div style="font-weight:700;font-size:13px;color:var(--accent-dark);">
+                {% if total > 0 %}{% widthratio overhead total 100 %}%{% else %}0%{% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if by_category %}
+<script>
+  const labels = [{% for row in by_category %}"{{ row.category__name|default:'Non catégorisé' }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+  const data   = [{% for row in by_category %}{{ row.total }}{% if not forloop.last %},{% endif %}{% endfor %}];
+  const colors = ['#f59e0b','#3b82f6','#8b5cf6','#10b981','#ef4444','#06b6d4','#f97316','#6366f1','#84cc16','#ec4899'];
+
+  new Chart(document.getElementById('expenseChart'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: colors.slice(0, data.length),
+        borderWidth: 2,
+        borderColor: '#fff',
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { font: { family: "'Barlow',sans-serif", size: 11 }, boxWidth: 12, boxHeight: 12, padding: 12 }
+        },
+        tooltip: {
+          callbacks: {
+            label: c => ` ${c.parsed.toLocaleString('fr-DZ')} DA`
+          }
+        }
+      }
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}

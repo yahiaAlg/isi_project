@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Dépenses{% endblock %}
+
+{% block breadcrumb %}
+<i class="bi bi-house-fill" style="font-size:12px;"></i>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+{% endblock %}
+{% block breadcrumb_active %}Dépenses{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'financial:expense_create' %}" class="topbar-btn primary">
+  <i class="bi bi-plus-lg"></i> Nouvelle dépense
+</a>
+<a href="{% url 'financial:expense_category_list' %}" class="topbar-btn">
+  <i class="bi bi-tag-fill"></i> Catégories
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>Dépenses</h1>
+      <p>Suivez et approuvez les dépenses de l'institut</p>
+    </div>
+  </div>
+
+  <!-- ── Filter bar ─────────────────────────────────────────── -->
+  <div class="isi-card mb-4">
+    <div class="isi-card-body" style="padding:16px 24px;">
+      <form method="get" novalidate>
+        <div class="row g-3 align-items-end">
+
+          <div class="col-lg-3 col-md-6">
+            <label class="form-label">Recherche</label>
+            <div class="input-icon-wrap">
+              <i class="bi bi-search"></i>
+              <input type="text" name="q" class="form-control"
+                     value="{{ filter_form.q.value|default:'' }}"
+                     placeholder="Description, fournisseur…">
+            </div>
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Catégorie</label>
+            {{ filter_form.category }}
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Approbation</label>
+            <select name="approval_status" class="form-select">
+              {% for val, label in filter_form.approval_status.field.choices %}
+              <option value="{{ val }}" {% if filter_form.approval_status.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Du</label>
+            <input type="date" name="date_from" class="form-control"
+                   value="{{ filter_form.date_from.value|default:'' }}">
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Au</label>
+            <input type="date" name="date_to" class="form-control"
+                   value="{{ filter_form.date_to.value|default:'' }}">
+          </div>
+
+          <div class="col-lg-1 col-md-3">
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-amber flex-grow-1">
+                <i class="bi bi-funnel-fill"></i>
+              </button>
+              <a href="{% url 'financial:expense_list' %}" class="btn btn-ghost" title="Réinitialiser">
+                <i class="bi bi-x-lg"></i>
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Results card ───────────────────────────────────────── -->
+  <div class="isi-card">
+    <div class="isi-card-header">
+      <div class="card-icon red" style="background:rgba(239,68,68,.12);color:var(--danger);">
+        <i class="bi bi-credit-card-fill"></i>
+      </div>
+      <h3>
+        Liste des dépenses
+        {% if page_obj.paginator.count %}
+        <span style="font-size:13px;font-weight:400;color:var(--text-muted);margin-left:8px;">
+          — {{ page_obj.paginator.count }} résultat{{ page_obj.paginator.count|pluralize }}
+        </span>
+        {% endif %}
+      </h3>
+    </div>
+
+    {% if page_obj.object_list %}
+    <div style="overflow-x:auto;">
+      <table class="isi-table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Catégorie</th>
+            <th>Date</th>
+            <th>Imputation</th>
+            <th>Approbation</th>
+            <th style="text-align:right;">Montant</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for expense in page_obj.object_list %}
+          <tr>
+            <td>
+              <div>
+                <span style="font-weight:600;color:var(--text-primary);">{{ expense.description }}</span>
+                {% if expense.supplier %}
+                <div style="font-size:12px;color:var(--text-muted);">{{ expense.supplier }}</div>
+                {% endif %}
+                {% if not expense.receipt and not expense.receipt_missing %}
+                <span class="isi-badge red" style="font-size:10px;padding:2px 6px;margin-top:3px;display:inline-flex;">
+                  <i class="bi bi-exclamation-circle-fill"></i> Sans justificatif
+                </span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              {% if expense.category %}
+              <span class="isi-badge amber" style="{% if expense.category.color %}background:{{ expense.category.color }}20;{% endif %}">
+                {{ expense.category.name }}
+              </span>
+              {% else %}
+              <span style="color:var(--text-muted);font-size:13px;">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <span style="color:var(--text-muted);font-size:13px;">{{ expense.date|date:"d/m/Y" }}</span>
+            </td>
+            <td>
+              {% if expense.allocated_to_session %}
+                <span class="isi-badge blue" style="font-size:11px;">
+                  <i class="bi bi-mortarboard-fill"></i> Session
+                </span>
+              {% elif expense.allocated_to_project %}
+                <span class="isi-badge purple" style="font-size:11px;">
+                  <i class="bi bi-diagram-3-fill"></i> Projet
+                </span>
+              {% elif expense.is_overhead %}
+                <span class="isi-badge gray" style="font-size:11px;">
+                  <i class="bi bi-building-fill"></i> Frais généraux
+                </span>
+              {% else %}
+                <span style="color:var(--text-muted);font-size:13px;">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if expense.approval_status == 'approved' %}
+                <span class="isi-badge green"><i class="bi bi-check-circle-fill"></i> Approuvée</span>
+              {% elif expense.approval_status == 'rejected' %}
+                <span class="isi-badge red"><i class="bi bi-x-circle-fill"></i> Refusée</span>
+              {% else %}
+                <span class="isi-badge amber"><i class="bi bi-clock-fill"></i> En attente</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">
+              <span style="font-weight:700;font-family:var(--font-head);font-size:15px;">
+                {{ expense.amount|floatformat:2 }}
+              </span>
+              <span style="font-size:11px;color:var(--text-muted);"> DA</span>
+            </td>
+            <td>
+              <div style="display:flex;justify-content:flex-end;gap:4px;">
+                {% if expense.approval_status == 'pending' %}
+                <form method="post" action="{% url 'financial:expense_approve' expense.pk %}"
+                      style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-ghost btn-sm" title="Approuver"
+                          onclick="return confirm('Approuver cette dépense ?')">
+                    <i class="bi bi-check-lg" style="color:var(--success);"></i>
+                  </button>
+                </form>
+                <form method="post" action="{% url 'financial:expense_reject' expense.pk %}"
+                      style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-ghost btn-sm" title="Refuser"
+                          onclick="return confirm('Refuser cette dépense ?')">
+                    <i class="bi bi-x-lg" style="color:var(--danger);"></i>
+                  </button>
+                </form>
+                {% endif %}
+                <a href="{% url 'financial:expense_edit' expense.pk %}"
+                   class="btn btn-ghost btn-sm" title="Modifier">
+                  <i class="bi bi-pencil-fill"></i>
+                </a>
+                <form method="post" action="{% url 'financial:expense_delete' expense.pk %}"
+                      style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-danger-soft btn-sm" title="Supprimer"
+                          onclick="return confirm('Supprimer cette dépense ?')">
+                    <i class="bi bi-trash-fill"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div style="padding:16px 24px;border-top:1px solid var(--card-border);
+                display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div style="font-size:13px;color:var(--text-muted);">
+        Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }}
+        — {{ page_obj.paginator.count }} dépense{{ page_obj.paginator.count|pluralize }}
+      </div>
+      <div style="display:flex;gap:4px;">
+        {% if page_obj.has_previous %}
+        <a href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}"
+           class="btn btn-ghost btn-sm"><i class="bi bi-chevron-left"></i></a>
+        {% endif %}
+        {% for num in page_obj.paginator.page_range %}
+          {% if page_obj.number == num %}
+          <button class="btn btn-amber btn-sm" disabled>{{ num }}</button>
+          {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+          <a href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ num }}"
+             class="btn btn-ghost btn-sm">{{ num }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <a href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.next_page_number }}"
+           class="btn btn-ghost btn-sm"><i class="bi bi-chevron-right"></i></a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="isi-card-body text-center" style="padding:60px 24px;">
+      <div style="font-size:52px;color:#e2e8f0;margin-bottom:16px;">
+        <i class="bi bi-credit-card"></i>
+      </div>
+      {% if filter_form.q.value or filter_form.category.value or filter_form.approval_status.value %}
+        <p style="color:var(--text-muted);font-size:15px;margin:0 0 16px;">
+          Aucune dépense ne correspond à vos critères.
+        </p>
+        <a href="{% url 'financial:expense_list' %}" class="btn btn-ghost">
+          <i class="bi bi-x-lg"></i> Réinitialiser les filtres
+        </a>
+      {% else %}
+        <p style="color:var(--text-muted);font-size:15px;margin:0 0 16px;">
+          Aucune dépense enregistrée.
+        </p>
+        <a href="{% url 'financial:expense_create' %}" class="btn btn-amber">
+          <i class="bi bi-plus-lg"></i> Enregistrer la première dépense
+        </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

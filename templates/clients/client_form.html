@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }} client{% endblock %}
+
+{% block breadcrumb %}
+<i class="bi bi-house-fill" style="font-size:12px;"></i>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+<a href="{% url 'clients:client_list' %}" style="color:var(--text-muted);text-decoration:none;">Clients</a>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+{% if client %}
+<a href="{% url 'clients:client_detail' client.pk %}" style="color:var(--text-muted);text-decoration:none;">{{ client.name }}</a>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+{% endif %}
+{% endblock %}
+{% block breadcrumb_active %}{{ action }}{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>{{ action }}{% if action == "Modifier" %} — {{ client.name }}{% endif %}</h1>
+      <p>{% if client %}Modifiez les informations du client{% else %}Enregistrez un nouveau client dans le système{% endif %}</p>
+    </div>
+    <a href="{% if client %}{% url 'clients:client_detail' client.pk %}{% else %}{% url 'clients:client_list' %}{% endif %}"
+       class="btn btn-ghost">
+      <i class="bi bi-arrow-left"></i> Retour
+    </a>
+  </div>
+
+  <form method="post" novalidate id="client-form">
+    {% csrf_token %}
+
+    <div class="row g-4">
+
+      <!-- ── Main column ──────────────────────────────────── -->
+      <div class="col-lg-8">
+
+        <!-- Identification -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-building-fill"></i></div>
+            <h3>Identification</h3>
+          </div>
+          <div class="isi-card-body">
+
+            <div class="form-section-title">Informations générales</div>
+            <div class="row g-3 mb-4">
+              <div class="col-sm-8">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Nom *</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-building-fill"></i>
+                  <input type="text" name="{{ form.name.html_name }}" id="{{ form.name.id_for_label }}"
+                         class="form-control {% if form.name.errors %}is-invalid{% endif %}"
+                         value="{{ form.name.value|default:'' }}" required>
+                </div>
+                {% if form.name.errors %}
+                <div class="invalid-feedback d-block">{{ form.name.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.client_type.id_for_label }}">Type *</label>
+                <select name="{{ form.client_type.html_name }}" id="{{ form.client_type.id_for_label }}"
+                        class="form-select {% if form.client_type.errors %}is-invalid{% endif %}">
+                  {% for val, label in form.client_type.field.choices %}
+                  <option value="{{ val }}" {% if form.client_type.value == val %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                {% if form.client_type.errors %}
+                <div class="invalid-feedback d-block">{{ form.client_type.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="{{ form.activity_sector.id_for_label }}">Secteur d'activité</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-briefcase-fill"></i>
+                  <input type="text" name="{{ form.activity_sector.html_name }}"
+                         id="{{ form.activity_sector.id_for_label }}"
+                         class="form-control {% if form.activity_sector.errors %}is-invalid{% endif %}"
+                         value="{{ form.activity_sector.value|default:'' }}"
+                         placeholder="Ex. Industrie pétrolière, BTP, Agroalimentaire…">
+                </div>
+              </div>
+            </div>
+
+            <div class="section-divider"></div>
+            <div class="form-section-title">Coordonnées</div>
+            <div class="row g-3 mb-4">
+              <div class="col-12">
+                <label class="form-label" for="{{ form.address.id_for_label }}">Adresse</label>
+                <textarea name="{{ form.address.html_name }}" id="{{ form.address.id_for_label }}"
+                          class="form-control {% if form.address.errors %}is-invalid{% endif %}"
+                          rows="2" placeholder="Rue, numéro, quartier…">{{ form.address.value|default:'' }}</textarea>
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.postal_code.id_for_label }}">Code postal</label>
+                <input type="text" name="{{ form.postal_code.html_name }}" id="{{ form.postal_code.id_for_label }}"
+                       class="form-control" value="{{ form.postal_code.value|default:'' }}">
+              </div>
+              <div class="col-sm-8">
+                <label class="form-label" for="{{ form.city.id_for_label }}">Ville</label>
+                <input type="text" name="{{ form.city.html_name }}" id="{{ form.city.id_for_label }}"
+                       class="form-control" value="{{ form.city.value|default:'' }}">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label" for="{{ form.phone.id_for_label }}">Téléphone</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-telephone-fill"></i>
+                  <input type="text" name="{{ form.phone.html_name }}" id="{{ form.phone.id_for_label }}"
+                         class="form-control {% if form.phone.errors %}is-invalid{% endif %}"
+                         value="{{ form.phone.value|default:'' }}">
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label" for="{{ form.email.id_for_label }}">Email</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-envelope-fill"></i>
+                  <input type="email" name="{{ form.email.html_name }}" id="{{ form.email.id_for_label }}"
+                         class="form-control {% if form.email.errors %}is-invalid{% endif %}"
+                         value="{{ form.email.value|default:'' }}">
+                </div>
+                {% if form.email.errors %}
+                <div class="invalid-feedback d-block">{{ form.email.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="{{ form.website.id_for_label }}">Site web</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-globe"></i>
+                  <input type="url" name="{{ form.website.html_name }}" id="{{ form.website.id_for_label }}"
+                         class="form-control" value="{{ form.website.value|default:'' }}"
+                         placeholder="https://…">
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Contact principal -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon blue"><i class="bi bi-person-fill"></i></div>
+            <h3>Contact principal</h3>
+          </div>
+          <div class="isi-card-body">
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px;">
+              <i class="bi bi-info-circle" style="color:var(--accent);"></i>
+              Pour gérer plusieurs contacts, utilisez la section <strong>Contacts</strong> depuis la fiche client.
+            </div>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label" for="{{ form.contact_name.id_for_label }}">Nom du contact</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-person"></i>
+                  <input type="text" name="{{ form.contact_name.html_name }}" id="{{ form.contact_name.id_for_label }}"
+                         class="form-control" value="{{ form.contact_name.value|default:'' }}">
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label" for="{{ form.contact_phone.id_for_label }}">Tél. contact</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-telephone-fill"></i>
+                  <input type="text" name="{{ form.contact_phone.html_name }}" id="{{ form.contact_phone.id_for_label }}"
+                         class="form-control" value="{{ form.contact_phone.value|default:'' }}">
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label" for="{{ form.contact_email.id_for_label }}">Email contact</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-envelope-fill"></i>
+                  <input type="email" name="{{ form.contact_email.html_name }}" id="{{ form.contact_email.id_for_label }}"
+                         class="form-control" value="{{ form.contact_email.value|default:'' }}">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Numéros légaux (company only) -->
+        <div class="isi-card mb-4" id="legal-card">
+          <div class="isi-card-header">
+            <div class="card-icon blue"><i class="bi bi-file-earmark-text-fill"></i></div>
+            <h3>Identification légale</h3>
+          </div>
+          <div class="isi-card-body">
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px;">
+              <i class="bi bi-info-circle" style="color:var(--accent);"></i>
+              Applicable aux clients de type Entreprise uniquement.
+            </div>
+            <div class="row g-3">
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.registration_number.id_for_label }}">N° RC</label>
+                <input type="text" name="{{ form.registration_number.html_name }}"
+                       id="{{ form.registration_number.id_for_label }}"
+                       class="form-control" value="{{ form.registration_number.value|default:'' }}">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.nif.id_for_label }}">NIF</label>
+                <input type="text" name="{{ form.nif.html_name }}" id="{{ form.nif.id_for_label }}"
+                       class="form-control" value="{{ form.nif.value|default:'' }}">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.nis.id_for_label }}">NIS</label>
+                <input type="text" name="{{ form.nis.html_name }}" id="{{ form.nis.id_for_label }}"
+                       class="form-control" value="{{ form.nis.value|default:'' }}">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon purple"><i class="bi bi-sticky-fill"></i></div>
+            <h3>Notes</h3>
+          </div>
+          <div class="isi-card-body">
+            <textarea name="{{ form.notes.html_name }}" id="{{ form.notes.id_for_label }}"
+                      class="form-control" rows="4"
+                      placeholder="Informations complémentaires, contexte, remarques…">{{ form.notes.value|default:'' }}</textarea>
+          </div>
+        </div>
+
+        <!-- Non-field errors -->
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger mb-4">
+          <i class="bi bi-exclamation-circle-fill"></i>
+          <div>{{ form.non_field_errors|join:"<br>" }}</div>
+        </div>
+        {% endif %}
+
+        <!-- Submit row -->
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-amber">
+            <i class="bi bi-check-lg"></i>
+            {% if client %}Enregistrer les modifications{% else %}Créer le client{% endif %}
+          </button>
+          <a href="{% if client %}{% url 'clients:client_detail' client.pk %}{% else %}{% url 'clients:client_list' %}{% endif %}"
+             class="btn btn-ghost">Annuler</a>
+        </div>
+
+      </div><!-- /col-lg-8 -->
+
+      <!-- ── Side column ──────────────────────────────────── -->
+      <div class="col-lg-4">
+
+        <!-- Statut -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon green"><i class="bi bi-toggle-on"></i></div>
+            <h3>Statut</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="form-check form-switch" style="padding-left:0;">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input class="form-check-input" type="checkbox"
+                       name="{{ form.is_active.html_name }}"
+                       id="{{ form.is_active.id_for_label }}"
+                       {% if form.is_active.value %}checked{% endif %}
+                       style="width:40px;height:22px;">
+                <label class="form-check-label" for="{{ form.is_active.id_for_label }}"
+                       style="font-weight:500;font-size:14px;">
+                  Client actif
+                </label>
+              </div>
+              <p style="font-size:12px;color:var(--text-muted);margin:8px 0 0;line-height:1.5;">
+                Un client inactif n'apparaît plus dans les listes de sélection.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Type helper -->
+        <div class="isi-card">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-question-circle-fill"></i></div>
+            <h3>Types de clients</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="mb-3 p-3" style="background:rgba(245,158,11,.08);border-radius:8px;">
+              <div style="font-weight:600;font-size:13px;color:#92400e;margin-bottom:4px;">
+                <i class="bi bi-building-fill"></i> Entreprise
+              </div>
+              <p style="font-size:12.5px;color:#78350f;margin:0;line-height:1.5;">
+                Société, organisme ou institution. Les champs RC, NIF et NIS sont applicables.
+              </p>
+            </div>
+            <div class="p-3" style="background:rgba(59,130,246,.08);border-radius:8px;">
+              <div style="font-weight:600;font-size:13px;color:#1e40af;margin-bottom:4px;">
+                <i class="bi bi-person-fill"></i> Particulier
+              </div>
+              <p style="font-size:12.5px;color:#1e3a8a;margin:0;line-height:1.5;">
+                Professionnel indépendant ou individu. Les numéros d'identification légaux ne s'appliquent pas.
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /col-lg-4 -->
+    </div><!-- /row -->
+  </form>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Show/hide legal card based on client type
+  const typeSelect = document.getElementById('{{ form.client_type.id_for_label }}');
+  const legalCard  = document.getElementById('legal-card');
+
+  function toggleLegal() {
+    if (typeSelect) {
+      legalCard.style.display = typeSelect.value === 'individual' ? 'none' : '';
+    }
+  }
+
+  typeSelect?.addEventListener('change', toggleLegal);
+  toggleLegal();
+</script>
+{% endblock %}

@@ -1,0 +1,570 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau de bord{% endblock %}
+{% block breadcrumb_active %}Tableau de bord{% endblock %}
+
+{% block topbar_actions %}
+{% if is_admin %}
+<a href="{% url 'reporting:revenue_summary' %}" class="topbar-btn">
+  <i class="bi bi-bar-chart-fill"></i> Rapports
+</a>
+<a href="{% url 'reporting:export_invoices_csv' %}" class="topbar-btn primary">
+  <i class="bi bi-download"></i> Export
+</a>
+{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kpi-trend { font-size:11.5px; color:#64748b; margin-top:2px; }
+  .kpi-trend .up   { color:#10b981; }
+  .kpi-trend .down { color:#ef4444; }
+  .chart-wrap { position:relative; height:260px; }
+  .session-row { display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #e2e8f0; }
+  .session-row:last-child { border-bottom:none; }
+  .nav-tile {
+    display:flex;flex-direction:column;align-items:flex-start;gap:6px;
+    padding:16px 18px;background:#fff;border:1px solid var(--card-border);
+    border-radius:10px;text-decoration:none;color:var(--text-primary);
+    transition:border-color .15s,box-shadow .15s;height:100%;
+  }
+  .nav-tile:hover { border-color:var(--accent);box-shadow:0 4px 16px rgba(245,158,11,.12);color:var(--text-primary); }
+  .nav-tile-icon { width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0; }
+  .nav-tile-label { font-weight:600;font-size:13.5px; }
+  .nav-tile-sub   { font-size:11.5px;color:var(--text-muted);line-height:1.4; }
+  .report-link {
+    display:flex;align-items:center;gap:10px;padding:9px 0;
+    border-bottom:1px solid #f1f5f9;text-decoration:none;
+    color:var(--text-primary);font-size:13.5px;font-weight:500;
+    transition:color .1s;
+  }
+  .report-link:last-child { border-bottom:none; }
+  .report-link:hover { color:var(--accent); }
+  .report-link i { color:var(--text-muted);font-size:14px;flex-shrink:0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>Tableau de bord</h1>
+      <p>Vue d'ensemble de l'activité — {% now "F Y" %}</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       KPI ROW (admin only)
+  ══════════════════════════════════════════════════════════════ -->
+  {% if is_admin and kpis %}
+  <div class="row g-3 mb-4">
+
+    <div class="col-sm-6 col-lg-3">
+      <a href="{% url 'reporting:revenue_summary' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+            <div class="card-icon amber" style="width:44px;height:44px;font-size:20px;border-radius:12px;"><i class="bi bi-receipt-cutoff"></i></div>
+            <div>
+              <div class="stat-value">{{ kpis.ca_ht|floatformat:0 }} DA</div>
+              <div class="stat-label">CA HT (année)</div>
+              <div class="kpi-trend">
+                <span>F {{ kpis.ca_formation_ht|floatformat:0 }} · E {{ kpis.ca_etude_ht|floatformat:0 }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+      <a href="{% url 'reporting:collections_report' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+            <div class="card-icon green" style="width:44px;height:44px;font-size:20px;border-radius:12px;"><i class="bi bi-cash-coin"></i></div>
+            <div>
+              <div class="stat-value">{{ kpis.collected_year|floatformat:0 }} DA</div>
+              <div class="stat-label">Encaissé (année)</div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+      <a href="{% url 'reporting:outstanding_receivables' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+            <div class="card-icon {% if kpis.overdue_count > 0 %}red{% else %}blue{% endif %}" style="width:44px;height:44px;font-size:20px;border-radius:12px;"><i class="bi bi-clock-fill"></i></div>
+            <div>
+              <div class="stat-value">{{ kpis.outstanding_total|floatformat:0 }} DA</div>
+              <div class="stat-label">Créances impayées</div>
+              {% if kpis.overdue_count > 0 %}
+              <div class="kpi-trend"><span class="down"><i class="bi bi-exclamation-circle-fill"></i> {{ kpis.overdue_count }} en retard</span></div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+      <a href="{% url 'reporting:combined_margin_report' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+            <div class="card-icon purple" style="width:44px;height:44px;font-size:20px;border-radius:12px;"><i class="bi bi-graph-up-arrow"></i></div>
+            <div>
+              <div class="stat-value">{{ kpis.gross_margin|floatformat:0 }} DA</div>
+              <div class="stat-label">Marge brute</div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+  </div>
+
+  <!-- Secondary KPI row -->
+  <div class="row g-3 mb-4">
+
+    <div class="col-sm-4">
+      <a href="{% url 'formations:session_list' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+            <div class="card-icon blue" style="width:40px;height:40px;font-size:18px;border-radius:10px;"><i class="bi bi-calendar3-fill"></i></div>
+            <div>
+              <div class="stat-value" style="font-size:20px;">{{ kpis.sessions_upcoming }}</div>
+              <div class="stat-label">Sessions à venir</div>
+              {% if kpis.sessions_in_progress > 0 %}
+              <div class="kpi-trend"><span class="up">{{ kpis.sessions_in_progress }} en cours</span></div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-sm-4">
+      <a href="{% url 'etudes:project_list' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+            <div class="card-icon amber" style="width:40px;height:40px;font-size:18px;border-radius:10px;"><i class="bi bi-diagram-3-fill"></i></div>
+            <div>
+              <div class="stat-value" style="font-size:20px;">{{ kpis.projects_active }}</div>
+              <div class="stat-label">Projets actifs</div>
+              {% if kpis.projects_overdue > 0 %}
+              <div class="kpi-trend"><span class="down">{{ kpis.projects_overdue }} en retard</span></div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-sm-4">
+      <a href="{% url 'financial:expense_list' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+            <div class="card-icon {% if kpis.expenses_need_action > 0 %}red{% else %}green{% endif %}" style="width:40px;height:40px;font-size:18px;border-radius:10px;"><i class="bi bi-credit-card-fill"></i></div>
+            <div>
+              <div class="stat-value" style="font-size:20px;">{{ kpis.expenses_need_action }}</div>
+              <div class="stat-label">Dépenses à traiter</div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+  </div>
+
+  <!-- Charts row -->
+  <div class="row g-4 mb-4">
+    <div class="col-lg-8">
+      <div class="isi-card">
+        <div class="isi-card-header">
+          <div class="card-icon amber"><i class="bi bi-bar-chart-fill"></i></div>
+          <h3>Chiffre d'affaires mensuel</h3>
+          <a href="{% url 'reporting:revenue_by_month' %}" class="ms-auto btn btn-ghost btn-sm">Détail</a>
+        </div>
+        <div class="isi-card-body">
+          <div class="chart-wrap"><canvas id="chartRevenueTrend"></canvas></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="isi-card">
+        <div class="isi-card-header">
+          <div class="card-icon purple"><i class="bi bi-pie-chart-fill"></i></div>
+          <h3>Répartition activités</h3>
+        </div>
+        <div class="isi-card-body">
+          <div class="chart-wrap" style="height:180px;"><canvas id="chartBusinessSplit"></canvas></div>
+          <div class="mt-3" style="font-size:13px;">
+            <div class="d-flex justify-content-between mb-2">
+              <span><i class="bi bi-circle-fill" style="color:#f59e0b;font-size:8px;"></i> Formations</span>
+              <span style="font-weight:600;">{{ kpis.ca_formation_ht|floatformat:0 }} DA</span>
+            </div>
+            <div class="d-flex justify-content-between">
+              <span><i class="bi bi-circle-fill" style="color:#3b82f6;font-size:8px;"></i> Études</span>
+              <span style="font-weight:600;">{{ kpis.ca_etude_ht|floatformat:0 }} DA</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unpaid invoices + overdue projects -->
+  {% if unpaid_invoices %}
+  <div class="row g-4 mb-4">
+    <div class="col-lg-7">
+      <div class="isi-card">
+        <div class="isi-card-header">
+          <div class="card-icon red"><i class="bi bi-receipt-cutoff"></i></div>
+          <h3>Factures impayées</h3>
+          <a href="{% url 'reporting:outstanding_receivables' %}" class="ms-auto btn btn-ghost btn-sm">Voir tout</a>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="isi-table">
+            <thead>
+              <tr>
+                <th>Référence</th>
+                <th>Client</th>
+                <th>Échéance</th>
+                <th style="text-align:right;">Restant</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for inv in unpaid_invoices %}
+              <tr>
+                <td><a href="{% url 'financial:invoice_detail' inv.pk %}" style="font-weight:600;color:var(--accent);text-decoration:none;">{{ inv.reference }}</a></td>
+                <td style="color:#64748b;">{{ inv.client.name }}</td>
+                <td>
+                  {% if inv.due_date %}
+                    {% if inv.due_date < today %}
+                      <span class="isi-badge red"><i class="bi bi-clock-fill"></i> {{ inv.due_date|date:"d/m/Y" }}</span>
+                    {% else %}
+                      <span style="font-size:13px;">{{ inv.due_date|date:"d/m/Y" }}</span>
+                    {% endif %}
+                  {% else %}—{% endif %}
+                </td>
+                <td style="text-align:right;font-weight:600;">{{ inv.amount_remaining|floatformat:0 }} DA</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      {% if overdue_projects %}
+      <div class="isi-card">
+        <div class="isi-card-header">
+          <div class="card-icon red"><i class="bi bi-diagram-3-fill"></i></div>
+          <h3>Projets en retard</h3>
+          <a href="{% url 'reporting:project_overview_report' %}" class="ms-auto btn btn-ghost btn-sm">Voir tout</a>
+        </div>
+        <div class="isi-card-body" style="padding-top:12px;">
+          {% for p in overdue_projects %}
+          <div class="session-row">
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ p.title }}</div>
+              <div style="font-size:12px;color:#64748b;">{{ p.client.name }}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <span class="isi-badge red"><i class="bi bi-clock-fill"></i> {{ p.days_overdue }}j</span>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ══════════════════════════════════════════════════════════════
+       REPORTS QUICK ACCESS (admin only)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="row g-4 mb-4">
+
+    <!-- Revenue reports -->
+    <div class="col-lg-4">
+      <div class="isi-card h-100">
+        <div class="isi-card-header">
+          <div class="card-icon amber"><i class="bi bi-bar-chart-fill"></i></div>
+          <h3>Revenus & Finances</h3>
+        </div>
+        <div class="isi-card-body" style="padding-top:8px;">
+          <a href="{% url 'reporting:revenue_summary' %}" class="report-link"><i class="bi bi-bar-chart-line-fill"></i> Synthèse des revenus</a>
+          <a href="{% url 'reporting:revenue_by_month' %}" class="report-link"><i class="bi bi-calendar3"></i> Revenus par mois</a>
+          <a href="{% url 'reporting:revenue_by_client' %}" class="report-link"><i class="bi bi-building-fill"></i> Revenus par client</a>
+          <a href="{% url 'reporting:revenue_by_business_line' %}" class="report-link"><i class="bi bi-diagram-2-fill"></i> Par ligne d'activité</a>
+          <a href="{% url 'reporting:cash_flow_report' %}" class="report-link"><i class="bi bi-cash-stack"></i> Flux de trésorerie</a>
+          <a href="{% url 'reporting:tva_report' %}" class="report-link"><i class="bi bi-percent"></i> Déclaration TVA</a>
+          <a href="{% url 'reporting:outstanding_receivables' %}" class="report-link"><i class="bi bi-hourglass-split"></i> Créances impayées</a>
+          <a href="{% url 'reporting:invoice_aging_report' %}" class="report-link"><i class="bi bi-clock-history"></i> Analyse aging</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Margins & Expenses -->
+    <div class="col-lg-4">
+      <div class="isi-card h-100">
+        <div class="isi-card-header">
+          <div class="card-icon green"><i class="bi bi-graph-up-arrow"></i></div>
+          <h3>Marges & Dépenses</h3>
+        </div>
+        <div class="isi-card-body" style="padding-top:8px;">
+          <a href="{% url 'reporting:session_margins' %}" class="report-link"><i class="bi bi-mortarboard-fill"></i> Marges sessions</a>
+          <a href="{% url 'reporting:project_margins' %}" class="report-link"><i class="bi bi-diagram-3-fill"></i> Marges projets</a>
+          <a href="{% url 'reporting:combined_margin_report' %}" class="report-link"><i class="bi bi-layers-fill"></i> Rapport combiné</a>
+          <a href="{% url 'reporting:expense_breakdown_report' %}" class="report-link"><i class="bi bi-credit-card-fill"></i> Analyse des dépenses</a>
+          <a href="{% url 'reporting:expense_by_category' %}" class="report-link"><i class="bi bi-tags-fill"></i> Dépenses par catégorie</a>
+          <a href="{% url 'reporting:pending_expenses_report' %}" class="report-link"><i class="bi bi-exclamation-circle-fill"></i> Dépenses en attente</a>
+          <a href="{% url 'financial:expense_list' %}" class="report-link"><i class="bi bi-list-ul"></i> Toutes les dépenses</a>
+          <a href="{% url 'financial:expense_create' %}" class="report-link"><i class="bi bi-plus-circle-fill"></i> Nouvelle dépense</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Formations & Operations -->
+    <div class="col-lg-4">
+      <div class="isi-card h-100">
+        <div class="isi-card-header">
+          <div class="card-icon blue"><i class="bi bi-mortarboard-fill"></i></div>
+          <h3>Formations & Opérations</h3>
+        </div>
+        <div class="isi-card-body" style="padding-top:8px;">
+          <a href="{% url 'reporting:sessions_report' %}" class="report-link"><i class="bi bi-calendar3-fill"></i> Rapport sessions</a>
+          <a href="{% url 'reporting:fill_rate_report' %}" class="report-link"><i class="bi bi-people-fill"></i> Taux de remplissage</a>
+          <a href="{% url 'reporting:catalog_performance' %}" class="report-link"><i class="bi bi-star-fill"></i> Performance catalogue</a>
+          <a href="{% url 'reporting:trainer_utilization_report' %}" class="report-link"><i class="bi bi-person-badge-fill"></i> Utilisation formateurs</a>
+          <a href="{% url 'reporting:top_clients_report' %}" class="report-link"><i class="bi bi-trophy-fill"></i> Top clients</a>
+          <a href="{% url 'reporting:project_overview_report' %}" class="report-link"><i class="bi bi-kanban-fill"></i> Vue projets</a>
+          <a href="{% url 'reporting:equipment_report' %}" class="report-link"><i class="bi bi-tools"></i> Ressources & équipements</a>
+          <a href="{% url 'reporting:room_occupancy_report' %}" class="report-link"><i class="bi bi-door-closed-fill"></i> Occupation salles</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {% endif %}{# end is_admin #}
+
+  <!-- ══════════════════════════════════════════════════════════════
+       QUICK ACCESS TILES (all users)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="row g-3 mb-4">
+    <div class="col-12">
+      <div style="font-family:var(--font-head);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b;border-bottom:2px solid var(--accent);display:inline-block;padding-bottom:8px;margin-bottom:18px;">
+        Accès rapide
+      </div>
+    </div>
+
+    <div class="col-6 col-sm-4 col-lg-2">
+      <a href="{% url 'clients:client_list' %}" class="nav-tile">
+        <div class="nav-tile-icon" style="background:rgba(245,158,11,.12);color:var(--accent);"><i class="bi bi-building-fill"></i></div>
+        <div class="nav-tile-label">Clients</div>
+        <div class="nav-tile-sub">Liste & fiches</div>
+      </a>
+    </div>
+
+    <div class="col-6 col-sm-4 col-lg-2">
+      <a href="{% url 'formations:session_list' %}" class="nav-tile">
+        <div class="nav-tile-icon" style="background:rgba(59,130,246,.12);color:#3b82f6;"><i class="bi bi-calendar3-fill"></i></div>
+        <div class="nav-tile-label">Sessions</div>
+        <div class="nav-tile-sub">Planning & suivi</div>
+      </a>
+    </div>
+
+    <div class="col-6 col-sm-4 col-lg-2">
+      <a href="{% url 'formations:formation_list' %}" class="nav-tile">
+        <div class="nav-tile-icon" style="background:rgba(16,185,129,.12);color:var(--success);"><i class="bi bi-mortarboard-fill"></i></div>
+        <div class="nav-tile-label">Formations</div>
+        <div class="nav-tile-sub">Catalogue</div>
+      </a>
+    </div>
+
+    <div class="col-6 col-sm-4 col-lg-2">
+      <a href="{% url 'etudes:project_list' %}" class="nav-tile">
+        <div class="nav-tile-icon" style="background:rgba(139,92,246,.12);color:#8b5cf6;"><i class="bi bi-diagram-3-fill"></i></div>
+        <div class="nav-tile-label">Études</div>
+        <div class="nav-tile-sub">Projets actifs</div>
+      </a>
+    </div>
+
+    <div class="col-6 col-sm-4 col-lg-2">
+      <a href="{% url 'financial:invoice_list' %}" class="nav-tile">
+        <div class="nav-tile-icon" style="background:rgba(245,158,11,.12);color:var(--accent);"><i class="bi bi-receipt-cutoff"></i></div>
+        <div class="nav-tile-label">Factures</div>
+        <div class="nav-tile-sub">Facturation</div>
+      </a>
+    </div>
+
+    <div class="col-6 col-sm-4 col-lg-2">
+      <a href="{% url 'financial:expense_list' %}" class="nav-tile">
+        <div class="nav-tile-icon" style="background:rgba(239,68,68,.12);color:var(--danger);"><i class="bi bi-credit-card-fill"></i></div>
+        <div class="nav-tile-label">Dépenses</div>
+        <div class="nav-tile-sub">Saisie & approbation</div>
+      </a>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       UPCOMING SESSIONS + ACTIVE PROJECTS (all users)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="row g-4">
+
+    <div class="col-lg-7">
+      <div class="isi-card">
+        <div class="isi-card-header">
+          <div class="card-icon blue"><i class="bi bi-calendar3-fill"></i></div>
+          <h3>Prochaines sessions</h3>
+          <a href="{% url 'formations:session_list' %}" class="ms-auto btn btn-ghost btn-sm">Voir tout</a>
+        </div>
+        {% if upcoming_sessions %}
+        <div style="overflow-x:auto;">
+          <table class="isi-table">
+            <thead>
+              <tr>
+                <th>Formation</th>
+                <th>Client</th>
+                <th>Début</th>
+                <th>Formateur</th>
+                <th>Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in upcoming_sessions %}
+              <tr>
+                <td>
+                  <a href="{% url 'formations:session_detail' s.pk %}" style="font-weight:600;color:var(--text-primary);text-decoration:none;">
+                    {{ s.formation.title|truncatechars:30 }}
+                  </a>
+                </td>
+                <td style="color:#64748b;font-size:13px;">{{ s.client.name|default:"—"|truncatechars:20 }}</td>
+                <td style="font-size:13px;white-space:nowrap;">{{ s.date_start|date:"d/m/Y" }}</td>
+                <td style="font-size:13px;color:#64748b;">{{ s.trainer.full_name|default:"—"|truncatechars:18 }}</td>
+                <td><span class="isi-badge blue"><i class="bi bi-circle-fill" style="font-size:7px;"></i> Planifiée</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="isi-card-body text-center" style="padding:40px 24px;">
+          <div style="font-size:40px;color:#e2e8f0;margin-bottom:12px;"><i class="bi bi-calendar3"></i></div>
+          <p style="color:#64748b;margin:0 0 14px;">Aucune session planifiée prochainement.</p>
+          <a href="{% url 'formations:session_create' %}" class="btn btn-amber btn-sm">
+            <i class="bi bi-plus-lg"></i> Planifier une session
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="isi-card">
+        <div class="isi-card-header">
+          <div class="card-icon amber"><i class="bi bi-diagram-3-fill"></i></div>
+          <h3>Projets actifs</h3>
+          <a href="{% url 'etudes:project_list' %}" class="ms-auto btn btn-ghost btn-sm">Voir tout</a>
+        </div>
+        <div class="isi-card-body" style="padding-top:12px;">
+          {% for p in active_projects %}
+          <div class="session-row">
+            <div style="flex:1;min-width:0;">
+              <a href="{% url 'etudes:project_detail' p.pk %}" style="font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;color:var(--text-primary);text-decoration:none;">
+                {{ p.title|truncatechars:32 }}
+              </a>
+              <div style="font-size:12px;color:#64748b;">{{ p.client.name }}</div>
+            </div>
+            <div style="flex-shrink:0;text-align:right;">
+              {% if p.is_overdue %}
+                <span class="isi-badge red" style="font-size:10px;">Retard</span>
+              {% else %}
+                <div style="font-size:11px;color:#94a3b8;">{{ p.progress_percentage }}%</div>
+                <div style="width:60px;height:4px;background:#e2e8f0;border-radius:2px;margin-top:3px;">
+                  <div style="width:{{ p.progress_percentage }}%;height:4px;background:var(--accent);border-radius:2px;"></div>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+          {% empty %}
+          <div class="text-center" style="padding:30px 0;">
+            <div style="font-size:36px;color:#e2e8f0;margin-bottom:10px;"><i class="bi bi-diagram-3"></i></div>
+            <p style="color:#64748b;font-size:13.5px;margin:0 0 14px;">Aucun projet actif.</p>
+            <a href="{% url 'etudes:project_create' %}" class="btn btn-amber btn-sm">
+              <i class="bi bi-plus-lg"></i> Nouveau projet
+            </a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if is_admin %}
+<script>
+const CHART_COLORS = {
+  amber: '#f59e0b', amberLight: 'rgba(245,158,11,.15)',
+  blue: '#3b82f6',  blueLight: 'rgba(59,130,246,.15)',
+  green: '#10b981', purple: '#8b5cf6',
+  text: '#64748b',  grid: '#e2e8f0',
+};
+
+fetch("{% url 'reporting:chart_revenue_trend' %}")
+  .then(r => r.json())
+  .then(({ data }) => {
+    new Chart(document.getElementById('chartRevenueTrend'), {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.month),
+        datasets: [
+          { label: 'Formations', data: data.map(d => d.formation_ht), backgroundColor: CHART_COLORS.amberLight, borderColor: CHART_COLORS.amber, borderWidth: 2, borderRadius: 4 },
+          { label: 'Études',     data: data.map(d => d.etude_ht),     backgroundColor: CHART_COLORS.blueLight,  borderColor: CHART_COLORS.blue,  borderWidth: 2, borderRadius: 4 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: CHART_COLORS.text, font: { family: 'Barlow', size: 12 } } },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString('fr-DZ')} DA` } },
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { color: CHART_COLORS.text, font: { family: 'Barlow', size: 11 } } },
+          y: { stacked: true, grid: { color: CHART_COLORS.grid }, ticks: { color: CHART_COLORS.text, font: { family: 'Barlow', size: 11 }, callback: v => v.toLocaleString('fr-DZ') } },
+        },
+      },
+    });
+  });
+
+fetch("{% url 'reporting:chart_business_line_split' %}")
+  .then(r => r.json())
+  .then(data => {
+    new Chart(document.getElementById('chartBusinessSplit'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Formations', 'Études'],
+        datasets: [{ data: [data.formation_ht, data.etude_ht], backgroundColor: [CHART_COLORS.amber, CHART_COLORS.blue], borderWidth: 0, hoverOffset: 4 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '68%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw.toLocaleString('fr-DZ')} DA` } },
+        },
+      },
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Catégories de dépenses{% endblock %}
+
+{% block breadcrumb %}
+<i class="bi bi-house-fill" style="font-size:12px;"></i>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+<a href="{% url 'financial:expense_list' %}" style="color:var(--text-muted);text-decoration:none;">Dépenses</a>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+{% endblock %}
+{% block breadcrumb_active %}Catégories{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'financial:expense_category_create' %}" class="topbar-btn primary">
+  <i class="bi bi-plus-lg"></i> Nouvelle catégorie
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>Catégories de dépenses</h1>
+      <p>Organisez vos dépenses par catégorie</p>
+    </div>
+  </div>
+
+  <div class="isi-card fade-up-delay-1">
+    <div class="isi-card-header">
+      <div class="card-icon amber"><i class="bi bi-tag-fill"></i></div>
+      <h3>Liste des catégories</h3>
+    </div>
+
+    {% if categories %}
+    <div style="overflow-x:auto;">
+      <table class="isi-table">
+        <thead>
+          <tr>
+            <th>Catégorie</th>
+            <th>Description</th>
+            <th>Type</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cat in categories %}
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div style="width:16px;height:16px;border-radius:4px;
+                            background:{{ cat.color|default:'#94a3b8' }};flex-shrink:0;"></div>
+                <span style="font-weight:600;color:var(--text-primary);">{{ cat.name }}</span>
+              </div>
+            </td>
+            <td>
+              <span style="color:var(--text-muted);font-size:13px;">
+                {{ cat.description|default:"—"|truncatechars:60 }}
+              </span>
+            </td>
+            <td>
+              {% if cat.is_direct_cost %}
+                <span class="isi-badge green"><i class="bi bi-arrow-down-circle-fill"></i> Coût direct</span>
+              {% else %}
+                <span class="isi-badge gray">Frais généraux</span>
+              {% endif %}
+            </td>
+            <td>
+              <div style="display:flex;justify-content:flex-end;gap:6px;">
+                <a href="{% url 'financial:expense_category_edit' cat.pk %}"
+                   class="btn btn-ghost btn-sm" title="Modifier">
+                  <i class="bi bi-pencil-fill"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="isi-card-body text-center" style="padding:60px 24px;">
+      <div style="font-size:52px;color:#e2e8f0;margin-bottom:16px;">
+        <i class="bi bi-tags"></i>
+      </div>
+      <p style="color:var(--text-muted);font-size:15px;margin:0 0 16px;">
+        Aucune catégorie définie.
+      </p>
+      <a href="{% url 'financial:expense_category_create' %}" class="btn btn-amber">
+        <i class="bi bi-plus-lg"></i> Créer la première catégorie
+      </a>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Category form (inline create/edit) -->
+  {% if form %}
+  <div class="isi-card mt-4">
+    <div class="isi-card-header">
+      <div class="card-icon amber"><i class="bi bi-tag-fill"></i></div>
+      <h3>{% if category %}Modifier{% else %}Nouvelle catégorie{% endif %}</h3>
+    </div>
+    <div class="isi-card-body">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">{{ form.name.label }}</label>
+            {{ form.name }}
+            {% if form.name.errors %}
+            <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.name.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">{{ form.description.label }}</label>
+            {{ form.description }}
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">{{ form.color.label }}</label>
+            {{ form.color }}
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">&nbsp;</label>
+            <div class="d-flex align-items-center" style="height:38px;gap:8px;">
+              {{ form.is_direct_cost }}
+              <label for="{{ form.is_direct_cost.id_for_label }}"
+                     style="font-size:13px;font-weight:500;margin:0;cursor:pointer;">
+                Coût direct
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-amber">
+            <i class="bi bi-check-lg"></i>
+            {% if category %}Modifier{% else %}Créer{% endif %}
+          </button>
+          <a href="{% url 'financial:expense_category_list' %}" class="btn btn-ghost">
+            <i class="bi bi-x-lg"></i> Annuler
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

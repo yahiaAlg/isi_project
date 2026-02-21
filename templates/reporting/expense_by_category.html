@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Dépenses par catégorie{% endblock %}
+{% block breadcrumb %}
+<i class="bi bi-house-fill" style="font-size:12px;"></i>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+<a href="{% url 'reporting:expense_breakdown_report' %}" style="color:var(--text-muted);text-decoration:none;">Dépenses</a>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+{% endblock %}
+{% block breadcrumb_active %}Par catégorie{% endblock %}
+{% block content %}
+<div class="fade-up">
+  <div class="page-header"><div class="page-header-left"><h1>Dépenses par catégorie</h1><p>Ventilation des dépenses approuvées</p></div></div>
+  <div class="isi-card mb-4"><div class="isi-card-body" style="padding:16px 24px;">
+    <form method="get" class="d-flex align-items-center gap-3 flex-wrap">
+      <div style="display:flex;align-items:center;gap:8px;"><label class="form-label mb-0">Du</label><input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}" class="form-control" style="width:160px;"></div>
+      <div style="display:flex;align-items:center;gap:8px;"><label class="form-label mb-0">Au</label><input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}" class="form-control" style="width:160px;"></div>
+      <button type="submit" class="btn btn-amber"><i class="bi bi-funnel-fill"></i> Filtrer</button>
+    </form>
+  </div></div>
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="isi-card">
+        <div class="isi-card-header"><div class="card-icon red"><i class="bi bi-pie-chart-fill"></i></div><h3>Répartition</h3></div>
+        <div class="isi-card-body"><div style="position:relative;height:280px;"><canvas id="chartCat"></canvas></div></div>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div class="isi-card">
+        <div class="isi-card-header"><div class="card-icon amber"><i class="bi bi-bar-chart-fill"></i></div><h3>Détail par catégorie</h3><div class="ms-auto" style="font-size:13px;color:#64748b;">Total : {{ grand_total|floatformat:0 }} DA</div></div>
+        <div style="overflow-x:auto;">
+          <table class="isi-table">
+            <thead><tr><th>Catégorie</th><th style="text-align:right;">Nb</th><th style="text-align:right;">Montant</th><th style="text-align:right;">Part</th></tr></thead>
+            <tbody>
+              {% for r in rows %}
+              <tr>
+                <td style="font-weight:600;">{{ r.category__name|default:"—" }}</td>
+                <td style="text-align:right;">{{ r.count }}</td>
+                <td style="text-align:right;font-weight:600;">{{ r.total|floatformat:0 }} DA</td>
+                <td style="text-align:right;">
+                  <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;">
+                    <div style="width:60px;height:6px;background:#e2e8f0;border-radius:3px;"><div style="width:{{ r.pct }}%;height:6px;background:var(--accent);border-radius:3px;"></div></div>
+                    <span style="font-size:12px;font-weight:600;min-width:32px;">{{ r.pct }}%</span>
+                  </div>
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="4"><div class="text-center" style="padding:40px;"><p style="color:#64748b;margin:0;">Aucune catégorie.</p></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const catData = [{% for r in rows %}{ label: "{{ r.category__name|default:'—' }}", total: {{ r.total|default:0|floatformat:2 }} },{% endfor %}];
+const palette = ['#f59e0b','#3b82f6','#10b981','#8b5cf6','#ef4444','#f97316','#06b6d4','#84cc16','#ec4899','#6366f1'];
+if (catData.length) {
+  new Chart(document.getElementById('chartCat'), {
+    type: 'doughnut',
+    data: { labels: catData.map(d=>d.label), datasets: [{ data: catData.map(d=>d.total), backgroundColor: palette.slice(0,catData.length), borderWidth: 0, hoverOffset: 5 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom', labels: { color: '#64748b', font: { family: 'Barlow', size: 11 }, padding: 12, boxWidth: 12 } } } }
+  });
+}
+</script>
+{% endblock %}

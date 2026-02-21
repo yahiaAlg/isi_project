@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }} — Facture{% endblock %}
+
+{% block breadcrumb %}
+<i class="bi bi-house-fill" style="font-size:12px;"></i>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+<a href="{% url 'financial:invoice_list' %}" style="color:var(--text-muted);text-decoration:none;">Factures</a>
+<i class="bi bi-chevron-right" style="font-size:10px;"></i>
+{% endblock %}
+{% block breadcrumb_active %}{{ action }}{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>{{ action }}{% if invoice %} — {{ invoice.reference }}{% endif %}</h1>
+      <p>{% if invoice %}Modification de la facture {{ invoice.reference }}{% else %}Création d'une nouvelle facture{% endif %}</p>
+    </div>
+    <a href="{% if invoice %}{% url 'financial:invoice_detail' invoice.pk %}{% else %}{% url 'financial:invoice_list' %}{% endif %}"
+       class="btn btn-ghost">
+      <i class="bi bi-arrow-left"></i> Retour
+    </a>
+  </div>
+
+  {% if source_session %}
+  <div class="isi-card mb-4" style="border-left:3px solid var(--accent);">
+    <div class="isi-card-body" style="padding:14px 20px;display:flex;align-items:center;gap:12px;">
+      <i class="bi bi-info-circle-fill" style="color:var(--accent);font-size:18px;flex-shrink:0;"></i>
+      <span style="font-size:13.5px;">
+        Facture pré-remplie depuis la session <strong>{{ source_session }}</strong> —
+        {{ source_session.attended_count }} participant(s) à {{ source_session.effective_price|floatformat:2 }} DA.
+      </span>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if source_project %}
+  <div class="isi-card mb-4" style="border-left:3px solid var(--accent);">
+    <div class="isi-card-body" style="padding:14px 20px;display:flex;align-items:center;gap:12px;">
+      <i class="bi bi-info-circle-fill" style="color:var(--accent);font-size:18px;flex-shrink:0;"></i>
+      <span style="font-size:13.5px;">
+        Facture pré-remplie depuis le projet <strong>{{ source_project.title }}</strong> —
+        budget {{ source_project.budget|floatformat:2 }} DA.
+      </span>
+    </div>
+  </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="row g-4">
+
+      <!-- ── Main form ─────────────────────────────────────── -->
+      <div class="col-lg-8">
+
+        <!-- Informations générales -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-receipt-cutoff"></i></div>
+            <h3>Informations générales</h3>
+          </div>
+          <div class="isi-card-body">
+
+            <div class="form-section-title">Identification</div>
+            <div class="row g-3 mb-4">
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.invoice_type.id_for_label }}">Type *</label>
+                <select name="{{ form.invoice_type.html_name }}"
+                        id="{{ form.invoice_type.id_for_label }}"
+                        class="form-select {% if form.invoice_type.errors %}is-invalid{% endif %}">
+                  {% for val, label in form.invoice_type.field.choices %}
+                  <option value="{{ val }}" {% if form.invoice_type.value == val %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                {% if form.invoice_type.errors %}
+                <div class="invalid-feedback d-block">{{ form.invoice_type.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.client.id_for_label }}">Client *</label>
+                <select name="{{ form.client.html_name }}"
+                        id="{{ form.client.id_for_label }}"
+                        class="form-select {% if form.client.errors %}is-invalid{% endif %}">
+                  <option value="">— Sélectionner un client —</option>
+                  {% for choice in form.client.field.choices %}
+                    {% if choice.0 %}
+                    <option value="{{ choice.0 }}" {% if form.client.value|stringformat:"s" == choice.0|stringformat:"s" %}selected{% endif %}>{{ choice.1 }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                {% if form.client.errors %}
+                <div class="invalid-feedback d-block">{{ form.client.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+            </div>
+
+            <div class="section-divider"></div>
+            <div class="form-section-title">Dates</div>
+            <div class="row g-3 mb-4">
+
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.invoice_date.id_for_label }}">Date de facturation *</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-calendar-fill"></i>
+                  <input type="date" name="{{ form.invoice_date.html_name }}"
+                         id="{{ form.invoice_date.id_for_label }}"
+                         class="form-control {% if form.invoice_date.errors %}is-invalid{% endif %}"
+                         value="{{ form.invoice_date.value|default:'' }}">
+                </div>
+                {% if form.invoice_date.errors %}
+                <div class="invalid-feedback d-block">{{ form.invoice_date.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.due_date.id_for_label }}">Date d'échéance</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-calendar-check-fill"></i>
+                  <input type="date" name="{{ form.due_date.html_name }}"
+                         id="{{ form.due_date.id_for_label }}"
+                         class="form-control {% if form.due_date.errors %}is-invalid{% endif %}"
+                         value="{{ form.due_date.value|default:'' }}">
+                </div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">Optionnel — date limite de règlement.</div>
+                {% if form.due_date.errors %}
+                <div class="invalid-feedback d-block">{{ form.due_date.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.tva_rate.id_for_label }}">Taux TVA *</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-percent"></i>
+                  <input type="number" name="{{ form.tva_rate.html_name }}"
+                         id="{{ form.tva_rate.id_for_label }}"
+                         class="form-control {% if form.tva_rate.errors %}is-invalid{% endif %}"
+                         value="{{ form.tva_rate.value|default:'0.19' }}"
+                         step="0.01" min="0" max="1">
+                </div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">Entre 0 et 1 (ex. 0.19 pour 19%).</div>
+                {% if form.tva_rate.errors %}
+                <div class="invalid-feedback d-block">{{ form.tva_rate.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+            </div>
+
+            <div class="section-divider"></div>
+            <div class="form-section-title">Liaison</div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;">
+              <i class="bi bi-info-circle" style="color:var(--accent);"></i>
+              Liez cette facture à une session ou un projet pour le suivi de marge.
+            </div>
+            <div class="row g-3">
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.session.id_for_label }}">Session</label>
+                <select name="{{ form.session.html_name }}"
+                        id="{{ form.session.id_for_label }}"
+                        class="form-select {% if form.session.errors %}is-invalid{% endif %}">
+                  <option value="">———</option>
+                  {% for choice in form.session.field.choices %}
+                    {% if choice.0 %}
+                    <option value="{{ choice.0 }}" {% if form.session.value|stringformat:"s" == choice.0|stringformat:"s" %}selected{% endif %}>{{ choice.1 }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                {% if form.session.errors %}
+                <div class="invalid-feedback d-block">{{ form.session.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.study_project.id_for_label }}">Projet d'étude</label>
+                <select name="{{ form.study_project.html_name }}"
+                        id="{{ form.study_project.id_for_label }}"
+                        class="form-select {% if form.study_project.errors %}is-invalid{% endif %}">
+                  <option value="">———</option>
+                  {% for choice in form.study_project.field.choices %}
+                    {% if choice.0 %}
+                    <option value="{{ choice.0 }}" {% if form.study_project.value|stringformat:"s" == choice.0|stringformat:"s" %}selected{% endif %}>{{ choice.1 }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                {% if form.study_project.errors %}
+                <div class="invalid-feedback d-block">{{ form.study_project.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Notes & pied de page -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon purple"><i class="bi bi-sticky-fill"></i></div>
+            <h3>Notes &amp; pied de page</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Notes internes</label>
+                <textarea name="{{ form.notes.html_name }}"
+                          id="{{ form.notes.id_for_label }}"
+                          class="form-control"
+                          rows="3"
+                          placeholder="Remarques internes, contexte…">{{ form.notes.value|default:'' }}</textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="{{ form.footer_text.id_for_label }}">Pied de page (personnalisé)</label>
+                <textarea name="{{ form.footer_text.html_name }}"
+                          id="{{ form.footer_text.id_for_label }}"
+                          class="form-control"
+                          rows="3"
+                          placeholder="Conditions de paiement, mentions légales spécifiques…">{{ form.footer_text.value|default:'' }}</textarea>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
+                  Si vide, le texte par défaut de l'institut sera utilisé.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Non-field errors -->
+        {% if form.non_field_errors %}
+        <div class="isi-card mb-4" style="border-left:3px solid var(--danger);">
+          <div class="isi-card-body" style="padding:14px 20px;">
+            {% for error in form.non_field_errors %}
+            <div style="color:var(--danger);font-size:13.5px;display:flex;gap:8px;align-items:flex-start;">
+              <i class="bi bi-exclamation-circle-fill" style="margin-top:2px;flex-shrink:0;"></i>
+              {{ error }}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Submit row -->
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-amber">
+            <i class="bi bi-check-lg"></i>
+            {% if invoice %}Enregistrer les modifications{% else %}Créer la facture{% endif %}
+          </button>
+          <a href="{% if invoice %}{% url 'financial:invoice_detail' invoice.pk %}{% else %}{% url 'financial:invoice_list' %}{% endif %}"
+             class="btn btn-ghost">
+            <i class="bi bi-x-lg"></i> Annuler
+          </a>
+        </div>
+
+      </div><!-- /col-lg-8 -->
+
+      <!-- ── Side panel ────────────────────────────────────── -->
+      <div class="col-lg-4">
+
+        {% if invoice %}
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon green"><i class="bi bi-bar-chart-fill"></i></div>
+            <h3>Résumé actuel</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="row g-3">
+              <div class="col-6">
+                <div class="stat-label mb-1">Total TTC</div>
+                <div class="stat-value" style="font-size:20px;">{{ invoice.amount_ttc|floatformat:0 }}</div>
+                <div style="font-size:11px;color:var(--text-muted);">DA</div>
+              </div>
+              <div class="col-6">
+                <div class="stat-label mb-1">Solde dû</div>
+                <div class="stat-value" style="font-size:20px;color:{% if invoice.amount_remaining > 0 %}var(--danger){% else %}var(--success){% endif %};">
+                  {{ invoice.amount_remaining|floatformat:0 }}
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);">DA</div>
+              </div>
+              <div class="col-12">
+                <div class="stat-label mb-1">Statut</div>
+                <div style="margin-top:4px;">
+                  {% if invoice.status == 'paid' %}
+                    <span class="isi-badge green"><i class="bi bi-check-circle-fill"></i> Payée</span>
+                  {% elif invoice.status == 'partially_paid' %}
+                    <span class="isi-badge amber"><i class="bi bi-circle-half"></i> Part. payée</span>
+                  {% elif invoice.status == 'unpaid' %}
+                    <span class="isi-badge red"><i class="bi bi-clock-fill"></i> Impayée</span>
+                  {% else %}
+                    <span class="isi-badge gray"><i class="bi bi-slash-circle-fill"></i> Annulée</span>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="isi-card">
+          <div class="isi-card-header">
+            <div class="card-icon blue"><i class="bi bi-info-circle-fill"></i></div>
+            <h3>Aide</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="mb-3 p-3" style="background:rgba(59,130,246,.08);border-radius:8px;">
+              <div style="font-weight:600;font-size:13px;color:#1e40af;margin-bottom:4px;">
+                <i class="bi bi-mortarboard-fill"></i> Formation
+              </div>
+              <p style="font-size:12.5px;color:#1e3a8a;margin:0;line-height:1.5;">
+                Liez à une session terminée pour le suivi des participants.
+              </p>
+            </div>
+            <div class="p-3" style="background:rgba(139,92,246,.08);border-radius:8px;">
+              <div style="font-weight:600;font-size:13px;color:#5b21b6;margin-bottom:4px;">
+                <i class="bi bi-diagram-3-fill"></i> Étude
+              </div>
+              <p style="font-size:12.5px;color:#4c1d95;margin:0;line-height:1.5;">
+                Liez à un projet terminé pour le suivi budgétaire.
+              </p>
+            </div>
+            <p style="font-size:12.5px;color:var(--text-muted);margin:12px 0 0;line-height:1.5;">
+              <i class="bi bi-hash" style="color:var(--accent);"></i>
+              Le numéro de facture est généré automatiquement à la sauvegarde.
+            </p>
+          </div>
+        </div>
+
+      </div><!-- /col-lg-4 -->
+    </div><!-- /row -->
+  </form>
+
+</div>
+{% endblock %}
