@@ -1229,7 +1229,7 @@ def maintenance_cost_report(request):
 
 @admin_required
 def room_occupancy_report(request):
-    from resources.models import TrainingRoom
+    from formations.models import TrainingRoom
 
     date_from, date_to = _parse_date_range(request)
     period_days = (date_to - date_from).days + 1

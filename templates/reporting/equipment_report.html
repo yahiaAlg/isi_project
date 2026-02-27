@@ -19,14 +19,14 @@
   {% endif %}
   <div class="row g-4 mb-4">
     <div class="col-lg-4">
-      <div class="isi-card fade-up-delay-1">
+      <div class="isi-card">
         <div class="isi-card-header"><div class="card-icon amber"><i class="bi bi-pie-chart-fill"></i></div><h3>Répartition statut</h3></div>
         <div class="isi-card-body"><div style="position:relative;height:200px;"><canvas id="chartEqStatus"></canvas></div></div>
       </div>
     </div>
     <div class="col-lg-8">
       {% if maintenance_due %}
-      <div class="isi-card mb-3 fade-up-delay-2">
+      <div class="isi-card mb-3">
         <div class="isi-card-header"><div class="card-icon amber"><i class="bi bi-wrench-adjustable-fill"></i></div><h3>Maintenance due</h3></div>
         <div style="overflow-x:auto;"><table class="isi-table">
           <thead><tr><th>Équipement</th><th>Catégorie</th><th>Prochaine maintenance</th><th>État</th></tr></thead>
@@ -41,7 +41,7 @@
       {% endif %}
     </div>
   </div>
-  <div class="isi-card fade-up-delay-2">
+  <div class="isi-card">
     <div class="isi-card-header"><div class="card-icon blue"><i class="bi bi-tools"></i></div><h3>Inventaire complet</h3></div>
     <div style="overflow-x:auto;">
       <table class="isi-table">

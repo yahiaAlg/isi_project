@@ -17,11 +17,11 @@
       <button type="submit" class="btn btn-amber"><i class="bi bi-funnel-fill"></i> Filtrer</button>
     </form>
   </div></div>
-  <div class="isi-card mb-4 fade-up-delay-1">
+  <div class="isi-card mb-4">
     <div class="isi-card-header"><div class="card-icon amber"><i class="bi bi-bar-chart-fill"></i></div><h3>Occupation par salle</h3></div>
     <div class="isi-card-body"><div style="position:relative;height:220px;"><canvas id="chartRooms"></canvas></div></div>
   </div>
-  <div class="isi-card fade-up-delay-2">
+  <div class="isi-card">
     <div class="isi-card-header"><div class="card-icon blue"><i class="bi bi-door-open-fill"></i></div><h3>Détail — Période de {{ period_days }} jours</h3></div>
     <div style="overflow-x:auto;">
       <table class="isi-table">
@@ -50,7 +50,7 @@
 {% endblock %}
 {% block extra_scripts %}
 <script>
-const roomData = [{% for r in data %}{ name: "{{ r.room.name|truncatechars:18 }}", rate: {{ r.occupancy_rate }} },{% endfor %}];
+const roomData = [{% for r in data %}{ name: "{{ r.room.name|truncatechars:18|escapejs }}", rate: {{ r.occupancy_rate|default:0|stringformat:".2f" }} },{% endfor %}];
 if (roomData.length) {
   new Chart(document.getElementById('chartRooms'), {
     type: 'bar',

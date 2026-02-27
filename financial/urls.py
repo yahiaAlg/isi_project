@@ -41,11 +41,13 @@ urlpatterns = [
     ),
     # --- Payments ---
     path(
-        "invoices/<int:invoice_pk>/payments/add/", views.payment_add, name="payment_add"
+        "invoices/<int:invoice_pk>/payments/add/",
+        views.payment_add,
+        name="payment_add",
     ),
     path(
         "invoices/<int:invoice_pk>/payments/<int:pk>/edit/",
-        views.payment_edit,
+        views.payment_add,  # ← same view, pk makes it edit mode
         name="payment_edit",
     ),
     path(

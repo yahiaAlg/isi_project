@@ -19,14 +19,21 @@ from financial.models import Invoice, InvoiceItem, Payment
 @receiver(post_save, sender=Payment)
 def payment_saved(sender, instance, **kwargs):
     """Refresh invoice totals after any payment save."""
-    instance.invoice.refresh_payment_totals()
+    if not instance.invoice_id:
+        return
+    try:
+        Invoice.objects.get(pk=instance.invoice_id).refresh_payment_totals()
+    except Invoice.DoesNotExist:
+        pass
 
 
 @receiver(post_delete, sender=Payment)
 def payment_deleted(sender, instance, **kwargs):
     """Refresh invoice totals after a payment is removed."""
+    if not instance.invoice_id:
+        return
     try:
-        instance.invoice.refresh_payment_totals()
+        Invoice.objects.get(pk=instance.invoice_id).refresh_payment_totals()
     except Invoice.DoesNotExist:
         pass  # Invoice itself was deleted — nothing to update
 

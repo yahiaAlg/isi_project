@@ -186,7 +186,7 @@ def client_history(request, pk):
 
     from financial.models import Invoice
 
-    invoices = Invoice.objects.filter(client=client).order_by("-date")
+    invoices = Invoice.objects.filter(client=client).order_by("-invoice_date")
 
     from formations.models import Session
 

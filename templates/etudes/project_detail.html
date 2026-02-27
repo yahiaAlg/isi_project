@@ -20,6 +20,10 @@
     <i class="bi bi-check-circle-fill"></i> Clôturer
   </a>
   {% endif %}
+ <a href="{% url 'etudes:project_print' project.pk %}"
+    class="topbar-btn" target="_blank">
+   <i class="bi bi-printer-fill"></i> Imprimer
+ </a>
 {% endif %}
 {% endblock %}
 

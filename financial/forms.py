@@ -308,6 +308,16 @@ class ExpenseFilterForm(ISIFormMixin, forms.Form):
         required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
     )
+    allocation = forms.ChoiceField(
+        label="Affectation",
+        required=False,
+        choices=[
+            ("", "Toutes"),
+            ("session", "Session"),
+            ("project", "Projet"),
+            ("overhead", "Frais généraux"),
+        ],
+    )
 
 
 class ExpenseCategoryForm(ISIFormMixin, forms.ModelForm):

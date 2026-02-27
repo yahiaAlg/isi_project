@@ -146,7 +146,7 @@ def trainer_utilization_report(date_from=None, date_to=None):
     """
     Return trainers annotated with session_count and total_days for the period.
     """
-    from resources.models import Trainer
+    from formations.models import Trainer
     from formations.models import Session
     from django.db.models import F
 

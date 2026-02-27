@@ -88,6 +88,33 @@ def project_detail(request, pk):
 
 
 @login_and_active_required
+def project_print(request, pk):
+    """
+    Printable / PDF-friendly A4 project sheet for a study project.
+    Includes header (institute + bureau info), KPIs, phases table,
+    and financial summary — all from the database (nothing hard-coded).
+    """
+    from core.models import BureauEtudeInfo
+
+    project = get_object_or_404(StudyProject.objects.select_related("client"), pk=pk)
+    phases = project.phases.order_by("order")
+
+    bureau = BureauEtudeInfo.get_instance()  # singleton — never None
+
+    return render(
+        request,
+        "etudes/project_print.html",
+        {
+            "project": project,
+            "phases": phases,
+            "bureau": bureau,
+            # `institute` is already injected by the context_processors.institute_info
+            # processor, so it is available in the template automatically.
+        },
+    )
+
+
+@login_and_active_required
 def project_create(request):
     is_rec = _is_receptionist(request.user)
     form = StudyProjectForm(request.POST or None, is_receptionist=is_rec)

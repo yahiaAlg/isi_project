@@ -164,16 +164,18 @@ def top_clients_by_revenue(limit=10, date_from=None, date_to=None):
     """Return queryset of clients annotated with total_paid, ordered desc."""
     from financial.models import Invoice
     from clients.models import Client
+    from django.db.models import Sum, Q
 
-    inv_qs = Invoice.objects.filter(status=Invoice.STATUS_PAID)
+    filters = Q(invoices__status=Invoice.STATUS_PAID)
     if date_from:
-        inv_qs = inv_qs.filter(invoice_date__gte=date_from)
+        filters &= Q(invoices__invoice_date__gte=date_from)
     if date_to:
-        inv_qs = inv_qs.filter(invoice_date__lte=date_to)
+        filters &= Q(invoices__invoice_date__lte=date_to)
 
     return (
-        Client.objects.filter(invoices__in=inv_qs)
+        Client.objects.filter(filters)
         .annotate(total_paid=Sum("invoices__amount_ttc"))
+        .distinct()
         .order_by("-total_paid")[:limit]
     )
 

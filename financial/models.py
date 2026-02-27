@@ -493,7 +493,11 @@ class Payment(TimeStampedModel):
         return f"Paiement {self.amount} DA — {self.invoice.reference} ({self.date})"
 
     def clean(self):
-        if not self.invoice.is_payable:
+        if not self.invoice_id:
+            return
+        # Only block NEW payments on a closed invoice — edits to existing
+        # payments must always be allowed (e.g. correcting a status)
+        if self.pk is None and not self.invoice.is_payable:
             raise ValidationError(
                 f"La facture {self.invoice.reference} n'est pas en attente de paiement."
             )

@@ -324,43 +324,48 @@ def item_delete(request, invoice_pk, pk):
 
 
 @admin_required
-def payment_add(request, invoice_pk):
+def payment_add(request, invoice_pk, pk=None):
     invoice = get_object_or_404(Invoice, pk=invoice_pk)
-    if invoice.status in [Invoice.STATUS_PAID, Invoice.STATUS_VOIDED]:
+    is_edit = pk is not None
+
+    if not is_edit and invoice.status in [Invoice.STATUS_PAID, Invoice.STATUS_VOIDED]:
         messages.error(request, "Cette facture ne peut plus recevoir de paiement.")
         return redirect("financial:invoice_detail", pk=invoice_pk)
 
-    form = PaymentForm(request.POST or None, invoice=invoice)
-    if request.method == "POST" and form.is_valid():
-        payment = form.save(commit=False)
-        payment.invoice = invoice
-        payment.save()
-        # Signal fires refresh_payment_totals()
-        messages.success(request, "Paiement enregistré.")
-        return redirect("financial:invoice_detail", pk=invoice_pk)
+    if is_edit:
+        payment = get_object_or_404(Payment, pk=pk, invoice=invoice)
+    else:
+        payment_count = invoice.payments.count() + 1
+        auto_reference = (
+            f"PAY-{timezone.now().year}-{invoice.reference}-{payment_count:04d}"
+        )
+        payment = Payment(
+            invoice=invoice,
+            date=timezone.now().date(),
+            amount=invoice.amount_remaining,
+            reference=auto_reference,
+        )
+
+    if request.method == "POST":
+        form = PaymentForm(request.POST, instance=payment)
+        if form.is_valid():
+            form.save()
+            messages.success(
+                request,
+                "Paiement mis à jour." if is_edit else "Paiement enregistré.",
+            )
+            return redirect("financial:invoice_detail", pk=invoice_pk)
+    else:
+        form = PaymentForm(instance=payment)
 
     return render(
         request,
         "financial/payment_form.html",
-        {"form": form, "invoice": invoice, "action": "Enregistrer un paiement"},
-    )
-
-
-@admin_required
-def payment_edit(request, invoice_pk, pk):
-    invoice = get_object_or_404(Invoice, pk=invoice_pk)
-    payment = get_object_or_404(Payment, pk=pk, invoice=invoice)
-    form = PaymentForm(request.POST or None, instance=payment, invoice=invoice)
-
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Paiement mis à jour.")
-        return redirect("financial:invoice_detail", pk=invoice_pk)
-
-    return render(
-        request,
-        "financial/payment_form.html",
-        {"form": form, "invoice": invoice, "action": "Modifier"},
+        {
+            "form": form,
+            "invoice": invoice,
+            "action": "Modifier le paiement" if is_edit else "Enregistrer un paiement",
+        },
     )
 
 
@@ -412,7 +417,7 @@ def credit_note_list(request):
 @admin_required
 def credit_note_create(request, invoice_pk):
     invoice = get_object_or_404(Invoice, pk=invoice_pk)
-    form = CreditNoteForm(request.POST or None, invoice=invoice)
+    form = CreditNoteForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
         cn = form.save(commit=False)

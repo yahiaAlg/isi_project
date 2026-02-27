@@ -12,6 +12,7 @@ urlpatterns = [
     path("", views.project_list, name="project_list"),
     path("create/", views.project_create, name="project_create"),
     path("<int:pk>/", views.project_detail, name="project_detail"),
+    path("<int:pk>/print/", views.project_print, name="project_print"),
     path("<int:pk>/edit/", views.project_edit, name="project_edit"),
     path("<int:pk>/close/", views.project_close, name="project_close"),
     path("<int:pk>/cancel/", views.project_cancel, name="project_cancel"),
