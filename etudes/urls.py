@@ -55,4 +55,7 @@ urlpatterns = [
     ),
     # --- Analytics ---
     path("analytics/", views.etudes_analytics, name="analytics"),
+    # ── API (AJAX for invoice line-item prepopulation) ────────────────── #
+    path("api/projects/", views.api_project_list, name="api_project_list"),
+    path("api/projects/<int:pk>/", views.api_project_detail, name="api_project_detail"),
 ]

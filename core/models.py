@@ -1,6 +1,10 @@
 """
 Core models — institute configuration and singleton business-line settings.
+v3.0: Added agrement_number + article_imposition to InstituteInfo;
+      FormationInfo TVA default corrected to 9% per Algerian fiscal code.
 """
+
+from decimal import Decimal
 
 from django.db import models
 
@@ -10,7 +14,7 @@ from core.base_models import TimeStampedModel
 class SingletonModel(TimeStampedModel):
     """
     Abstract base for singleton configuration records.
-    Forces pk=1 on save and prevents deletion.
+    Forces pk=1 on save; ignores delete calls.
     """
 
     class Meta:
@@ -21,7 +25,7 @@ class SingletonModel(TimeStampedModel):
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        pass  # Singleton records cannot be deleted
+        pass  # Singleton records cannot be deleted.
 
     @classmethod
     def get_instance(cls):
@@ -48,23 +52,31 @@ class InstituteInfo(SingletonModel):
     email = models.EmailField(verbose_name="Email")
     website = models.URLField(blank=True, verbose_name="Site web")
 
-    # ---- Algerian registration numbers ------------------------------- #
-    registration_number = models.CharField(
-        max_length=100, blank=True, verbose_name="Numéro RC"
-    )
+    # ---- Algerian fiscal registration --------------------------------- #
+    rc = models.CharField(max_length=100, blank=True, verbose_name="Numéro RC")
     nif = models.CharField(max_length=100, blank=True, verbose_name="NIF")
     nis = models.CharField(max_length=100, blank=True, verbose_name="NIS")
+    article_imposition = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Article d'imposition (A.I.)",
+    )
+    agrement_number = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="N° Agrément",
+        help_text="Numéro d'agrément officiel de l'institut (ex. formation professionnelle).",
+    )
 
-    # ---- Bank details ------------------------------------------------ #
+    # ---- Bank details ------------------------------------------------- #
     bank_name = models.CharField(max_length=255, blank=True, verbose_name="Banque")
     bank_account = models.CharField(
-        max_length=255, blank=True, verbose_name="Numéro de compte"
+        max_length=255, blank=True, verbose_name="N° de compte"
     )
     bank_rib = models.CharField(max_length=255, blank=True, verbose_name="RIB")
 
-    # ---- Branding ---------------------------------------------------- #
+    # ---- Branding ----------------------------------------------------- #
     logo = models.ImageField(upload_to="institute/", blank=True, verbose_name="Logo")
-    # Optional signature image for printed documents
     director_signature = models.ImageField(
         upload_to="institute/", blank=True, verbose_name="Signature du directeur"
     )
@@ -75,11 +87,11 @@ class InstituteInfo(SingletonModel):
         max_length=255, blank=True, verbose_name="Titre du directeur"
     )
 
-    # ---- Invoice footer text ----------------------------------------- #
+    # ---- Invoice footer ----------------------------------------------- #
     invoice_footer_text = models.TextField(
         blank=True,
         verbose_name="Pied de page des factures",
-        help_text="Texte affiché en bas de chaque facture (ex. conditions de paiement).",
+        help_text="Texte affiché en bas de chaque facture (conditions de paiement, etc.).",
     )
 
     class Meta:
@@ -93,13 +105,13 @@ class InstituteInfo(SingletonModel):
 class BureauEtudeInfo(SingletonModel):
     """
     Configuration specific to the Études (Consulting) business line.
+    TVA: 19% standard rate for consulting services.
     """
 
     name = models.CharField(
         max_length=255, default="Bureau d'Étude", verbose_name="Nom"
     )
     description = models.TextField(blank=True, verbose_name="Description")
-
     address = models.TextField(blank=True, verbose_name="Adresse spécifique")
     phone = models.CharField(
         max_length=50, blank=True, verbose_name="Téléphone spécifique"
@@ -108,16 +120,29 @@ class BureauEtudeInfo(SingletonModel):
 
     # ---- Invoice numbering ------------------------------------------- #
     invoice_prefix = models.CharField(
-        max_length=10, default="E", verbose_name="Préfixe des factures"
+        max_length=10,
+        default="E",
+        verbose_name="Préfixe des factures",
+        help_text="Utilisé dans les références — ex. E → E-2026-001.",
+    )
+    proforma_prefix = models.CharField(
+        max_length=10,
+        default="PF-E",
+        verbose_name="Préfixe proforma",
+        help_text="Utilisé dans les références proforma — ex. PF-E → PF-E-2026-001.",
     )
 
-    # ---- TVA --------------------------------------------------------- #
+    # ---- TVA ---------------------------------------------------------- #
     tva_applicable = models.BooleanField(default=True, verbose_name="TVA applicable")
     tva_rate = models.DecimalField(
-        max_digits=5, decimal_places=4, default=0.19, verbose_name="Taux de TVA"
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0.19"),
+        verbose_name="Taux de TVA",
+        help_text="Taux standard 19% pour les études et le conseil.",
     )
 
-    # ---- Signatory --------------------------------------------------- #
+    # ---- Signatory ---------------------------------------------------- #
     chief_engineer_name = models.CharField(
         max_length=255, blank=True, verbose_name="Ingénieur en chef"
     )
@@ -139,13 +164,14 @@ class BureauEtudeInfo(SingletonModel):
 class FormationInfo(SingletonModel):
     """
     Configuration specific to the Formations (Training) business line.
+    TVA: 9% — reduced rate applicable to professional training services
+    under Algerian fiscal code.
     """
 
     name = models.CharField(
         max_length=255, default="Centre de Formation", verbose_name="Nom"
     )
     description = models.TextField(blank=True, verbose_name="Description")
-
     address = models.TextField(blank=True, verbose_name="Adresse spécifique")
     phone = models.CharField(
         max_length=50, blank=True, verbose_name="Téléphone spécifique"
@@ -154,13 +180,26 @@ class FormationInfo(SingletonModel):
 
     # ---- Invoice numbering ------------------------------------------- #
     invoice_prefix = models.CharField(
-        max_length=10, default="F", verbose_name="Préfixe des factures"
+        max_length=10,
+        default="F",
+        verbose_name="Préfixe des factures",
+        help_text="Utilisé dans les références — ex. F → F-2026-001.",
+    )
+    proforma_prefix = models.CharField(
+        max_length=10,
+        default="PF-F",
+        verbose_name="Préfixe proforma",
+        help_text="Utilisé dans les références proforma — ex. PF-F → PF-F-2026-001.",
     )
 
-    # ---- TVA --------------------------------------------------------- #
+    # ---- TVA ---------------------------------------------------------- #
     tva_applicable = models.BooleanField(default=True, verbose_name="TVA applicable")
     tva_rate = models.DecimalField(
-        max_digits=5, decimal_places=4, default=0.19, verbose_name="Taux de TVA"
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0.09"),
+        verbose_name="Taux de TVA",
+        help_text="Taux réduit 9% pour les prestations de formation professionnelle.",
     )
 
     # ---- Training director ------------------------------------------- #
@@ -172,13 +211,14 @@ class FormationInfo(SingletonModel):
         upload_to="formations/", blank=True, verbose_name="Signature du directeur"
     )
 
-    # ---- Attestations ------------------------------------------------ #
+    # ---- Attestations ------------------------------------------------- #
     attestation_validity_years = models.PositiveIntegerField(
         default=5, verbose_name="Validité des attestations (années)"
     )
-    # Minimum attendance percentage required to issue an attestation
     min_attendance_percent = models.PositiveIntegerField(
-        default=80, verbose_name="Présence minimale requise (%)"
+        default=80,
+        verbose_name="Présence minimale requise (%)",
+        help_text="Seuil de présence en dessous duquel aucune attestation n'est délivrée.",
     )
 
     class Meta:

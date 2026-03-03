@@ -123,7 +123,7 @@
                 <div class="invalid-feedback d-block">{{ form.email.errors|join:", " }}</div>
                 {% endif %}
               </div>
-              <div class="col-12">
+              <div class="col-sm-8">
                 <label class="form-label" for="{{ form.website.id_for_label }}">Site web</label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-globe"></i>
@@ -131,6 +131,12 @@
                          class="form-control" value="{{ form.website.value|default:'' }}"
                          placeholder="https://…">
                 </div>
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.rib.id_for_label }}">RIB bancaire</label>
+                <input type="text" name="{{ form.rib.html_name }}" id="{{ form.rib.id_for_label }}"
+                       class="form-control" value="{{ form.rib.value|default:'' }}"
+                       placeholder="Ex. 002 00100 …">
               </div>
             </div>
 
@@ -177,33 +183,146 @@
           </div>
         </div>
 
-        <!-- Numéros légaux (company only) -->
-        <div class="isi-card mb-4" id="legal-card">
+        <!-- ── Fiscal section: Entreprise / Startup ──────────── -->
+        <div class="isi-card mb-4" id="fiscal-entreprise">
           <div class="isi-card-header">
             <div class="card-icon blue"><i class="bi bi-file-earmark-text-fill"></i></div>
-            <h3>Identification légale</h3>
+            <h3>Identification légale &amp; fiscale</h3>
           </div>
           <div class="isi-card-body">
             <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px;">
               <i class="bi bi-info-circle" style="color:var(--accent);"></i>
-              Applicable aux clients de type Entreprise uniquement.
+              Applicable aux clients <strong>Entreprise</strong> et <strong>Startup</strong>.
+              Ces champs sont requis pour la finalisation des factures.
             </div>
             <div class="row g-3">
               <div class="col-sm-4">
-                <label class="form-label" for="{{ form.registration_number.id_for_label }}">N° RC</label>
-                <input type="text" name="{{ form.registration_number.html_name }}"
-                       id="{{ form.registration_number.id_for_label }}"
-                       class="form-control" value="{{ form.registration_number.value|default:'' }}">
+                <label class="form-label" for="{{ form.forme_juridique.id_for_label }}">Forme juridique</label>
+                <input type="text" name="{{ form.forme_juridique.html_name }}"
+                       id="{{ form.forme_juridique.id_for_label }}"
+                       class="form-control" value="{{ form.forme_juridique.value|default:'' }}"
+                       placeholder="Ex. SPA, SARL, EURL…">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.rc.id_for_label }}">N° RC</label>
+                <input type="text" name="{{ form.rc.html_name }}" id="{{ form.rc.id_for_label }}"
+                       class="form-control {% if form.rc.errors %}is-invalid{% endif %}"
+                       value="{{ form.rc.value|default:'' }}"
+                       placeholder="Ex. 16/00-1234567B19">
+                {% if form.rc.errors %}
+                <div class="invalid-feedback d-block">{{ form.rc.errors|join:", " }}</div>
+                {% endif %}
               </div>
               <div class="col-sm-4">
                 <label class="form-label" for="{{ form.nif.id_for_label }}">NIF</label>
                 <input type="text" name="{{ form.nif.html_name }}" id="{{ form.nif.id_for_label }}"
-                       class="form-control" value="{{ form.nif.value|default:'' }}">
+                       class="form-control {% if form.nif.errors %}is-invalid{% endif %}"
+                       value="{{ form.nif.value|default:'' }}" placeholder="15 chiffres">
+                {% if form.nif.errors %}
+                <div class="invalid-feedback d-block">{{ form.nif.errors|join:", " }}</div>
+                {% endif %}
               </div>
               <div class="col-sm-4">
                 <label class="form-label" for="{{ form.nis.id_for_label }}">NIS</label>
                 <input type="text" name="{{ form.nis.html_name }}" id="{{ form.nis.id_for_label }}"
-                       class="form-control" value="{{ form.nis.value|default:'' }}">
+                       class="form-control" value="{{ form.nis.value|default:'' }}" placeholder="15 chiffres">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.article_imposition.id_for_label }}">Article d'imposition</label>
+                <input type="text" name="{{ form.article_imposition.html_name }}"
+                       id="{{ form.article_imposition.id_for_label }}"
+                       class="form-control" value="{{ form.article_imposition.value|default:'' }}">
+              </div>
+            </div>
+
+            <!-- Startup-specific fields -->
+            <div id="startup-extra" style="display:none;">
+              <div class="section-divider mt-4 mb-3"></div>
+              <div class="form-section-title">Label Startup</div>
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label class="form-label" for="{{ form.label_startup_number.id_for_label }}">N° Label Startup (ANIE)</label>
+                  <input type="text" name="{{ form.label_startup_number.html_name }}"
+                         id="{{ form.label_startup_number.id_for_label }}"
+                         class="form-control" value="{{ form.label_startup_number.value|default:'' }}"
+                         placeholder="Ex. ANIE-2023-ST-04521">
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label" for="{{ form.label_startup_date.id_for_label }}">Date du label</label>
+                  <input type="date" name="{{ form.label_startup_date.html_name }}"
+                         id="{{ form.label_startup_date.id_for_label }}"
+                         class="form-control" value="{{ form.label_startup_date.value|date:'Y-m-d'|default:'' }}">
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label" for="{{ form.programme_accompagnement.id_for_label }}">Programme</label>
+                  <input type="text" name="{{ form.programme_accompagnement.html_name }}"
+                         id="{{ form.programme_accompagnement.id_for_label }}"
+                         class="form-control" value="{{ form.programme_accompagnement.value|default:'' }}"
+                         placeholder="Ex. NEXUS, Riyada…">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Fiscal section: Auto-entrepreneur ─────────────── -->
+        <div class="isi-card mb-4" id="fiscal-ae">
+          <div class="isi-card-header">
+            <div class="card-icon violet"><i class="bi bi-person-badge-fill"></i></div>
+            <h3>Identification — Auto-entrepreneur</h3>
+          </div>
+          <div class="isi-card-body">
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px;">
+              <i class="bi bi-info-circle" style="color:var(--accent);"></i>
+              Régime IFU — exonéré de TVA.
+            </div>
+            <div class="row g-3">
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.nif.id_for_label }}_ae">NIF</label>
+                <input type="text" name="{{ form.nif.html_name }}" id="{{ form.nif.id_for_label }}_ae"
+                       class="form-control" value="{{ form.nif.value|default:'' }}" placeholder="15 chiffres">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.article_imposition.id_for_label }}_ae">Article d'imposition</label>
+                <input type="text" name="{{ form.article_imposition.html_name }}"
+                       id="{{ form.article_imposition.id_for_label }}_ae"
+                       class="form-control" value="{{ form.article_imposition.value|default:'' }}">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.carte_auto_entrepreneur.id_for_label }}">Carte AE</label>
+                <input type="text" name="{{ form.carte_auto_entrepreneur.html_name }}"
+                       id="{{ form.carte_auto_entrepreneur.id_for_label }}"
+                       class="form-control" value="{{ form.carte_auto_entrepreneur.value|default:'' }}"
+                       placeholder="Ex. AE-2023-19-00587">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Fiscal section: Particulier ───────────────────── -->
+        <div class="isi-card mb-4" id="fiscal-particulier">
+          <div class="isi-card-header">
+            <div class="card-icon blue"><i class="bi bi-person-vcard-fill"></i></div>
+            <h3>Identification — Particulier</h3>
+          </div>
+          <div class="isi-card-body">
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px;">
+              <i class="bi bi-info-circle" style="color:var(--accent);"></i>
+              Particulier — exonéré de TVA.
+            </div>
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <label class="form-label" for="{{ form.nin.id_for_label }}">
+                  NIN — Numéro d'identification national
+                  <span class="text-muted" style="font-size:11px;">(18 chiffres)</span>
+                </label>
+                <input type="text" name="{{ form.nin.html_name }}" id="{{ form.nin.id_for_label }}"
+                       class="form-control {% if form.nin.errors %}is-invalid{% endif %}"
+                       value="{{ form.nin.value|default:'' }}"
+                       maxlength="18" placeholder="Ex. 198506160160042">
+                {% if form.nin.errors %}
+                <div class="invalid-feedback d-block">{{ form.nin.errors|join:", " }}</div>
+                {% endif %}
               </div>
             </div>
           </div>
@@ -271,6 +390,33 @@
           </div>
         </div>
 
+        <!-- TVA override (shown for entreprise/startup only) -->
+        <div class="isi-card mb-4" id="tva-card">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-percent"></i></div>
+            <h3>Régime TVA</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="form-check form-switch" style="padding-left:0;">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input class="form-check-input" type="checkbox"
+                       name="{{ form.is_tva_exempt.html_name }}"
+                       id="{{ form.is_tva_exempt.id_for_label }}"
+                       {% if form.is_tva_exempt.value %}checked{% endif %}
+                       style="width:40px;height:22px;">
+                <label class="form-check-label" for="{{ form.is_tva_exempt.id_for_label }}"
+                       style="font-weight:500;font-size:14px;">
+                  Exonéré de TVA
+                </label>
+              </div>
+              <p style="font-size:12px;color:var(--text-muted);margin:8px 0 0;line-height:1.5;">
+                Pour les particuliers et auto-entrepreneurs, l'exonération est automatique.
+                Ce paramètre est une dérogation manuelle pour les entreprises.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <!-- Type helper -->
         <div class="isi-card">
           <div class="isi-card-header">
@@ -278,22 +424,43 @@
             <h3>Types de clients</h3>
           </div>
           <div class="isi-card-body">
-            <div class="mb-3 p-3" style="background:rgba(245,158,11,.08);border-radius:8px;">
+
+            <div class="mb-2 p-3" style="background:rgba(245,158,11,.08);border-radius:8px;">
               <div style="font-weight:600;font-size:13px;color:#92400e;margin-bottom:4px;">
                 <i class="bi bi-building-fill"></i> Entreprise
               </div>
-              <p style="font-size:12.5px;color:#78350f;margin:0;line-height:1.5;">
-                Société, organisme ou institution. Les champs RC, NIF et NIS sont applicables.
+              <p style="font-size:12px;color:#78350f;margin:0;line-height:1.5;">
+                Société (SPA, SARL…). RC, NIF, NIS, AI requis. TVA 19 %.
               </p>
             </div>
+
+            <div class="mb-2 p-3" style="background:rgba(124,58,237,.08);border-radius:8px;">
+              <div style="font-weight:600;font-size:13px;color:#5b21b6;margin-bottom:4px;">
+                <i class="bi bi-rocket-takeoff-fill"></i> Startup
+              </div>
+              <p style="font-size:12px;color:#4c1d95;margin:0;line-height:1.5;">
+                Idem Entreprise + N° label ANIE. TVA 19 %.
+              </p>
+            </div>
+
+            <div class="mb-2 p-3" style="background:rgba(109,40,217,.08);border-radius:8px;">
+              <div style="font-weight:600;font-size:13px;color:#6d28d9;margin-bottom:4px;">
+                <i class="bi bi-person-badge-fill"></i> Auto-entrepreneur
+              </div>
+              <p style="font-size:12px;color:#5b21b6;margin:0;line-height:1.5;">
+                Régime IFU. NIF + carte AE. Exonéré TVA.
+              </p>
+            </div>
+
             <div class="p-3" style="background:rgba(59,130,246,.08);border-radius:8px;">
               <div style="font-weight:600;font-size:13px;color:#1e40af;margin-bottom:4px;">
                 <i class="bi bi-person-fill"></i> Particulier
               </div>
-              <p style="font-size:12.5px;color:#1e3a8a;margin:0;line-height:1.5;">
-                Professionnel indépendant ou individu. Les numéros d'identification légaux ne s'appliquent pas.
+              <p style="font-size:12px;color:#1e3a8a;margin:0;line-height:1.5;">
+                Individu. NIN (18 chiffres) requis. Exonéré TVA.
               </p>
             </div>
+
           </div>
         </div>
 
@@ -306,17 +473,45 @@
 
 {% block extra_scripts %}
 <script>
-  // Show/hide legal card based on client type
   const typeSelect = document.getElementById('{{ form.client_type.id_for_label }}');
-  const legalCard  = document.getElementById('legal-card');
+  const cardEntreprise  = document.getElementById('fiscal-entreprise');
+  const cardAE          = document.getElementById('fiscal-ae');
+  const cardParticulier = document.getElementById('fiscal-particulier');
+  const startupExtra    = document.getElementById('startup-extra');
+  const tvaCard         = document.getElementById('tva-card');
 
-  function toggleLegal() {
-    if (typeSelect) {
-      legalCard.style.display = typeSelect.value === 'individual' ? 'none' : '';
-    }
+  function setInputsDisabled(card, disabled) {
+    card.querySelectorAll('input, select, textarea').forEach(el => {
+      el.disabled = disabled;
+    });
   }
 
-  typeSelect?.addEventListener('change', toggleLegal);
-  toggleLegal();
+  function syncFields() {
+    const v = typeSelect ? typeSelect.value : '';
+    const isCompany    = v === 'entreprise' || v === 'startup';
+    const isAE         = v === 'auto_entrepreneur';
+    const isParticular = v === 'particulier';
+
+    cardEntreprise.style.display  = isCompany    ? '' : 'none';
+    cardAE.style.display          = isAE         ? '' : 'none';
+    cardParticulier.style.display = isParticular ? '' : 'none';
+    startupExtra.style.display    = v === 'startup' ? '' : 'none';
+
+    // Disable hidden cards' inputs so they are NOT submitted
+    // (prevents duplicate field names from overwriting real values)
+    setInputsDisabled(cardEntreprise,  !isCompany);
+    setInputsDisabled(cardAE,          !isAE);
+    setInputsDisabled(cardParticulier, !isParticular);
+    // startup-extra lives inside cardEntreprise so re-enable/disable just those
+    startupExtra.querySelectorAll('input').forEach(el => {
+      el.disabled = v !== 'startup';
+    });
+
+    // TVA override only makes sense for companies (AE/particulier are auto-exempt)
+    tvaCard.style.display = isCompany ? '' : 'none';
+  }
+
+  typeSelect?.addEventListener('change', syncFields);
+  syncFields();
 </script>
 {% endblock %}

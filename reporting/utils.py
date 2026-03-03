@@ -26,27 +26,31 @@ def dashboard_kpis():
     year_end = date(today.year, 12, 31)
 
     inv_year = Invoice.objects.filter(
+        phase=Invoice.Phase.FINALE,
         invoice_date__range=[year_start, year_end],
         status__in=[
-            Invoice.STATUS_UNPAID,
-            Invoice.STATUS_PARTIALLY_PAID,
-            Invoice.STATUS_PAID,
+            Invoice.Status.UNPAID,
+            Invoice.Status.PARTIALLY_PAID,
+            Invoice.Status.PAID,
         ],
     ).aggregate(
         total_ht=Sum("amount_ht"),
-        formation_ht=Sum("amount_ht", filter=Q(invoice_type=Invoice.TYPE_FORMATION)),
-        etude_ht=Sum("amount_ht", filter=Q(invoice_type=Invoice.TYPE_ETUDE)),
+        formation_ht=Sum(
+            "amount_ht", filter=Q(invoice_type=Invoice.InvoiceType.FORMATION)
+        ),
+        etude_ht=Sum("amount_ht", filter=Q(invoice_type=Invoice.InvoiceType.ETUDE)),
     )
 
     # ── Collections ───────────────────────────────────────────────────── #
     collected_year = Payment.objects.filter(
         date__range=[year_start, year_end],
-        status=Payment.STATUS_CONFIRMED,
+        status=Payment.Status.CONFIRMED,
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
     # ── Outstanding ───────────────────────────────────────────────────── #
     outstanding = Invoice.objects.filter(
-        status__in=[Invoice.STATUS_UNPAID, Invoice.STATUS_PARTIALLY_PAID]
+        phase=Invoice.Phase.FINALE,
+        status__in=[Invoice.Status.UNPAID, Invoice.Status.PARTIALLY_PAID],
     ).aggregate(
         count=Count("pk"),
         total=Sum("amount_remaining"),
@@ -84,12 +88,12 @@ def dashboard_kpis():
     # ── Expenses (year) ───────────────────────────────────────────────── #
     expenses_year = Expense.objects.filter(
         date__range=[year_start, year_end],
-        approval_status=Expense.APPROVAL_APPROVED,
+        approval_status=Expense.ApprovalStatus.APPROVED,
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
     # ── Expenses needing action ───────────────────────────────────────── #
     expenses_action = Expense.objects.filter(
-        Q(receipt_missing=True) | Q(approval_status=Expense.APPROVAL_PENDING)
+        Q(receipt_missing=True) | Q(approval_status=Expense.ApprovalStatus.PENDING)
     ).count()
 
     total_ht = inv_year["total_ht"] or Decimal("0")
@@ -146,8 +150,7 @@ def trainer_utilization_report(date_from=None, date_to=None):
     """
     Return trainers annotated with session_count and total_days for the period.
     """
-    from formations.models import Trainer
-    from formations.models import Session
+    from formations.models import Session, Trainer
     from django.db.models import F
 
     qs = (

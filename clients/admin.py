@@ -1,5 +1,5 @@
 # =============================================================================
-# clients/admin.py
+# clients/admin.py  —  v3.0
 # =============================================================================
 
 from django.contrib import admin
@@ -21,28 +21,92 @@ class ClientAdmin(admin.ModelAdmin):
         "phone",
         "email",
         "activity_sector",
+        "is_tva_exempt",
+        "is_invoice_ready",
         "is_active",
     ]
-    list_filter = ["client_type", "is_active", "city"]
-    search_fields = ["name", "email", "phone", "registration_number", "nif", "nis"]
+    list_filter = ["client_type", "is_active", "is_tva_exempt", "city"]
+    search_fields = ["name", "email", "phone", "rc", "nif", "nis", "nin"]
     list_editable = ["is_active"]
+    readonly_fields = ["is_tva_exempt", "is_invoice_ready"]
     inlines = [ClientContactInline]
     fieldsets = [
         (
             "Identification",
-            {"fields": ["name", "client_type", "activity_sector", "is_active"]},
+            {
+                "fields": [
+                    "name",
+                    "client_type",
+                    "forme_juridique",
+                    "activity_sector",
+                    "is_active",
+                ]
+            },
         ),
         (
             "Coordonnées",
-            {"fields": ["address", "postal_code", "city", "phone", "email", "website"]},
+            {
+                "fields": [
+                    "address",
+                    "postal_code",
+                    "city",
+                    "phone",
+                    "email",
+                    "website",
+                ]
+            },
         ),
         (
-            "Contact principal",
-            {"fields": ["contact_name", "contact_phone", "contact_email"]},
+            "Contact principal (héritage)",
+            {
+                "fields": ["contact_name", "contact_phone", "contact_email"],
+                "classes": ["collapse"],
+            },
         ),
-        ("Enregistrement", {"fields": ["registration_number", "nif", "nis"]}),
+        (
+            "Identifiants fiscaux",
+            {
+                "fields": [
+                    "nin",
+                    "nif",
+                    "nis",
+                    "rc",
+                    "article_imposition",
+                    "rib",
+                    "is_tva_exempt",
+                ],
+                "description": (
+                    "NIN : particulier uniquement. "
+                    "NIF / A.I. : AE, entreprise, startup. "
+                    "NIS / RC : entreprise, startup."
+                ),
+            },
+        ),
+        (
+            "Auto-Entrepreneur",
+            {
+                "fields": ["carte_auto_entrepreneur"],
+                "classes": ["collapse"],
+            },
+        ),
+        (
+            "Startup",
+            {
+                "fields": [
+                    "label_startup_number",
+                    "label_startup_date",
+                    "programme_accompagnement",
+                ],
+                "classes": ["collapse"],
+            },
+        ),
+        ("Statut facturation", {"fields": ["is_invoice_ready"]}),
         ("Notes", {"fields": ["notes"]}),
     ]
+
+    @admin.display(description="Prêt facturation", boolean=True)
+    def is_invoice_ready(self, obj):
+        return obj.is_invoice_ready
 
 
 @admin.register(ClientContact)

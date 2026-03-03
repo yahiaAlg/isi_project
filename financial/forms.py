@@ -1,9 +1,7 @@
-# financial/forms.py
+# financial/forms.py  —  v3.0
 # =============================================================================
 # All forms for the financial module.
-# ISIFormMixin auto-applies Bootstrap 5 CSS classes (form-control /
-# form-select / form-check-input) to every widget so that templates can use
-# {{ form.field_name }} directly without manual class injection.
+# ISIFormMixin auto-applies Bootstrap 5 CSS classes.
 # =============================================================================
 
 from decimal import Decimal
@@ -25,71 +23,164 @@ from financial.models import (
 
 
 # ---------------------------------------------------------------------------
-# Invoice forms
+# Proforma creation form
 # ---------------------------------------------------------------------------
 
 
-class InvoiceForm(ISIFormMixin, forms.ModelForm):
+class ProformaCreateForm(ISIFormMixin, forms.ModelForm):
+    """
+    Used when creating a new proforma invoice.
+    Only fields relevant to the PROFORMA phase are exposed.
+    reference / proforma_reference are auto-generated; amounts are computed
+    from line items.
+    """
+
     class Meta:
         model = Invoice
         fields = [
             "invoice_type",
             "client",
             "invoice_date",
-            "due_date",
+            "validity_date",
             "tva_rate",
+            "page_ref",
             "session",
             "study_project",
             "notes",
             "footer_text",
         ]
         labels = {
-            "invoice_type": "Type",
+            "invoice_type": "Type de prestation",
             "client": "Client",
-            "invoice_date": "Date",
-            "due_date": "Échéance",
+            "invoice_date": "Date d'émission",
+            "validity_date": "Date de validité",
             "tva_rate": "Taux TVA",
-            "session": "Session",
-            "study_project": "Projet",
+            "page_ref": "Réf. interne (en-tête)",
+            "session": "Session liée (optionnel)",
+            "study_project": "Projet lié (optionnel)",
             "notes": "Notes internes",
             "footer_text": "Pied de page (personnalisé)",
         }
         widgets = {
             "invoice_date": forms.DateInput(attrs={"type": "date"}),
-            "due_date": forms.DateInput(attrs={"type": "date"}),
+            "validity_date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 3}),
             "footer_text": forms.Textarea(attrs={"rows": 3}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Only active clients in the dropdown
         self.fields["client"].queryset = Client.objects.filter(is_active=True).order_by(
             "name"
         )
-        self.fields["due_date"].required = False
-        self.fields["session"].required = False
-        self.fields["study_project"].required = False
-        self.fields["notes"].required = False
-        self.fields["footer_text"].required = False
+        for f in (
+            "validity_date",
+            "page_ref",
+            "session",
+            "study_project",
+            "notes",
+            "footer_text",
+        ):
+            self.fields[f].required = False
 
     def clean(self):
         cleaned = super().clean()
         inv_type = cleaned.get("invoice_type")
+        client = cleaned.get("client")
         session = cleaned.get("session")
         project = cleaned.get("study_project")
-        # Soft validation: warn when type/link mismatch
-        if inv_type == Invoice.TYPE_FORMATION and project:
+
+        # Auto-zero TVA when client is exempt
+        if client and client.is_tva_exempt:
+            cleaned["tva_rate"] = Decimal("0.00")
+
+        if inv_type == Invoice.InvoiceType.FORMATION and project:
             self.add_error(
                 "study_project",
-                "Une facture Formation ne devrait pas être liée à un projet.",
+                "Une facture Formation ne devrait pas être liée à un projet d'étude.",
             )
-        if inv_type == Invoice.TYPE_ETUDE and session:
+        if inv_type == Invoice.InvoiceType.ETUDE and session:
             self.add_error(
                 "session",
                 "Une facture Étude ne devrait pas être liée à une session.",
             )
         return cleaned
+
+
+# Keep a backward-compatible alias used by generic edit views
+InvoiceForm = ProformaCreateForm
+
+
+# ---------------------------------------------------------------------------
+# Bon de Commande recording form
+# ---------------------------------------------------------------------------
+
+
+class BonCommandeForm(ISIFormMixin, forms.ModelForm):
+    """
+    Records the client's purchase order against an existing proforma.
+    Only the BC fields are editable; everything else stays read-only.
+    """
+
+    class Meta:
+        model = Invoice
+        fields = [
+            "bon_commande_number",
+            "bon_commande_date",
+            "bon_commande_amount",
+            "bon_commande_scan",
+        ]
+        labels = {
+            "bon_commande_number": "N° Bon de Commande",
+            "bon_commande_date": "Date du BC",
+            "bon_commande_amount": "Montant BC (DA) — vérification",
+            "bon_commande_scan": "Scan / document BC",
+        }
+        widgets = {
+            "bon_commande_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for f in ("bon_commande_date", "bon_commande_amount", "bon_commande_scan"):
+            self.fields[f].required = False
+
+    def clean_bon_commande_number(self):
+        number = self.cleaned_data.get("bon_commande_number", "").strip()
+        if not number:
+            raise ValidationError("Le numéro de Bon de Commande est obligatoire.")
+        return number
+
+
+# ---------------------------------------------------------------------------
+# Invoice finalization confirmation form
+# ---------------------------------------------------------------------------
+
+
+class FinalizeInvoiceForm(ISIFormMixin, forms.Form):
+    """
+    Shown on the finalization confirmation page (GET).
+    Lets the user verify and edit the auto-generated amount-in-words
+    and set the payment due date before submitting (POST).
+    """
+
+    amount_in_words = forms.CharField(
+        label="Montant en lettres",
+        required=False,
+        widget=forms.TextInput(
+            attrs={"placeholder": "Généré automatiquement — vérifiez si nécessaire"}
+        ),
+    )
+    due_date = forms.DateField(
+        label="Date d'échéance",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Invoice filter form
+# ---------------------------------------------------------------------------
 
 
 class InvoiceFilterForm(ISIFormMixin, forms.Form):
@@ -98,15 +189,20 @@ class InvoiceFilterForm(ISIFormMixin, forms.Form):
         required=False,
         widget=forms.TextInput(attrs={"placeholder": "Référence, client…"}),
     )
+    phase = forms.ChoiceField(
+        label="Phase",
+        required=False,
+        choices=[("", "Toutes")] + Invoice.Phase.choices,
+    )
     status = forms.ChoiceField(
         label="Statut",
         required=False,
-        choices=[("", "Tous")] + Invoice.STATUS_CHOICES,
+        choices=[("", "Tous")] + Invoice.Status.choices,
     )
     invoice_type = forms.ChoiceField(
         label="Type",
         required=False,
-        choices=[("", "Tous")] + Invoice.TYPE_CHOICES,
+        choices=[("", "Tous")] + Invoice.InvoiceType.choices,
     )
     date_from = forms.DateField(
         label="Du",
@@ -135,18 +231,22 @@ class InvoiceItemForm(ISIFormMixin, forms.ModelForm):
     class Meta:
         model = InvoiceItem
         fields = [
+            "order",
             "description",
-            "quantity",
+            "pricing_mode",
+            "nb_persons",
+            "nb_days",
             "unit_price_ht",
             "discount_percent",
-            "order",
         ]
         labels = {
-            "description": "Description",
-            "quantity": "Qté",
+            "order": "Ordre",
+            "description": "Désignation",
+            "pricing_mode": "Mode",
+            "nb_persons": "Nb personnes",
+            "nb_days": "Nb jours",
             "unit_price_ht": "P.U. HT (DA)",
             "discount_percent": "Remise (%)",
-            "order": "Ordre",
         }
         widgets = {
             "description": forms.TextInput(
@@ -156,8 +256,25 @@ class InvoiceItemForm(ISIFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["discount_percent"].required = False
         self.fields["order"].required = False
+        self.fields["discount_percent"].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        mode = cleaned.get("pricing_mode")
+        nb_persons = cleaned.get("nb_persons") or Decimal("0")
+        nb_days = cleaned.get("nb_days") or Decimal("0")
+
+        if mode == InvoiceItem.PricingMode.PER_PERSON and nb_persons <= 0:
+            self.add_error("nb_persons", "Indiquez le nombre de personnes.")
+        if mode == InvoiceItem.PricingMode.PER_DAY and nb_days <= 0:
+            self.add_error("nb_days", "Indiquez le nombre de jours.")
+        if mode == InvoiceItem.PricingMode.PER_PERSON_PER_DAY:
+            if nb_persons <= 0:
+                self.add_error("nb_persons", "Indiquez le nombre de personnes.")
+            if nb_days <= 0:
+                self.add_error("nb_days", "Indiquez le nombre de jours.")
+        return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -221,13 +338,25 @@ class CreditNoteForm(ISIFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["notes"].required = False
-        self.fields["tva_rate"].initial = Decimal("0.19")
+        # Default matches the formation rate; view should override for études
+        self.fields["tva_rate"].initial = Decimal("0.09")
 
     def clean_amount_ht(self):
         amount = self.cleaned_data.get("amount_ht")
         if amount is not None and amount <= 0:
             raise ValidationError("Le montant doit être positif.")
         return amount
+
+    def clean(self):
+        cleaned = super().clean()
+        amount_ht = cleaned.get("amount_ht") or Decimal("0")
+        tva_rate = cleaned.get("tva_rate") or Decimal("0")
+        if tva_rate < 0 or tva_rate > 1:
+            self.add_error(
+                "tva_rate",
+                "Le taux de TVA doit être compris entre 0 et 1 (ex. 0.09 pour 9%).",
+            )
+        return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +379,8 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "is_overhead",
             "receipt",
             "receipt_missing",
+            "approval_status",
+            "approval_notes",
             "notes",
         ]
         labels = {
@@ -264,21 +395,28 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "is_overhead": "Frais généraux",
             "receipt": "Justificatif",
             "receipt_missing": "Justificatif manquant",
+            "approval_status": "Statut d'approbation",
+            "approval_notes": "Notes d'approbation",
             "notes": "Notes",
         }
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 3}),
+            "approval_notes": forms.Textarea(attrs={"rows": 2}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["supplier"].required = False
-        self.fields["payment_reference"].required = False
-        self.fields["allocated_to_session"].required = False
-        self.fields["allocated_to_project"].required = False
-        self.fields["receipt"].required = False
-        self.fields["notes"].required = False
+        for f in (
+            "supplier",
+            "payment_reference",
+            "allocated_to_session",
+            "allocated_to_project",
+            "receipt",
+            "approval_notes",
+            "notes",
+        ):
+            self.fields[f].required = False
 
 
 class ExpenseFilterForm(ISIFormMixin, forms.Form):
@@ -296,7 +434,7 @@ class ExpenseFilterForm(ISIFormMixin, forms.Form):
     approval_status = forms.ChoiceField(
         label="Approbation",
         required=False,
-        choices=[("", "Tous")] + Expense.APPROVAL_CHOICES,
+        choices=[("", "Tous")] + Expense.ApprovalStatus.choices,
     )
     date_from = forms.DateField(
         label="Du",
@@ -409,7 +547,12 @@ class ReportFilterForm(ISIFormMixin, forms.Form):
     invoice_type = forms.ChoiceField(
         label="Type",
         required=False,
-        choices=[("", "Formation + Étude")] + Invoice.TYPE_CHOICES,
+        choices=[("", "Formation + Étude")] + Invoice.InvoiceType.choices,
+    )
+    phase = forms.ChoiceField(
+        label="Phase",
+        required=False,
+        choices=[("", "Toutes")] + Invoice.Phase.choices,
     )
 
     def clean(self):
@@ -417,7 +560,6 @@ class ReportFilterForm(ISIFormMixin, forms.Form):
         period = cleaned.get("period")
         date_from = cleaned.get("date_from")
         date_to = cleaned.get("date_to")
-        # If no period selected, both manual dates are required
         if not period:
             if not date_from:
                 self.add_error(
@@ -426,7 +568,8 @@ class ReportFilterForm(ISIFormMixin, forms.Form):
                 )
             if not date_to:
                 self.add_error(
-                    "date_to", "Sélectionnez une période ou saisissez une date de fin."
+                    "date_to",
+                    "Sélectionnez une période ou saisissez une date de fin.",
                 )
             if date_from and date_to and date_to < date_from:
                 raise ValidationError(

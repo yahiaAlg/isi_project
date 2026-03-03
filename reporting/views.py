@@ -105,13 +105,13 @@ def dashboard(request):
         ctx["kpis"] = dashboard_kpis()
         ctx["unpaid_invoices"] = (
             Invoice.objects.filter(
-                status__in=[Invoice.STATUS_UNPAID, Invoice.STATUS_PARTIALLY_PAID]
+                status__in=[Invoice.Status.UNPAID, Invoice.Status.PARTIALLY_PAID]
             )
             .select_related("client")
             .order_by("invoice_date")[:8]
         )
         ctx["overdue_invoices_count"] = Invoice.objects.filter(
-            status__in=[Invoice.STATUS_UNPAID, Invoice.STATUS_PARTIALLY_PAID],
+            status__in=[Invoice.Status.UNPAID, Invoice.Status.PARTIALLY_PAID],
             due_date__lt=today,
         ).count()
         ctx["overdue_projects"] = StudyProject.objects.filter(
@@ -209,7 +209,7 @@ def cash_flow_report(request):
 
     c_by_month = (
         Payment.objects.filter(
-            date__range=[date_from, date_to], status=Payment.STATUS_CONFIRMED
+            date__range=[date_from, date_to], status=Payment.Status.CONFIRMED
         )
         .annotate(month=TruncMonth("date"))
         .values("month")
@@ -217,7 +217,8 @@ def cash_flow_report(request):
     )
     e_by_month = (
         Expense.objects.filter(
-            date__range=[date_from, date_to], approval_status=Expense.APPROVAL_APPROVED
+            date__range=[date_from, date_to],
+            approval_status=Expense.ApprovalStatus.APPROVED,
         )
         .annotate(month=TruncMonth("date"))
         .values("month")
@@ -265,7 +266,7 @@ def collections_report(request):
     date_from, date_to = _parse_date_range(request)
     payments = (
         Payment.objects.filter(
-            date__range=[date_from, date_to], status=Payment.STATUS_CONFIRMED
+            date__range=[date_from, date_to], status=Payment.Status.CONFIRMED
         )
         .select_related("invoice__client")
         .order_by("-date")
@@ -298,9 +299,9 @@ def tva_report(request):
     qs = Invoice.objects.filter(
         invoice_date__range=[date_from, date_to],
         status__in=[
-            Invoice.STATUS_UNPAID,
-            Invoice.STATUS_PARTIALLY_PAID,
-            Invoice.STATUS_PAID,
+            Invoice.Status.UNPAID,
+            Invoice.Status.PARTIALLY_PAID,
+            Invoice.Status.PAID,
         ],
     )
     return render(
@@ -312,13 +313,17 @@ def tva_report(request):
                 total_tva=Sum("amount_tva"),
                 total_ttc=Sum("amount_ttc"),
                 formation_ht=Sum(
-                    "amount_ht", filter=Q(invoice_type=Invoice.TYPE_FORMATION)
+                    "amount_ht", filter=Q(invoice_type=Invoice.InvoiceType.FORMATION)
                 ),
                 formation_tva=Sum(
-                    "amount_tva", filter=Q(invoice_type=Invoice.TYPE_FORMATION)
+                    "amount_tva", filter=Q(invoice_type=Invoice.InvoiceType.FORMATION)
                 ),
-                etude_ht=Sum("amount_ht", filter=Q(invoice_type=Invoice.TYPE_ETUDE)),
-                etude_tva=Sum("amount_tva", filter=Q(invoice_type=Invoice.TYPE_ETUDE)),
+                etude_ht=Sum(
+                    "amount_ht", filter=Q(invoice_type=Invoice.InvoiceType.ETUDE)
+                ),
+                etude_tva=Sum(
+                    "amount_tva", filter=Q(invoice_type=Invoice.InvoiceType.ETUDE)
+                ),
             ),
             "by_month": qs.annotate(month=TruncMonth("invoice_date"))
             .values("month", "invoice_type")
@@ -352,12 +357,12 @@ def outstanding_receivables(request):
             "total_outstanding": invoices.aggregate(t=Sum("amount_remaining"))["t"]
             or Decimal("0"),
             "total_formation": invoices.filter(
-                invoice_type=Invoice.TYPE_FORMATION
+                invoice_type=Invoice.InvoiceType.FORMATION
             ).aggregate(t=Sum("amount_remaining"))["t"]
             or Decimal("0"),
-            "total_etude": invoices.filter(invoice_type=Invoice.TYPE_ETUDE).aggregate(
-                t=Sum("amount_remaining")
-            )["t"]
+            "total_etude": invoices.filter(
+                invoice_type=Invoice.InvoiceType.ETUDE
+            ).aggregate(t=Sum("amount_remaining"))["t"]
             or Decimal("0"),
             "overdue_invoices": overdue,
             "overdue_total": overdue.aggregate(t=Sum("amount_remaining"))["t"]
@@ -373,7 +378,7 @@ def invoice_aging_report(request):
 
     today = date.today()
     unpaid = Invoice.objects.filter(
-        status__in=[Invoice.STATUS_UNPAID, Invoice.STATUS_PARTIALLY_PAID]
+        status__in=[Invoice.Status.UNPAID, Invoice.Status.PARTIALLY_PAID]
     ).select_related("client")
 
     buckets = {"current": [], "1_30": [], "31_60": [], "61_90": [], "over_90": []}
@@ -504,7 +509,7 @@ def combined_margin_report(request):
     formation_expenses = Expense.objects.filter(
         date__range=[date_from, date_to],
         allocated_to_session__isnull=False,
-        approval_status=Expense.APPROVAL_APPROVED,
+        approval_status=Expense.ApprovalStatus.APPROVED,
     ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
 
     completed_projects = StudyProject.objects.filter(
@@ -515,7 +520,7 @@ def combined_margin_report(request):
     etude_expenses = Expense.objects.filter(
         date__range=[date_from, date_to],
         allocated_to_project__isnull=False,
-        approval_status=Expense.APPROVAL_APPROVED,
+        approval_status=Expense.ApprovalStatus.APPROVED,
     ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
 
     fm = formation_revenue - formation_expenses
@@ -554,7 +559,8 @@ def expense_breakdown_report(request):
 
     date_from, date_to = _parse_date_range(request)
     qs = Expense.objects.filter(
-        date__range=[date_from, date_to], approval_status=Expense.APPROVAL_APPROVED
+        date__range=[date_from, date_to],
+        approval_status=Expense.ApprovalStatus.APPROVED,
     ).select_related(
         "category", "allocated_to_session__formation", "allocated_to_project__client"
     )
@@ -597,7 +603,8 @@ def expense_by_category(request):
     date_from, date_to = _parse_date_range(request)
     by_cat = (
         Expense.objects.filter(
-            date__range=[date_from, date_to], approval_status=Expense.APPROVAL_APPROVED
+            date__range=[date_from, date_to],
+            approval_status=Expense.ApprovalStatus.APPROVED,
         )
         .values("category__name")
         .annotate(count=Count("pk"), total=Sum("amount"))
@@ -627,7 +634,7 @@ def pending_expenses_report(request):
 
     pending = (
         Expense.objects.filter(
-            Q(approval_status=Expense.APPROVAL_PENDING) | Q(receipt_missing=True)
+            Q(approval_status=Expense.ApprovalStatus.PENDING) | Q(receipt_missing=True)
         )
         .select_related(
             "category",
@@ -1620,7 +1627,8 @@ def chart_expense_by_category(request):
     date_from, date_to = _current_year_range()
     data = (
         Expense.objects.filter(
-            date__range=[date_from, date_to], approval_status=Expense.APPROVAL_APPROVED
+            date__range=[date_from, date_to],
+            approval_status=Expense.ApprovalStatus.APPROVED,
         )
         .values("category__name")
         .annotate(total=Sum("amount"))
@@ -1736,7 +1744,7 @@ def chart_cash_flow(request):
     c_map = {
         r["month"].strftime("%Y-%m"): _float(r["total"])
         for r in Payment.objects.filter(
-            date__range=[date_from, date_to], status=Payment.STATUS_CONFIRMED
+            date__range=[date_from, date_to], status=Payment.Status.CONFIRMED
         )
         .annotate(month=TruncMonth("date"))
         .values("month")
@@ -1745,7 +1753,8 @@ def chart_cash_flow(request):
     e_map = {
         r["month"].strftime("%Y-%m"): _float(r["total"])
         for r in Expense.objects.filter(
-            date__range=[date_from, date_to], approval_status=Expense.APPROVAL_APPROVED
+            date__range=[date_from, date_to],
+            approval_status=Expense.ApprovalStatus.APPROVED,
         )
         .annotate(month=TruncMonth("date"))
         .values("month")

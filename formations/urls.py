@@ -87,4 +87,11 @@ urlpatterns = [
         views.participant_import,
         name="participant_import",
     ),
+    # ── API (AJAX for invoice line-item prepopulation) ────────────────── #
+    path("api/formations/", views.api_formation_list, name="api_formation_list"),
+    path(
+        "api/formations/<int:pk>/",
+        views.api_formation_detail,
+        name="api_formation_detail",
+    ),
 ]

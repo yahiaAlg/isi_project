@@ -648,3 +648,65 @@ def sessions_calendar_feed(request):
         for s in qs
     ]
     return JsonResponse(events, safe=False)
+
+
+# ─── ADD THESE TO formations/views.py ────────────────────────────────────── #
+# (append at the end, or place near the AJAX section)
+
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
+
+
+@admin_required
+@require_GET
+def api_formation_list(request):
+    """
+    Return all active formations for the line-item source selector.
+    Optionally filter by ?q= for a live search.
+    """
+    from formations.models import Formation
+
+    q = request.GET.get("q", "").strip()
+    qs = Formation.objects.filter(is_active=True).order_by("title")
+    if q:
+        qs = qs.filter(title__icontains=q)
+
+    data = [
+        {
+            "id": f.pk,
+            "title": f.title,
+            "duration_days": getattr(f, "duration_days", None)
+            or getattr(f, "duration", None),
+            "base_price": str(
+                getattr(f, "base_price", None)
+                or getattr(f, "price_per_person", None)
+                or ""
+            ),
+            "description": f.title,  # use title as invoice line description default
+        }
+        for f in qs
+    ]
+    return JsonResponse({"results": data})
+
+
+@admin_required
+@require_GET
+def api_formation_detail(request, pk):
+    """Return a single formation's prepopulation data."""
+    from formations.models import Formation
+
+    f = get_object_or_404(Formation, pk=pk)
+    return JsonResponse(
+        {
+            "id": f.pk,
+            "title": f.title,
+            "description": f.title,
+            "duration_days": getattr(f, "duration_days", None)
+            or getattr(f, "duration", None),
+            "base_price": str(
+                getattr(f, "base_price", None)
+                or getattr(f, "price_per_person", None)
+                or ""
+            ),
+        }
+    )

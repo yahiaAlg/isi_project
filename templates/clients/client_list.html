@@ -20,7 +20,7 @@
   <div class="page-header">
     <div class="page-header-left">
       <h1>Clients</h1>
-      <p>Gérez vos entreprises et particuliers</p>
+      <p>Gérez vos entreprises, startups, auto-entrepreneurs et particuliers</p>
     </div>
   </div>
 
@@ -30,14 +30,14 @@
       <form method="get" id="filter-form" novalidate>
         <div class="row g-3 align-items-end">
 
-          <div class="col-lg-4 col-md-6">
+          <div class="col-lg-3 col-md-6">
             <label class="form-label">Recherche</label>
             <div class="input-icon-wrap">
               <i class="bi bi-search"></i>
               <input type="text" name="q" id="id_q"
                      class="form-control"
                      value="{{ filter_form.q.value|default:'' }}"
-                     placeholder="Nom, ville, secteur…">
+                     placeholder="Nom, ville, RC, NIF…">
             </div>
           </div>
 
@@ -46,6 +46,17 @@
             <select name="client_type" class="form-select">
               {% for val, label in filter_form.client_type.field.choices %}
               <option value="{{ val }}" {% if filter_form.client_type.value == val %}selected{% endif %}>
+                {{ label }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">TVA</label>
+            <select name="is_tva_exempt" class="form-select">
+              {% for val, label in filter_form.is_tva_exempt.field.choices %}
+              <option value="{{ val }}" {% if filter_form.is_tva_exempt.value == val %}selected{% endif %}>
                 {{ label }}
               </option>
               {% endfor %}
@@ -63,7 +74,7 @@
             </select>
           </div>
 
-          <div class="col-lg-2 col-md-3 col-sm-6">
+          <div class="col-lg-1 col-md-3 col-sm-6">
             <label class="form-label">Statut</label>
             <select name="is_active" class="form-select">
               {% for val, label in filter_form.is_active.field.choices %}
@@ -124,9 +135,15 @@
           <tr>
             <td>
               <div style="display:flex;align-items:center;gap:10px;">
+                <!-- Avatar colour by type -->
                 <div style="width:36px;height:36px;border-radius:9px;
-                            background:{% if client.client_type == 'company' %}rgba(245,158,11,.12){% else %}rgba(59,130,246,.12){% endif %};
-                            color:{% if client.client_type == 'company' %}#d97706{% else %}#3b82f6{% endif %};
+                            {% if client.client_type == 'entreprise' or client.client_type == 'startup' %}
+                              background:rgba(245,158,11,.12);color:#d97706;
+                            {% elif client.client_type == 'auto_entrepreneur' %}
+                              background:rgba(124,58,237,.12);color:#7c3aed;
+                            {% else %}
+                              background:rgba(59,130,246,.12);color:#3b82f6;
+                            {% endif %}
                             display:flex;align-items:center;justify-content:center;
                             font-family:var(--font-head);font-size:15px;font-weight:700;flex-shrink:0;">
                   {{ client.name|slice:":1"|upper }}
@@ -141,14 +158,27 @@
                       <i class="bi bi-exclamation-circle-fill"></i> Impayé
                     </span>
                   {% endif %}
+                  {% if not client.is_invoice_ready %}
+                    <span class="isi-badge gray ms-1" style="font-size:10px;padding:2px 6px;"
+                          title="Profil incomplet pour facturation">
+                      <i class="bi bi-exclamation-triangle-fill"></i>
+                    </span>
+                  {% endif %}
                 </div>
               </div>
             </td>
             <td>
-              {% if client.client_type == 'company' %}
+              {% if client.client_type == 'entreprise' %}
                 <span class="isi-badge amber"><i class="bi bi-building-fill"></i> Entreprise</span>
+              {% elif client.client_type == 'startup' %}
+                <span class="isi-badge purple"><i class="bi bi-rocket-takeoff-fill"></i> Startup</span>
+              {% elif client.client_type == 'auto_entrepreneur' %}
+                <span class="isi-badge violet"><i class="bi bi-person-badge-fill"></i> Auto-Ent.</span>
               {% else %}
                 <span class="isi-badge blue"><i class="bi bi-person-fill"></i> Particulier</span>
+              {% endif %}
+              {% if client.is_tva_exempt %}
+                <span class="isi-badge gray ms-1" style="font-size:10px;padding:2px 6px;">TVA exon.</span>
               {% endif %}
             </td>
             <td>
@@ -245,7 +275,7 @@
       <div style="font-size:52px;color:#e2e8f0;margin-bottom:16px;">
         <i class="bi bi-building"></i>
       </div>
-      {% if filter_form.q.value or filter_form.client_type.value or filter_form.is_active.value %}
+      {% if filter_form.q.value or filter_form.client_type.value or filter_form.is_active.value or filter_form.is_tva_exempt.value %}
         <p style="color:var(--text-muted);font-size:15px;margin:0 0 16px;">
           Aucun client ne correspond à vos critères de recherche.
         </p>

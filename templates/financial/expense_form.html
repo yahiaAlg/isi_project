@@ -16,7 +16,7 @@
   <div class="page-header">
     <div class="page-header-left">
       <h1>{{ action }}</h1>
-      <p>{% if expense %}Modification de la dépense{% else %}Enregistrement d'une nouvelle dépense{% endif %}</p>
+      <p>{% if expense %}Modification de la dépense — {{ expense.description|truncatechars:50 }}{% else %}Enregistrement d'une nouvelle dépense{% endif %}</p>
     </div>
     <a href="{% url 'financial:expense_list' %}" class="btn btn-ghost">
       <i class="bi bi-arrow-left"></i> Retour
@@ -27,15 +27,13 @@
     {% csrf_token %}
     <div class="row g-4">
 
-      <!-- ── Main form ─────────────────────────────────────── -->
+      <!-- ── Main form ──────────────────────────────────────── -->
       <div class="col-lg-8">
 
         <!-- Informations générales -->
         <div class="isi-card mb-4">
           <div class="isi-card-header">
-            <div class="card-icon red" style="background:rgba(239,68,68,.12);color:var(--danger);">
-              <i class="bi bi-credit-card-fill"></i>
-            </div>
+            <div class="card-icon red"><i class="bi bi-credit-card-fill"></i></div>
             <h3>Informations générales</h3>
           </div>
           <div class="isi-card-body">
@@ -47,45 +45,26 @@
                 <label class="form-label" for="{{ form.date.id_for_label }}">Date *</label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-calendar-fill"></i>
-                  <input type="date" name="{{ form.date.html_name }}"
-                         id="{{ form.date.id_for_label }}"
-                         class="form-control {% if form.date.errors %}is-invalid{% endif %}"
-                         value="{{ form.date.value|default:'' }}">
+                  {{ form.date }}
                 </div>
                 {% if form.date.errors %}
-                <div class="invalid-feedback d-block">{{ form.date.errors|join:", " }}</div>
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.date.errors|join:", " }}</div>
                 {% endif %}
               </div>
 
               <div class="col-md-6">
                 <label class="form-label" for="{{ form.category.id_for_label }}">Catégorie *</label>
-                <select name="{{ form.category.html_name }}"
-                        id="{{ form.category.id_for_label }}"
-                        class="form-select {% if form.category.errors %}is-invalid{% endif %}">
-                  <option value="">— Sélectionner —</option>
-                  {% for choice in form.category.field.choices %}
-                    {% if choice.0 %}
-                    <option value="{{ choice.0 }}" {% if form.category.value|stringformat:"s" == choice.0|stringformat:"s" %}selected{% endif %}>{{ choice.1 }}</option>
-                    {% endif %}
-                  {% endfor %}
-                </select>
+                {{ form.category }}
                 {% if form.category.errors %}
-                <div class="invalid-feedback d-block">{{ form.category.errors|join:", " }}</div>
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.category.errors|join:", " }}</div>
                 {% endif %}
               </div>
 
               <div class="col-12">
                 <label class="form-label" for="{{ form.description.id_for_label }}">Description *</label>
-                <div class="input-icon-wrap">
-                  <i class="bi bi-card-text"></i>
-                  <input type="text" name="{{ form.description.html_name }}"
-                         id="{{ form.description.id_for_label }}"
-                         class="form-control {% if form.description.errors %}is-invalid{% endif %}"
-                         value="{{ form.description.value|default:'' }}"
-                         placeholder="Objet de la dépense…">
-                </div>
+                {{ form.description }}
                 {% if form.description.errors %}
-                <div class="invalid-feedback d-block">{{ form.description.errors|join:", " }}</div>
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.description.errors|join:", " }}</div>
                 {% endif %}
               </div>
 
@@ -93,14 +72,10 @@
                 <label class="form-label" for="{{ form.amount.id_for_label }}">Montant (DA) *</label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-cash-coin"></i>
-                  <input type="number" name="{{ form.amount.html_name }}"
-                         id="{{ form.amount.id_for_label }}"
-                         class="form-control {% if form.amount.errors %}is-invalid{% endif %}"
-                         value="{{ form.amount.value|default:'' }}"
-                         step="0.01" min="0" placeholder="0.00">
+                  {{ form.amount }}
                 </div>
                 {% if form.amount.errors %}
-                <div class="invalid-feedback d-block">{{ form.amount.errors|join:", " }}</div>
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.amount.errors|join:", " }}</div>
                 {% endif %}
               </div>
 
@@ -108,24 +83,27 @@
                 <label class="form-label" for="{{ form.supplier.id_for_label }}">Fournisseur / bénéficiaire</label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-shop"></i>
-                  <input type="text" name="{{ form.supplier.html_name }}"
-                         id="{{ form.supplier.id_for_label }}"
-                         class="form-control"
-                         value="{{ form.supplier.value|default:'' }}"
-                         placeholder="Nom du fournisseur…">
+                  {{ form.supplier }}
                 </div>
               </div>
+
+              {% if form.payment_method %}
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.payment_method.id_for_label }}">Mode de règlement</label>
+                {{ form.payment_method }}
+                {% if form.payment_method.errors %}
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.payment_method.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+              {% endif %}
 
               <div class="col-md-6">
                 <label class="form-label" for="{{ form.payment_reference.id_for_label }}">Référence de paiement</label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-hash"></i>
-                  <input type="text" name="{{ form.payment_reference.html_name }}"
-                         id="{{ form.payment_reference.id_for_label }}"
-                         class="form-control"
-                         value="{{ form.payment_reference.value|default:'' }}"
-                         placeholder="N° virement, chèque…">
+                  {{ form.payment_reference }}
                 </div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">N° virement, chèque, ordre de paiement…</div>
               </div>
 
             </div>
@@ -135,67 +113,52 @@
             <div class="form-section-title">Imputation</div>
             <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;">
               <i class="bi bi-info-circle" style="color:var(--accent);"></i>
-              Imputez la dépense à un seul centre de coût.
+              Imputez la dépense à <strong>un seul</strong> centre de coût — session, projet ou frais généraux.
             </div>
 
             <div class="row g-3">
 
               <div class="col-md-5">
-                <label class="form-label" for="{{ form.allocated_to_session.id_for_label }}">Session</label>
-                <select name="{{ form.allocated_to_session.html_name }}"
-                        id="{{ form.allocated_to_session.id_for_label }}"
-                        class="form-select {% if form.allocated_to_session.errors %}is-invalid{% endif %}">
-                  <option value="">———</option>
-                  {% for choice in form.allocated_to_session.field.choices %}
-                    {% if choice.0 %}
-                    <option value="{{ choice.0 }}" {% if form.allocated_to_session.value|stringformat:"s" == choice.0|stringformat:"s" %}selected{% endif %}>{{ choice.1 }}</option>
-                    {% endif %}
-                  {% endfor %}
-                </select>
+                <label class="form-label" for="{{ form.allocated_to_session.id_for_label }}">
+                  <i class="bi bi-mortarboard-fill" style="color:#3b82f6;margin-right:4px;"></i> Session
+                </label>
+                {{ form.allocated_to_session }}
                 {% if form.allocated_to_session.errors %}
-                <div class="invalid-feedback d-block">{{ form.allocated_to_session.errors|join:", " }}</div>
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.allocated_to_session.errors|join:", " }}</div>
                 {% endif %}
               </div>
 
               <div class="col-md-5">
-                <label class="form-label" for="{{ form.allocated_to_project.id_for_label }}">Projet</label>
-                <select name="{{ form.allocated_to_project.html_name }}"
-                        id="{{ form.allocated_to_project.id_for_label }}"
-                        class="form-select {% if form.allocated_to_project.errors %}is-invalid{% endif %}">
-                  <option value="">———</option>
-                  {% for choice in form.allocated_to_project.field.choices %}
-                    {% if choice.0 %}
-                    <option value="{{ choice.0 }}" {% if form.allocated_to_project.value|stringformat:"s" == choice.0|stringformat:"s" %}selected{% endif %}>{{ choice.1 }}</option>
-                    {% endif %}
-                  {% endfor %}
-                </select>
+                <label class="form-label" for="{{ form.allocated_to_project.id_for_label }}">
+                  <i class="bi bi-diagram-3-fill" style="color:#8b5cf6;margin-right:4px;"></i> Projet d'étude
+                </label>
+                {{ form.allocated_to_project }}
                 {% if form.allocated_to_project.errors %}
-                <div class="invalid-feedback d-block">{{ form.allocated_to_project.errors|join:", " }}</div>
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.allocated_to_project.errors|join:", " }}</div>
                 {% endif %}
               </div>
 
               <div class="col-md-2">
                 <label class="form-label">&nbsp;</label>
-                <div class="d-flex align-items-center" style="height:38px;gap:10px;">
-                  <input class="form-check-input" type="checkbox"
-                         name="{{ form.is_overhead.html_name }}"
-                         id="{{ form.is_overhead.id_for_label }}"
-                         {% if form.is_overhead.value %}checked{% endif %}
-                         style="width:18px;height:18px;flex-shrink:0;">
+                <div style="display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;
+                            background:#f8fafc;border-radius:8px;border:1px solid var(--card-border);">
+                  {{ form.is_overhead }}
                   <label for="{{ form.is_overhead.id_for_label }}"
-                         style="font-size:13px;font-weight:500;margin:0;cursor:pointer;">
-                    Généraux
+                         style="font-size:13px;font-weight:500;margin:0;cursor:pointer;white-space:nowrap;">
+                    <i class="bi bi-building-fill" style="color:var(--text-muted);margin-right:2px;"></i> Généraux
                   </label>
                 </div>
               </div>
 
             </div>
 
-            <!-- Imputation error -->
+            <!-- Imputation mutual-exclusion error -->
             {% if form.non_field_errors %}
             <div style="margin-top:12px;">
               {% for error in form.non_field_errors %}
-              <div style="color:var(--danger);font-size:13px;display:flex;gap:8px;align-items:flex-start;padding:10px 12px;background:rgba(239,68,68,.06);border-radius:8px;border-left:3px solid var(--danger);">
+              <div style="color:var(--danger);font-size:13px;display:flex;gap:8px;align-items:flex-start;
+                          padding:10px 12px;background:rgba(239,68,68,.06);border-radius:8px;
+                          border-left:3px solid var(--danger);">
                 <i class="bi bi-exclamation-circle-fill" style="margin-top:1px;flex-shrink:0;"></i>
                 {{ error }}
               </div>
@@ -215,52 +178,56 @@
           <div class="isi-card-body">
 
             {% if expense and expense.receipt %}
-            <div style="text-align:center;margin-bottom:16px;padding:12px;background:#f8fafc;
-                        border-radius:8px;border:1px solid var(--card-border);">
-              <a href="{{ expense.receipt.url }}" target="_blank"
-                 style="color:var(--accent);font-size:13px;display:inline-flex;align-items:center;gap:8px;font-weight:500;">
-                <i class="bi bi-file-earmark-fill" style="font-size:16px;"></i>
-                Voir le justificatif actuel
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;
+                        background:#f8fafc;border-radius:8px;border:1px solid var(--card-border);
+                        margin-bottom:16px;">
+              <i class="bi bi-file-earmark-fill" style="font-size:20px;color:var(--accent);flex-shrink:0;"></i>
+              <div style="flex:1;">
+                <div style="font-weight:600;font-size:13.5px;">Justificatif existant</div>
+                <div style="font-size:12px;color:var(--text-muted);">Remplacez en uploadant un nouveau fichier ci-dessous.</div>
+              </div>
+              <a href="{{ expense.receipt.url }}" target="_blank" class="btn btn-ghost btn-sm">
+                <i class="bi bi-eye-fill"></i> Voir
               </a>
             </div>
             {% endif %}
 
             <div class="row g-3">
               <div class="col-md-8">
-                <label class="form-label" for="{{ form.receipt.id_for_label }}">Fichier justificatif</label>
-                <input type="file" name="{{ form.receipt.html_name }}"
-                       id="{{ form.receipt.id_for_label }}"
-                       class="form-control"
-                       accept=".pdf,.jpg,.jpeg,.png">
+                <label class="form-label" for="{{ form.receipt.id_for_label }}">
+                  Fichier justificatif
+                </label>
+                {{ form.receipt }}
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
+                  PDF, JPG ou PNG — max 5 Mo.
+                </div>
               </div>
+
               <div class="col-md-4">
                 <label class="form-label">&nbsp;</label>
-                <div class="d-flex align-items-center" style="height:38px;gap:10px;">
-                  <input class="form-check-input" type="checkbox"
-                         name="{{ form.receipt_missing.html_name }}"
-                         id="{{ form.receipt_missing.id_for_label }}"
-                         {% if form.receipt_missing.value %}checked{% endif %}
-                         style="width:18px;height:18px;flex-shrink:0;">
+                <div style="display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;
+                            background:#f8fafc;border-radius:8px;border:1px solid var(--card-border);">
+                  {{ form.receipt_missing }}
                   <label for="{{ form.receipt_missing.id_for_label }}"
-                         style="font-size:13px;font-weight:500;margin:0;cursor:pointer;">
+                         style="font-size:13px;font-weight:500;margin:0;cursor:pointer;white-space:nowrap;">
                     Justificatif manquant
                   </label>
                 </div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
+                  Cochez si le reçu ne peut pas être fourni.
+                </div>
               </div>
+
               <div class="col-12">
                 <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
-                <textarea name="{{ form.notes.html_name }}"
-                          id="{{ form.notes.id_for_label }}"
-                          class="form-control"
-                          rows="3"
-                          placeholder="Remarques, contexte…">{{ form.notes.value|default:'' }}</textarea>
+                {{ form.notes }}
               </div>
             </div>
 
           </div>
         </div>
 
-        <!-- Submit row -->
+        <!-- Submit -->
         <div class="d-flex gap-2">
           <button type="submit" class="btn btn-amber">
             <i class="bi bi-check-lg"></i>
@@ -273,75 +240,133 @@
 
       </div><!-- /col-lg-8 -->
 
-      <!-- ── Side panel ────────────────────────────────────── -->
+      <!-- ── Side panel ──────────────────────────────────────── -->
       <div class="col-lg-4">
 
+        <!-- Status / Approval (edit mode) -->
         {% if expense %}
         <div class="isi-card mb-4">
           <div class="isi-card-header">
-            <div class="card-icon amber"><i class="bi bi-info-circle-fill"></i></div>
-            <h3>Statut</h3>
+            <div class="card-icon amber"><i class="bi bi-shield-check"></i></div>
+            <h3>Statut & Approbation</h3>
           </div>
           <div class="isi-card-body">
             <div class="row g-3">
+
               <div class="col-12">
-                <div class="stat-label mb-1">Approbation</div>
+                <div class="stat-label mb-1">Décision</div>
                 <div style="margin-top:4px;">
                   {% if expense.approval_status == 'approved' %}
-                    <span class="isi-badge green"><i class="bi bi-check-circle-fill"></i> Approuvée</span>
+                    <span class="isi-badge green" style="font-size:13px;padding:5px 12px;">
+                      <i class="bi bi-check-circle-fill"></i> Approuvée
+                    </span>
                   {% elif expense.approval_status == 'rejected' %}
-                    <span class="isi-badge red"><i class="bi bi-x-circle-fill"></i> Refusée</span>
+                    <span class="isi-badge red" style="font-size:13px;padding:5px 12px;">
+                      <i class="bi bi-x-circle-fill"></i> Refusée
+                    </span>
                   {% else %}
-                    <span class="isi-badge amber"><i class="bi bi-clock-fill"></i> En attente</span>
+                    <span class="isi-badge amber" style="font-size:13px;padding:5px 12px;">
+                      <i class="bi bi-clock-fill"></i> En attente
+                    </span>
                   {% endif %}
                 </div>
               </div>
+
               {% if expense.approved_by %}
               <div class="col-12">
-                <div class="stat-label mb-1">Approuvée par</div>
+                <div class="stat-label mb-1">Par</div>
                 <div style="font-weight:500;font-size:13.5px;">{{ expense.approved_by }}</div>
               </div>
               {% endif %}
+
+              {% if expense.approved_at %}
+              <div class="col-12">
+                <div class="stat-label mb-1">Le</div>
+                <div style="font-weight:500;font-size:13.5px;">{{ expense.approved_at|date:"d/m/Y à H:i" }}</div>
+              </div>
+              {% endif %}
+
+              {% if expense.rejection_reason %}
+              <div class="col-12">
+                <div class="stat-label mb-1">Motif de refus</div>
+                <div style="font-size:13px;color:var(--danger);padding:8px 12px;
+                            background:rgba(239,68,68,.06);border-radius:6px;border-left:2px solid var(--danger);">
+                  {{ expense.rejection_reason }}
+                </div>
+              </div>
+              {% endif %}
+
               <div class="col-12">
                 <div class="stat-label mb-1">Montant</div>
-                <div class="stat-value" style="font-size:22px;">{{ expense.amount|floatformat:0 }}</div>
+                <div class="stat-value" style="font-size:24px;">{{ expense.amount|floatformat:2 }}</div>
                 <div style="font-size:11px;color:var(--text-muted);">DA</div>
               </div>
+
             </div>
+
+            <!-- Quick approve/reject buttons -->
+            {% if expense.approval_status == 'pending' %}
+            <div class="section-divider"></div>
+            <div class="d-flex gap-2">
+              <form method="post" action="{% url 'financial:expense_approve' expense.pk %}"
+                    style="flex:1;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-ghost w-100"
+                        style="color:var(--success);border-color:rgba(16,185,129,.3);"
+                        onclick="return confirm('Approuver cette dépense ?')">
+                  <i class="bi bi-check-lg"></i> Approuver
+                </button>
+              </form>
+              <form method="post" action="{% url 'financial:expense_reject' expense.pk %}"
+                    style="flex:1;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger-soft w-100"
+                        onclick="return confirm('Refuser cette dépense ?')">
+                  <i class="bi bi-x-lg"></i> Refuser
+                </button>
+              </form>
+            </div>
+            {% endif %}
+
           </div>
         </div>
         {% endif %}
 
+        <!-- Help card -->
         <div class="isi-card">
           <div class="isi-card-header">
             <div class="card-icon blue"><i class="bi bi-info-circle-fill"></i></div>
-            <h3>Aide</h3>
+            <h3>Aide — Imputation</h3>
           </div>
           <div class="isi-card-body">
             <div class="mb-3 p-3" style="background:rgba(59,130,246,.08);border-radius:8px;">
               <div style="font-weight:600;font-size:13px;color:#1e40af;margin-bottom:4px;">
                 <i class="bi bi-mortarboard-fill"></i> Session
               </div>
-              <p style="font-size:12.5px;color:#1e3a8a;margin:0;line-height:1.5;">
-                Dépense directement liée à une session de formation.
+              <p style="font-size:12px;color:#1e3a8a;margin:0;line-height:1.5;">
+                Dépense directement liée à une session de formation (formateur, location salle, matériel…).
               </p>
             </div>
             <div class="mb-3 p-3" style="background:rgba(139,92,246,.08);border-radius:8px;">
               <div style="font-weight:600;font-size:13px;color:#5b21b6;margin-bottom:4px;">
-                <i class="bi bi-diagram-3-fill"></i> Projet
+                <i class="bi bi-diagram-3-fill"></i> Projet d'étude
               </div>
-              <p style="font-size:12.5px;color:#4c1d95;margin:0;line-height:1.5;">
-                Dépense imputable à un projet d'étude.
+              <p style="font-size:12px;color:#4c1d95;margin:0;line-height:1.5;">
+                Dépense imputable à un projet d'étude spécifique (déplacements, expertise externe…).
               </p>
             </div>
             <div class="p-3" style="background:rgba(100,116,139,.08);border-radius:8px;">
               <div style="font-weight:600;font-size:13px;color:#334155;margin-bottom:4px;">
                 <i class="bi bi-building-fill"></i> Frais généraux
               </div>
-              <p style="font-size:12.5px;color:#475569;margin:0;line-height:1.5;">
-                Coût non imputable à un service ou projet précis.
+              <p style="font-size:12px;color:#475569;margin:0;line-height:1.5;">
+                Coût non imputable à un service précis (loyer, électricité, fournitures de bureau…).
               </p>
             </div>
+            <p style="font-size:12px;color:var(--danger);margin:12px 0 0;font-weight:600;">
+              <i class="bi bi-exclamation-triangle-fill"></i>
+              Une seule imputation par dépense.
+            </p>
           </div>
         </div>
 
@@ -351,4 +376,40 @@
   </form>
 
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Mutual exclusion for imputation fields:
+  // Selecting session/project should uncheck is_overhead, and vice versa.
+  (function () {
+    const sessionSel  = document.getElementById('id_allocated_to_session');
+    const projectSel  = document.getElementById('id_allocated_to_project');
+    const overheadChk = document.getElementById('id_is_overhead');
+
+    if (!sessionSel || !projectSel || !overheadChk) return;
+
+    function clearOthers(changed) {
+      if (changed === 'session' || changed === 'project') {
+        overheadChk.checked = false;
+        if (changed === 'session') projectSel.value = '';
+        if (changed === 'project') sessionSel.value = '';
+      } else {
+        sessionSel.value = '';
+        projectSel.value = '';
+      }
+    }
+
+    sessionSel.addEventListener('change',  () => { if (sessionSel.value)  clearOthers('session');  });
+    projectSel.addEventListener('change',  () => { if (projectSel.value)  clearOthers('project');  });
+    overheadChk.addEventListener('change', () => { if (overheadChk.checked) clearOthers('overhead'); });
+
+    // Pre-fill today's date if empty (create mode)
+    const dateInput = document.getElementById('id_date');
+    if (dateInput && !dateInput.value) {
+      const today = new Date();
+      dateInput.value = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    }
+  })();
+</script>
 {% endblock %}

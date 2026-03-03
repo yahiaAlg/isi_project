@@ -18,8 +18,11 @@
   <div class="page-header">
     <div class="page-header-left">
       <h1>{{ action }}</h1>
-      <p>{% if category %}Modification de la catégorie{% else %}Nouvelle catégorie de dépense{% endif %}</p>
+      <p>{% if category %}Modification — {{ category.name }}{% else %}Nouvelle catégorie de dépense{% endif %}</p>
     </div>
+    <a href="{% url 'financial:expense_category_list' %}" class="btn btn-ghost">
+      <i class="bi bi-arrow-left"></i> Retour
+    </a>
   </div>
 
   <div class="row justify-content-center">
@@ -28,7 +31,7 @@
       <div class="isi-card">
         <div class="isi-card-header">
           <div class="card-icon amber"><i class="bi bi-tag-fill"></i></div>
-          <h3>Catégorie de dépense</h3>
+          <h3>{% if category %}Modifier la catégorie{% else %}Nouvelle catégorie{% endif %}</h3>
         </div>
         <div class="isi-card-body">
           <form method="post" novalidate>
@@ -36,33 +39,31 @@
             <div class="row g-3">
 
               <div class="col-12">
-                <label class="form-label">{{ form.name.label }}</label>
+                <label class="form-label" for="{{ form.name.id_for_label }}">Nom *</label>
                 {{ form.name }}
                 {% if form.name.errors %}
-                <div style="color:var(--danger);font-size:12px;margin-top:4px;">
-                  {{ form.name.errors|join:", " }}
-                </div>
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.name.errors|join:", " }}</div>
                 {% endif %}
               </div>
 
               <div class="col-12">
-                <label class="form-label">{{ form.description.label }}</label>
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
                 {{ form.description }}
               </div>
 
-              <div class="col-md-4">
-                <label class="form-label">{{ form.color.label }}</label>
+              <div class="col-md-5">
+                <label class="form-label" for="{{ form.color.id_for_label }}">Couleur</label>
                 {{ form.color }}
                 <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
-                  Couleur d'identification visuelle.
+                  Couleur d'identification dans les listes et graphiques.
                 </div>
               </div>
 
-              <div class="col-md-8">
+              <div class="col-md-7">
                 <label class="form-label">&nbsp;</label>
-                <div style="display:flex;align-items:center;gap:10px;
-                            padding:12px 16px;background:#f8fafc;border-radius:8px;
-                            border:1px solid var(--card-border);height:38px;margin-top:0;">
+                <div style="display:flex;align-items:center;gap:10px;height:40px;
+                            padding:0 16px;background:#f8fafc;border-radius:8px;
+                            border:1px solid var(--card-border);">
                   {{ form.is_direct_cost }}
                   <label for="{{ form.is_direct_cost.id_for_label }}"
                          style="font-size:13.5px;font-weight:500;margin:0;cursor:pointer;line-height:1;">
@@ -70,9 +71,19 @@
                   </label>
                 </div>
                 <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
-                  Les coûts directs sont imputés aux sessions ou projets.
+                  Les coûts directs sont imputés aux sessions et projets (calcul de marge).
                 </div>
               </div>
+
+              {% if form.non_field_errors %}
+              <div class="col-12">
+                {% for error in form.non_field_errors %}
+                <div style="color:var(--danger);font-size:13px;display:flex;gap:8px;">
+                  <i class="bi bi-exclamation-circle-fill" style="flex-shrink:0;"></i> {{ error }}
+                </div>
+                {% endfor %}
+              </div>
+              {% endif %}
 
             </div>
 

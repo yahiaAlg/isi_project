@@ -425,3 +425,59 @@ def etudes_analytics(request):
             "projects": projects,
         },
     )
+
+
+# ─── ADD THESE TO etudes/views.py ────────────────────────────────────────── #
+
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
+
+
+@admin_required
+@require_GET
+def api_project_list(request):
+    """
+    Return active study projects for the line-item source selector.
+    Optionally filter by ?q= for live search.
+    """
+    q = request.GET.get("q", "").strip()
+    qs = (
+        StudyProject.objects.select_related("client")
+        .filter(status=StudyProject.STATUS_IN_PROGRESS)
+        .order_by("title")
+    )
+    if q:
+        from django.db.models import Q
+
+        qs = qs.filter(Q(title__icontains=q) | Q(client__name__icontains=q))
+
+    data = [
+        {
+            "id": p.pk,
+            "title": p.title,
+            "client": p.client.name,
+            "label": f"{p.title} — {p.client.name}",
+            "description": p.title,
+            "budget": str(p.budget),
+            "project_type": p.project_type,
+        }
+        for p in qs
+    ]
+    return JsonResponse({"results": data})
+
+
+@admin_required
+@require_GET
+def api_project_detail(request, pk):
+    """Return a single project's prepopulation data."""
+    p = get_object_or_404(StudyProject, pk=pk)
+    return JsonResponse(
+        {
+            "id": p.pk,
+            "title": p.title,
+            "client": p.client.name,
+            "description": p.title,
+            "budget": str(p.budget),
+            "project_type": p.project_type,
+        }
+    )

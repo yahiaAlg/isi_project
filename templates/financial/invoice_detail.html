@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Facture {{ invoice.reference }}{% endblock %}
+{% block title %}
+  {% if invoice.phase == 'proforma' %}Proforma {{ invoice.proforma_reference }}{% else %}Facture {{ invoice.reference }}{% endif %}
+{% endblock %}
 
 {% block breadcrumb %}
 <i class="bi bi-house-fill" style="font-size:12px;"></i>
@@ -8,68 +10,231 @@
 <a href="{% url 'financial:invoice_list' %}" style="color:var(--text-muted);text-decoration:none;">Factures</a>
 <i class="bi bi-chevron-right" style="font-size:10px;"></i>
 {% endblock %}
-{% block breadcrumb_active %}{{ invoice.reference }}{% endblock %}
+{% block breadcrumb_active %}{{ invoice.reference|default:invoice.proforma_reference }}{% endblock %}
 
 {% block topbar_actions %}
-{% if invoice.status != 'void' %}
-<a href="{% url 'financial:invoice_edit' invoice.pk %}" class="topbar-btn primary">
-  <i class="bi bi-pencil-fill"></i> Modifier
-</a>
-{% endif %}
 <a href="{% url 'financial:invoice_print' invoice.pk %}" class="topbar-btn" target="_blank">
   <i class="bi bi-printer-fill"></i> Imprimer
 </a>
-{% if invoice.status == 'unpaid' or invoice.status == 'partially_paid' %}
-<a href="{% url 'financial:payment_add' invoice.pk %}" class="topbar-btn">
-  <i class="bi bi-cash-coin"></i> Enregistrer un paiement
-</a>
+{% if invoice.phase == 'proforma' %}
+  {% if invoice.status != 'voided' %}
+  <a href="{% url 'financial:invoice_edit' invoice.pk %}" class="topbar-btn">
+    <i class="bi bi-pencil-fill"></i> Modifier
+  </a>
+  {% endif %}
+  {% if not invoice.has_bon_commande %}
+  <a href="{% url 'financial:invoice_record_bc' invoice.pk %}" class="topbar-btn primary">
+    <i class="bi bi-file-earmark-check-fill"></i> Enregistrer le BC
+  </a>
+  {% else %}
+  <a href="{% url 'financial:invoice_finalize' invoice.pk %}" class="topbar-btn primary">
+    <i class="bi bi-check2-circle"></i> Finaliser
+  </a>
+  {% endif %}
+{% elif invoice.phase == 'finale' %}
+  {% if invoice.is_payable %}
+  <a href="{% url 'financial:payment_add' invoice.pk %}" class="topbar-btn primary">
+    <i class="bi bi-cash-coin"></i> Encaisser
+  </a>
+  {% endif %}
 {% endif %}
 {% endblock %}
 
 {% block content %}
 <div class="fade-up">
 
+  <!-- ── Page header ─────────────────────────────────────── -->
   <div class="page-header">
     <div class="page-header-left">
-      <h1>{{ invoice.reference }}</h1>
+      <h1>
+        {% if invoice.phase == 'proforma' %}
+          <span style="color:var(--text-muted);font-size:18px;font-weight:500;margin-right:4px;">PROFORMA</span>
+        {% endif %}
+        {{ invoice.reference|default:invoice.proforma_reference }}
+      </h1>
       <p>{{ invoice.client.name }} — {{ invoice.invoice_date|date:"d/m/Y" }}</p>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      {% if invoice.status == 'paid' %}
-        <span class="isi-badge green" style="font-size:13px;padding:6px 14px;">
-          <i class="bi bi-check-circle-fill"></i> Payée
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      {% if invoice.phase == 'proforma' %}
+        <span class="isi-badge gray" style="font-size:12px;padding:5px 12px;">
+          <i class="bi bi-file-earmark-text"></i> Proforma
         </span>
-      {% elif invoice.status == 'partially_paid' %}
-        <span class="isi-badge amber" style="font-size:13px;padding:6px 14px;">
-          <i class="bi bi-circle-half"></i> Partiellement payée
+      {% else %}
+        <span class="isi-badge amber" style="font-size:12px;padding:5px 12px;">
+          <i class="bi bi-receipt-cutoff"></i> Facture Finale
         </span>
-      {% elif invoice.status == 'unpaid' %}
-        <span class="isi-badge red" style="font-size:13px;padding:6px 14px;">
-          <i class="bi bi-clock-fill"></i> Impayée
-        </span>
-      {% elif invoice.status == 'void' %}
-        <span class="isi-badge gray" style="font-size:13px;padding:6px 14px;">
-          <i class="bi bi-slash-circle-fill"></i> Annulée
-        </span>
+      {% endif %}
+      {% include "financial/partials/_invoice_status_badge.html" with invoice=invoice %}
+      {% if invoice.is_overdue %}
+      <span class="isi-badge red" style="font-size:12px;padding:5px 12px;">
+        <i class="bi bi-exclamation-triangle-fill"></i> En retard ({{ invoice.days_overdue }}j)
+      </span>
       {% endif %}
     </div>
   </div>
 
+  <!-- ── Lifecycle progress bar ───────────────────────────── -->
+  <div class="isi-card mb-4">
+    <div class="isi-card-body" style="padding:16px 24px;">
+      <div style="display:flex;align-items:center;gap:0;overflow-x:auto;">
+
+        <!-- Step 1: Proforma créée -->
+        <div style="display:flex;flex-direction:column;align-items:center;min-width:110px;">
+          <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+                      background:var(--accent);color:#0f172a;font-size:14px;font-weight:700;flex-shrink:0;">
+            <i class="bi bi-check-lg"></i>
+          </div>
+          <div style="font-size:11px;font-weight:600;margin-top:5px;text-align:center;color:var(--text-primary);">Proforma créée</div>
+          <div style="font-size:10px;color:var(--text-muted);text-align:center;">{{ invoice.invoice_date|date:"d/m/Y" }}</div>
+        </div>
+
+        <div style="flex:1;height:2px;background:{% if invoice.status == 'sent' or invoice.has_bon_commande or invoice.phase == 'finale' %}var(--accent){% else %}var(--card-border){% endif %};min-width:20px;"></div>
+
+        <!-- Step 2: Envoyée au client -->
+        <div style="display:flex;flex-direction:column;align-items:center;min-width:110px;">
+          <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                      {% if invoice.status == 'sent' or invoice.has_bon_commande or invoice.phase == 'finale' %}background:var(--accent);color:#0f172a;{% else %}background:var(--card-border);color:var(--text-muted);{% endif %}
+                      font-size:14px;font-weight:700;">
+            {% if invoice.status == 'sent' or invoice.has_bon_commande or invoice.phase == 'finale' %}
+              <i class="bi bi-check-lg"></i>
+            {% else %}
+              <span style="font-size:12px;">2</span>
+            {% endif %}
+          </div>
+          <div style="font-size:11px;font-weight:600;margin-top:5px;text-align:center;
+                      color:{% if invoice.status == 'sent' or invoice.has_bon_commande or invoice.phase == 'finale' %}var(--text-primary){% else %}var(--text-muted){% endif %};">
+            Envoyée
+          </div>
+        </div>
+
+        <div style="flex:1;height:2px;background:{% if invoice.has_bon_commande or invoice.phase == 'finale' %}var(--accent){% else %}var(--card-border){% endif %};min-width:20px;"></div>
+
+        <!-- Step 3: BC enregistré -->
+        <div style="display:flex;flex-direction:column;align-items:center;min-width:110px;">
+          <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                      {% if invoice.has_bon_commande or invoice.phase == 'finale' %}background:var(--accent);color:#0f172a;{% else %}background:var(--card-border);color:var(--text-muted);{% endif %}
+                      font-size:14px;font-weight:700;">
+            {% if invoice.has_bon_commande or invoice.phase == 'finale' %}
+              <i class="bi bi-check-lg"></i>
+            {% else %}
+              <span style="font-size:12px;">3</span>
+            {% endif %}
+          </div>
+          <div style="font-size:11px;font-weight:600;margin-top:5px;text-align:center;
+                      color:{% if invoice.has_bon_commande or invoice.phase == 'finale' %}var(--text-primary){% else %}var(--text-muted){% endif %};">
+            BC reçu
+          </div>
+          {% if invoice.bon_commande_number %}
+          <div style="font-size:10px;color:var(--text-muted);text-align:center;font-family:monospace;">{{ invoice.bon_commande_number }}</div>
+          {% endif %}
+        </div>
+
+        <div style="flex:1;height:2px;background:{% if invoice.phase == 'finale' %}var(--accent){% else %}var(--card-border){% endif %};min-width:20px;"></div>
+
+        <!-- Step 4: Finalisée -->
+        <div style="display:flex;flex-direction:column;align-items:center;min-width:110px;">
+          <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                      {% if invoice.phase == 'finale' %}background:var(--accent);color:#0f172a;{% else %}background:var(--card-border);color:var(--text-muted);{% endif %}
+                      font-size:14px;font-weight:700;">
+            {% if invoice.phase == 'finale' %}
+              <i class="bi bi-check-lg"></i>
+            {% else %}
+              <span style="font-size:12px;">4</span>
+            {% endif %}
+          </div>
+          <div style="font-size:11px;font-weight:600;margin-top:5px;text-align:center;
+                      color:{% if invoice.phase == 'finale' %}var(--text-primary){% else %}var(--text-muted){% endif %};">
+            Finalisée
+          </div>
+          {% if invoice.finalized_at %}
+          <div style="font-size:10px;color:var(--text-muted);text-align:center;">{{ invoice.finalized_at|date:"d/m/Y" }}</div>
+          {% endif %}
+        </div>
+
+        <div style="flex:1;height:2px;background:{% if invoice.status == 'paid' %}var(--success){% else %}var(--card-border){% endif %};min-width:20px;"></div>
+
+        <!-- Step 5: Payée -->
+        <div style="display:flex;flex-direction:column;align-items:center;min-width:80px;">
+          <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                      {% if invoice.status == 'paid' %}background:var(--success);color:#fff;{% elif invoice.status == 'partially_paid' %}background:rgba(245,158,11,.2);color:var(--accent);{% else %}background:var(--card-border);color:var(--text-muted);{% endif %}
+                      font-size:14px;font-weight:700;">
+            {% if invoice.status == 'paid' %}
+              <i class="bi bi-check-lg"></i>
+            {% elif invoice.status == 'partially_paid' %}
+              <i class="bi bi-circle-half"></i>
+            {% else %}
+              <span style="font-size:12px;">5</span>
+            {% endif %}
+          </div>
+          <div style="font-size:11px;font-weight:600;margin-top:5px;text-align:center;
+                      color:{% if invoice.status == 'paid' %}var(--success){% elif invoice.status == 'partially_paid' %}var(--accent){% else %}var(--text-muted){% endif %};">
+            Payée
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Next action alert (proforma only) ───────────────── -->
+  {% if invoice.phase == 'proforma' %}
+    {% if not invoice.has_bon_commande %}
+    <div class="alert alert-warning mb-4" style="display:flex;align-items:flex-start;gap:12px;">
+      <i class="bi bi-exclamation-triangle-fill" style="font-size:18px;flex-shrink:0;margin-top:2px;"></i>
+      <div>
+        <strong>Bon de Commande requis</strong> — Cette proforma doit recevoir le numéro de BC du client avant de pouvoir être finalisée.
+        <br>
+        <a href="{% url 'financial:invoice_record_bc' invoice.pk %}" class="btn btn-amber btn-sm mt-2">
+          <i class="bi bi-file-earmark-check-fill"></i> Enregistrer le BC maintenant
+        </a>
+      </div>
+    </div>
+    {% elif not invoice.client.is_invoice_ready %}
+    <div class="alert alert-warning mb-4">
+      <i class="bi bi-exclamation-triangle-fill" style="font-size:18px;flex-shrink:0;"></i>
+      <div>
+        <strong>Profil client incomplet</strong> — Complétez le profil client avant la finalisation.
+        Champs manquants : <em>{{ invoice.client.missing_fields_for_invoice|join:", " }}</em>.
+        <br>
+        <a href="{% url 'clients:client_edit' invoice.client.pk %}" class="btn btn-ghost btn-sm mt-2">
+          <i class="bi bi-person-fill-gear"></i> Compléter le profil
+        </a>
+      </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info mb-4">
+      <i class="bi bi-check-circle-fill" style="font-size:18px;flex-shrink:0;"></i>
+      <div>
+        <strong>Prête à finaliser</strong> — BC enregistré, profil client complet.
+        <a href="{% url 'financial:invoice_finalize' invoice.pk %}" class="btn btn-amber btn-sm ms-2">
+          <i class="bi bi-check2-circle"></i> Finaliser en facture définitive
+        </a>
+      </div>
+    </div>
+    {% endif %}
+  {% endif %}
+
   <div class="row g-4">
 
-    <!-- ── Left: invoice details ──────────────────────────── -->
+    <!-- ══════════════════ LEFT COLUMN ══════════════════ -->
     <div class="col-lg-8">
 
-      <!-- Line items -->
+      <!-- ── Line items ──────────────────────────────── -->
       <div class="isi-card mb-4">
         <div class="isi-card-header" style="justify-content:space-between;">
           <div style="display:flex;align-items:center;gap:12px;">
             <div class="card-icon amber"><i class="bi bi-list-ul"></i></div>
-            <h3>Lignes de facturation</h3>
+            <h3>Lignes de facturation
+              {% if invoice.is_locked %}
+              <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:6px;">
+                <i class="bi bi-lock-fill"></i> Verrouillé
+              </span>
+              {% endif %}
+            </h3>
           </div>
-          {% if invoice.status != 'void' %}
+          {% if not invoice.is_locked %}
           <a href="{% url 'financial:item_add' invoice.pk %}" class="btn btn-ghost btn-sm">
-            <i class="bi bi-plus-lg"></i> Ajouter une ligne
+            <i class="bi bi-plus-lg"></i> Ajouter
           </a>
           {% endif %}
         </div>
@@ -80,27 +245,41 @@
             <thead>
               <tr>
                 <th>Désignation</th>
-                <th style="text-align:right;">Qté</th>
-                <th>Unité</th>
+                <th>Mode</th>
+                <th style="text-align:right;">Personnes</th>
+                <th style="text-align:right;">Jours</th>
                 <th style="text-align:right;">PU HT</th>
                 <th style="text-align:right;">Remise</th>
                 <th style="text-align:right;">Total HT</th>
-                {% if invoice.status != 'void' %}
-                <th style="text-align:right;">Actions</th>
-                {% endif %}
+                {% if not invoice.is_locked %}<th style="text-align:right;">Actions</th>{% endif %}
               </tr>
             </thead>
             <tbody>
               {% for item in invoice.items.all %}
               <tr>
+                <td><span style="font-weight:500;">{{ item.description }}</span></td>
                 <td>
-                  <span style="font-weight:500;">{{ item.description }}</span>
+                  <span style="font-size:12px;color:var(--text-muted);">
+                    {% if item.pricing_mode == 'per_person' %}
+                      <i class="bi bi-person"></i> /pers.
+                    {% elif item.pricing_mode == 'per_day' %}
+                      <i class="bi bi-calendar-day"></i> /jour
+                    {% elif item.pricing_mode == 'per_person_per_day' %}
+                      <i class="bi bi-person"></i><i class="bi bi-x-lg" style="font-size:9px;"></i><i class="bi bi-calendar-day"></i>
+                    {% else %}
+                      <i class="bi bi-tag"></i> Forfait
+                    {% endif %}
+                  </span>
                 </td>
                 <td style="text-align:right;font-family:var(--font-head);font-weight:600;">
-                  {{ item.quantity|floatformat:2 }}
+                  {% if item.pricing_mode == 'per_person' or item.pricing_mode == 'per_person_per_day' %}
+                    {{ item.nb_persons|floatformat:0 }}
+                  {% else %}—{% endif %}
                 </td>
-                <td>
-                  <span style="color:var(--text-muted);font-size:13px;">{{ item.unit|default:"—" }}</span>
+                <td style="text-align:right;font-family:var(--font-head);font-weight:600;">
+                  {% if item.pricing_mode == 'per_day' or item.pricing_mode == 'per_person_per_day' %}
+                    {{ item.nb_days|floatformat:0 }}
+                  {% else %}—{% endif %}
                 </td>
                 <td style="text-align:right;font-family:var(--font-head);font-weight:600;">
                   {{ item.unit_price_ht|floatformat:2 }} DA
@@ -115,15 +294,14 @@
                 <td style="text-align:right;font-family:var(--font-head);font-weight:700;font-size:15px;">
                   {{ item.total_ht|floatformat:2 }} DA
                 </td>
-                {% if invoice.status != 'void' %}
+                {% if not invoice.is_locked %}
                 <td>
-                  <div style="display:flex;justify-content:flex-end;gap:6px;">
+                  <div style="display:flex;justify-content:flex-end;gap:4px;">
                     <a href="{% url 'financial:item_edit' invoice.pk item.pk %}"
                        class="btn btn-ghost btn-sm" title="Modifier">
                       <i class="bi bi-pencil-fill"></i>
                     </a>
-                    <form method="post"
-                          action="{% url 'financial:item_delete' invoice.pk item.pk %}"
+                    <form method="post" action="{% url 'financial:item_delete' invoice.pk item.pk %}"
                           style="display:inline;">
                       {% csrf_token %}
                       <button type="submit" class="btn btn-danger-soft btn-sm"
@@ -140,30 +318,28 @@
           </table>
         </div>
 
-        <!-- Totals row -->
+        <!-- Totals -->
         <div style="padding:16px 24px;border-top:1px solid var(--card-border);">
           <div style="display:flex;justify-content:flex-end;">
-            <div style="min-width:280px;">
-              <div style="display:flex;justify-content:space-between;padding:6px 0;
+            <div style="min-width:290px;">
+              <div style="display:flex;justify-content:space-between;padding:7px 0;
                           border-bottom:1px solid var(--card-border);">
                 <span style="color:var(--text-muted);font-size:13px;">Total HT</span>
                 <span style="font-weight:600;">{{ invoice.amount_ht|floatformat:2 }} DA</span>
               </div>
-              <div style="display:flex;justify-content:space-between;padding:6px 0;
+              <div style="display:flex;justify-content:space-between;padding:7px 0;
                           border-bottom:1px solid var(--card-border);">
                 <span style="color:var(--text-muted);font-size:13px;">
-                  TVA ({{ invoice.tva_rate|floatformat:0 }}%)
+                  TVA ({% widthratio invoice.tva_rate 1 100 %}%)
+                  {% if invoice.client.is_tva_exempt %}
+                    <span class="isi-badge gray" style="font-size:10px;padding:1px 6px;">Exonéré</span>
+                  {% endif %}
                 </span>
-                <span style="font-weight:600;">
-                  {{ invoice.amount_tva|floatformat:2 }} DA
-                </span>
+                <span style="font-weight:600;">{{ invoice.amount_tva|floatformat:2 }} DA</span>
               </div>
               <div style="display:flex;justify-content:space-between;padding:10px 0 0;">
-                <span style="font-family:var(--font-head);font-size:16px;font-weight:700;">
-                  Total TTC
-                </span>
-                <span style="font-family:var(--font-head);font-size:20px;font-weight:700;
-                              color:var(--accent);">
+                <span style="font-family:var(--font-head);font-size:16px;font-weight:700;">Total TTC</span>
+                <span style="font-family:var(--font-head);font-size:20px;font-weight:700;color:var(--accent);">
                   {{ invoice.amount_ttc|floatformat:2 }} DA
                 </span>
               </div>
@@ -173,13 +349,9 @@
 
         {% else %}
         <div class="isi-card-body text-center" style="padding:40px 24px;">
-          <div style="font-size:36px;color:#e2e8f0;margin-bottom:12px;">
-            <i class="bi bi-list-ul"></i>
-          </div>
-          <p style="color:var(--text-muted);font-size:14px;margin:0 0 12px;">
-            Aucune ligne de facturation.
-          </p>
-          {% if invoice.status != 'void' %}
+          <div style="font-size:36px;color:#e2e8f0;margin-bottom:12px;"><i class="bi bi-list-ul"></i></div>
+          <p style="color:var(--text-muted);font-size:14px;margin:0 0 12px;">Aucune ligne de facturation.</p>
+          {% if not invoice.is_locked %}
           <a href="{% url 'financial:item_add' invoice.pk %}" class="btn btn-amber btn-sm">
             <i class="bi bi-plus-lg"></i> Ajouter une ligne
           </a>
@@ -188,14 +360,62 @@
         {% endif %}
       </div>
 
-      <!-- Payments -->
+      <!-- ── Bon de Commande section ─────────────────── -->
+      {% if invoice.bon_commande_number or invoice.phase == 'finale' %}
+      <div class="isi-card mb-4">
+        <div class="isi-card-header" style="justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div class="card-icon green"><i class="bi bi-file-earmark-check-fill"></i></div>
+            <h3>Bon de Commande client</h3>
+          </div>
+          {% if invoice.phase == 'proforma' %}
+          <a href="{% url 'financial:invoice_record_bc' invoice.pk %}" class="btn btn-ghost btn-sm">
+            <i class="bi bi-pencil-fill"></i> Modifier
+          </a>
+          {% endif %}
+        </div>
+        <div class="isi-card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <div class="stat-label mb-1">N° Bon de Commande</div>
+              <div style="font-family:var(--font-head);font-size:16px;font-weight:700;color:var(--accent);">
+                {{ invoice.bon_commande_number|default:"—" }}
+              </div>
+            </div>
+            {% if invoice.bon_commande_date %}
+            <div class="col-md-4">
+              <div class="stat-label mb-1">Date du BC</div>
+              <div style="font-weight:500;font-size:13.5px;">{{ invoice.bon_commande_date|date:"d/m/Y" }}</div>
+            </div>
+            {% endif %}
+            {% if invoice.bon_commande_amount %}
+            <div class="col-md-4">
+              <div class="stat-label mb-1">Montant BC</div>
+              <div style="font-weight:500;font-size:13.5px;">{{ invoice.bon_commande_amount|floatformat:2 }} DA</div>
+            </div>
+            {% endif %}
+            {% if invoice.bon_commande_scan %}
+            <div class="col-12">
+              <a href="{{ invoice.bon_commande_scan.url }}" target="_blank"
+                 class="btn btn-ghost btn-sm">
+                <i class="bi bi-file-earmark-pdf-fill"></i> Voir le scan du BC
+              </a>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- ── Payments (finale only) ──────────────────── -->
+      {% if invoice.phase == 'finale' %}
       <div class="isi-card mb-4">
         <div class="isi-card-header" style="justify-content:space-between;">
           <div style="display:flex;align-items:center;gap:12px;">
             <div class="card-icon green"><i class="bi bi-cash-coin"></i></div>
             <h3>Paiements</h3>
           </div>
-          {% if invoice.status == 'unpaid' or invoice.status == 'partially_paid' %}
+          {% if invoice.is_payable %}
           <a href="{% url 'financial:payment_add' invoice.pk %}" class="btn btn-ghost btn-sm">
             <i class="bi bi-plus-lg"></i> Enregistrer
           </a>
@@ -218,12 +438,8 @@
             <tbody>
               {% for payment in invoice.payments.all %}
               <tr>
-                <td>
-                  <span style="font-size:13px;">{{ payment.date|date:"d/m/Y" }}</span>
-                </td>
-                <td>
-                  <span style="color:var(--text-muted);font-size:13px;">{{ payment.get_method_display }}</span>
-                </td>
+                <td><span style="font-size:13px;">{{ payment.date|date:"d/m/Y" }}</span></td>
+                <td><span style="color:var(--text-muted);font-size:13px;">{{ payment.get_method_display }}</span></td>
                 <td>
                   <span style="color:var(--text-muted);font-size:13px;font-family:monospace;">
                     {{ payment.reference|default:"—" }}
@@ -236,29 +452,27 @@
                     <span class="isi-badge amber"><i class="bi bi-clock-fill"></i> En attente</span>
                   {% elif payment.status == 'reversed' %}
                     <span class="isi-badge red"><i class="bi bi-arrow-counterclockwise"></i> Annulé</span>
-                  {% else %}
-                    <span class="isi-badge gray">{{ payment.get_status_display }}</span>
                   {% endif %}
                 </td>
-                <td style="text-align:right;font-family:var(--font-head);font-weight:700;font-size:15px;">
+                <td style="text-align:right;font-family:var(--font-head);font-weight:700;font-size:15px;
+                            {% if payment.status == 'reversed' %}color:var(--text-muted);{% endif %}">
                   {{ payment.amount|floatformat:2 }} DA
                 </td>
                 <td>
                   <div style="display:flex;justify-content:flex-end;gap:4px;">
                     {% if payment.status == 'pending' %}
-                    <form method="post"
-                          action="{% url 'financial:payment_confirm' invoice.pk payment.pk %}"
+                    <form method="post" action="{% url 'financial:payment_confirm' invoice.pk payment.pk %}"
                           style="display:inline;">
                       {% csrf_token %}
                       <button type="submit" class="btn btn-ghost btn-sm" title="Confirmer"
+                              style="color:var(--success);border-color:rgba(16,185,129,.3);"
                               onclick="return confirm('Confirmer ce paiement ?')">
                         <i class="bi bi-check-lg"></i>
                       </button>
                     </form>
                     {% endif %}
                     {% if payment.status == 'confirmed' %}
-                    <form method="post"
-                          action="{% url 'financial:payment_reverse' invoice.pk payment.pk %}"
+                    <form method="post" action="{% url 'financial:payment_reverse' invoice.pk payment.pk %}"
                           style="display:inline;">
                       {% csrf_token %}
                       <button type="submit" class="btn btn-danger-soft btn-sm" title="Annuler"
@@ -271,8 +485,7 @@
                        class="btn btn-ghost btn-sm" title="Modifier">
                       <i class="bi bi-pencil-fill"></i>
                     </a>
-                    <form method="post"
-                          action="{% url 'financial:payment_delete' invoice.pk payment.pk %}"
+                    <form method="post" action="{% url 'financial:payment_delete' invoice.pk payment.pk %}"
                           style="display:inline;">
                       {% csrf_token %}
                       <button type="submit" class="btn btn-danger-soft btn-sm" title="Supprimer"
@@ -288,9 +501,9 @@
           </table>
         </div>
 
-        <!-- Payment summary -->
+        <!-- Payment summary bar -->
         <div style="padding:14px 24px;border-top:1px solid var(--card-border);
-                    background:#f8fafc;display:flex;gap:32px;flex-wrap:wrap;">
+                    background:#f8fafc;display:flex;gap:32px;flex-wrap:wrap;align-items:center;">
           <div>
             <div class="stat-label mb-1">Total TTC</div>
             <div style="font-family:var(--font-head);font-weight:700;font-size:16px;">
@@ -298,29 +511,36 @@
             </div>
           </div>
           <div>
-            <div class="stat-label mb-1">Déjà payé</div>
+            <div class="stat-label mb-1">Encaissé</div>
             <div style="font-family:var(--font-head);font-weight:700;font-size:16px;color:var(--success);">
               {{ invoice.amount_paid|floatformat:2 }} DA
             </div>
           </div>
           <div>
-            <div class="stat-label mb-1">Solde restant</div>
+            <div class="stat-label mb-1">Reste dû</div>
             <div style="font-family:var(--font-head);font-weight:700;font-size:16px;
                         color:{% if invoice.amount_remaining > 0 %}var(--danger){% else %}var(--success){% endif %};">
               {{ invoice.amount_remaining|floatformat:2 }} DA
+            </div>
+          </div>
+          <div style="margin-left:auto;">
+            <!-- Progress bar -->
+            <div style="width:140px;height:6px;background:var(--card-border);border-radius:99px;overflow:hidden;">
+              <div style="height:100%;width:{{ invoice.payment_completion_percent }}%;
+                          background:{% if invoice.status == 'paid' %}var(--success){% else %}var(--accent){% endif %};
+                          border-radius:99px;transition:width .3s;"></div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;text-align:right;">
+              {{ invoice.payment_completion_percent }}% encaissé
             </div>
           </div>
         </div>
 
         {% else %}
         <div class="isi-card-body text-center" style="padding:36px 24px;">
-          <div style="font-size:36px;color:#e2e8f0;margin-bottom:12px;">
-            <i class="bi bi-cash-coin"></i>
-          </div>
-          <p style="color:var(--text-muted);font-size:14px;margin:0 0 12px;">
-            Aucun paiement enregistré.
-          </p>
-          {% if invoice.status == 'unpaid' or invoice.status == 'partially_paid' %}
+          <div style="font-size:36px;color:#e2e8f0;margin-bottom:12px;"><i class="bi bi-cash-coin"></i></div>
+          <p style="color:var(--text-muted);font-size:14px;margin:0 0 12px;">Aucun paiement enregistré.</p>
+          {% if invoice.is_payable %}
           <a href="{% url 'financial:payment_add' invoice.pk %}" class="btn btn-amber btn-sm">
             <i class="bi bi-plus-lg"></i> Enregistrer un paiement
           </a>
@@ -328,8 +548,39 @@
         </div>
         {% endif %}
       </div>
+      {% endif %}
 
-      <!-- Notes -->
+      <!-- ── Credit notes (finale only) ─────────────── -->
+      {% if invoice.phase == 'finale' and invoice.credit_notes.exists %}
+      <div class="isi-card mb-4">
+        <div class="isi-card-header">
+          <div class="card-icon red"><i class="bi bi-arrow-return-left"></i></div>
+          <h3>Avoirs</h3>
+        </div>
+        {% for cn in invoice.credit_notes.all %}
+        <div style="padding:12px 20px;border-bottom:1px solid var(--card-border);
+                    display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <div>
+            <a href="{% url 'financial:credit_note_detail' cn.pk %}"
+               style="font-family:var(--font-head);font-weight:700;color:var(--text-primary);text-decoration:none;">
+              {{ cn.reference }}
+            </a>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">{{ cn.date|date:"d/m/Y" }} — {{ cn.reason|truncatechars:60 }}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:var(--font-head);font-weight:700;font-size:15px;color:var(--danger);">
+              −{{ cn.amount_ttc|floatformat:2 }} DA
+            </div>
+            {% if cn.is_full_reversal %}
+            <span class="isi-badge red" style="font-size:10px;">Annulation totale</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- ── Notes ──────────────────────────────────── -->
       {% if invoice.notes %}
       <div class="isi-card">
         <div class="isi-card-header">
@@ -337,16 +588,14 @@
           <h3>Notes internes</h3>
         </div>
         <div class="isi-card-body">
-          <p style="font-size:14px;color:var(--text-primary);line-height:1.7;margin:0;white-space:pre-wrap;">
-            {{ invoice.notes }}
-          </p>
+          <p style="font-size:14px;color:var(--text-primary);line-height:1.7;margin:0;white-space:pre-wrap;">{{ invoice.notes }}</p>
         </div>
       </div>
       {% endif %}
 
     </div><!-- /col-lg-8 -->
 
-    <!-- ── Right: summary card ─────────────────────────────── -->
+    <!-- ══════════════════ RIGHT COLUMN ══════════════════ -->
     <div class="col-lg-4">
 
       <!-- Invoice info -->
@@ -359,13 +608,15 @@
           <div class="row g-3">
             <div class="col-12">
               <div class="stat-label mb-1">Client</div>
-              <div style="font-weight:600;font-size:14px;">
-                <a href="{% url 'clients:client_detail' invoice.client.pk %}"
-                   style="color:var(--accent);text-decoration:none;">
-                  {{ invoice.client.name }}
-                </a>
+              <a href="{% url 'clients:client_detail' invoice.client.pk %}"
+                 style="font-weight:600;font-size:14px;color:var(--accent);text-decoration:none;">
+                {{ invoice.client.name }}
+              </a>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+                {{ invoice.client.get_client_type_display }}
               </div>
             </div>
+
             <div class="col-6">
               <div class="stat-label mb-1">Type</div>
               <div style="margin-top:4px;">
@@ -376,52 +627,62 @@
                 {% endif %}
               </div>
             </div>
+
             <div class="col-6">
-              <div class="stat-label mb-1">Statut</div>
-              <div style="margin-top:4px;">
-                {% if invoice.status == 'paid' %}
-                  <span class="isi-badge green">Payée</span>
-                {% elif invoice.status == 'partially_paid' %}
-                  <span class="isi-badge amber">Part. payée</span>
-                {% elif invoice.status == 'unpaid' %}
-                  <span class="isi-badge red">Impayée</span>
-                {% else %}
-                  <span class="isi-badge gray">Annulée</span>
+              <div class="stat-label mb-1">TVA</div>
+              <div style="font-weight:500;font-size:13.5px;">
+                {% widthratio invoice.tva_rate 1 100 %}%
+                {% if invoice.client.is_tva_exempt %}
+                  <span class="isi-badge gray" style="font-size:10px;margin-left:4px;">Exonéré</span>
                 {% endif %}
               </div>
             </div>
+
             <div class="col-6">
-              <div class="stat-label mb-1">Date</div>
+              <div class="stat-label mb-1">N° Proforma</div>
+              <div style="font-weight:500;font-size:13px;font-family:monospace;color:var(--text-muted);">
+                {{ invoice.proforma_reference }}
+              </div>
+            </div>
+
+            {% if invoice.reference %}
+            <div class="col-6">
+              <div class="stat-label mb-1">N° Finale</div>
+              <div style="font-weight:700;font-size:13.5px;font-family:var(--font-head);color:var(--accent);">
+                {{ invoice.reference }}
+              </div>
+            </div>
+            {% endif %}
+
+            <div class="col-6">
+              <div class="stat-label mb-1">Date d'émission</div>
               <div style="font-weight:500;font-size:13.5px;">{{ invoice.invoice_date|date:"d/m/Y" }}</div>
             </div>
+
+            {% if invoice.phase == 'proforma' and invoice.validity_date %}
+            <div class="col-6">
+              <div class="stat-label mb-1">Validité proforma</div>
+              <div style="font-weight:500;font-size:13.5px;">{{ invoice.validity_date|date:"d/m/Y" }}</div>
+            </div>
+            {% endif %}
+
+            {% if invoice.phase == 'finale' and invoice.due_date %}
             <div class="col-6">
               <div class="stat-label mb-1">Échéance</div>
-              <div style="font-weight:500;font-size:13.5px;">
-                {{ invoice.due_date|date:"d/m/Y"|default:"—" }}
-              </div>
-            </div>
-            {% if invoice.session %}
-            <div class="col-12">
-              <div class="stat-label mb-1">Session liée</div>
-              <div style="font-weight:500;font-size:13.5px;">
-                <a href="{% url 'formations:session_detail' invoice.session.pk %}"
-                   style="color:var(--accent);text-decoration:none;">
-                  {{ invoice.session }}
-                </a>
+              <div style="font-weight:500;font-size:13.5px;
+                          {% if invoice.is_overdue %}color:var(--danger);font-weight:700;{% endif %}">
+                {{ invoice.due_date|date:"d/m/Y" }}
               </div>
             </div>
             {% endif %}
-            {% if invoice.study_project %}
+
+            {% if invoice.page_ref %}
             <div class="col-12">
-              <div class="stat-label mb-1">Projet lié</div>
-              <div style="font-weight:500;font-size:13.5px;">
-                <a href="{% url 'etudes:project_detail' invoice.study_project.pk %}"
-                   style="color:var(--accent);text-decoration:none;">
-                  {{ invoice.study_project.title }}
-                </a>
-              </div>
+              <div class="stat-label mb-1">Réf. interne</div>
+              <div style="font-weight:500;font-size:13px;font-family:monospace;">{{ invoice.page_ref }}</div>
             </div>
             {% endif %}
+
           </div>
         </div>
       </div>
@@ -433,7 +694,7 @@
           <h3>Résumé financier</h3>
         </div>
         <div class="isi-card-body">
-          <div style="display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;flex-direction:column;gap:8px;">
             <div style="display:flex;justify-content:space-between;align-items:center;
                         padding:10px 14px;background:#f8fafc;border-radius:8px;">
               <span style="font-size:13px;color:var(--text-muted);">Montant HT</span>
@@ -441,7 +702,9 @@
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;
                         padding:10px 14px;background:#f8fafc;border-radius:8px;">
-              <span style="font-size:13px;color:var(--text-muted);">TVA</span>
+              <span style="font-size:13px;color:var(--text-muted);">
+                TVA {% widthratio invoice.tva_rate 1 100 %}%
+              </span>
               <span style="font-weight:600;">{{ invoice.amount_tva|floatformat:2 }} DA</span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;
@@ -452,12 +715,11 @@
                 {{ invoice.amount_ttc|floatformat:2 }} DA
               </span>
             </div>
+            {% if invoice.phase == 'finale' %}
             <div style="display:flex;justify-content:space-between;align-items:center;
                         padding:10px 14px;background:rgba(16,185,129,.08);border-radius:8px;">
               <span style="font-size:13px;color:var(--text-muted);">Payé</span>
-              <span style="font-weight:600;color:var(--success);">
-                {{ invoice.amount_paid|floatformat:2 }} DA
-              </span>
+              <span style="font-weight:600;color:var(--success);">{{ invoice.amount_paid|floatformat:2 }} DA</span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;
                         padding:10px 14px;
@@ -469,6 +731,7 @@
                 {{ invoice.amount_remaining|floatformat:2 }} DA
               </span>
             </div>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -477,30 +740,127 @@
       <div class="isi-card mb-4">
         <div class="isi-card-header">
           <div class="card-icon blue"><i class="bi bi-lightning-fill"></i></div>
-          <h3>Actions rapides</h3>
+          <h3>Actions</h3>
         </div>
         <div class="isi-card-body">
           <div class="d-flex flex-column gap-2">
-            <a href="{% url 'financial:invoice_print' invoice.pk %}" target="_blank"
-               class="btn btn-amber">
-              <i class="bi bi-printer-fill"></i> Imprimer la facture
+
+            <a href="{% url 'financial:invoice_print' invoice.pk %}" target="_blank" class="btn btn-amber">
+              <i class="bi bi-printer-fill"></i>
+              {% if invoice.phase == 'proforma' %}Imprimer la proforma{% else %}Imprimer la facture{% endif %}
             </a>
-            {% if invoice.status != 'void' %}
-            <a href="{% url 'financial:invoice_edit' invoice.pk %}" class="btn btn-ghost">
-              <i class="bi bi-pencil-fill"></i> Modifier
-            </a>
-            <a href="{% url 'financial:credit_note_create' invoice.pk %}" class="btn btn-ghost">
-              <i class="bi bi-arrow-return-left"></i> Créer un avoir
-            </a>
-            <a href="{% url 'financial:invoice_void' invoice.pk %}"
-               class="btn btn-danger-soft"
-               onclick="return confirm('Annuler définitivement cette facture ?')">
-              <i class="bi bi-slash-circle-fill"></i> Annuler la facture
-            </a>
+
+            {% if invoice.phase == 'proforma' %}
+              <a href="{% url 'financial:invoice_edit' invoice.pk %}" class="btn btn-ghost">
+                <i class="bi bi-pencil-fill"></i> Modifier
+              </a>
+              {% if not invoice.has_bon_commande %}
+              <a href="{% url 'financial:invoice_record_bc' invoice.pk %}" class="btn btn-outline-amber">
+                <i class="bi bi-file-earmark-check-fill"></i> Enregistrer le BC
+              </a>
+              {% else %}
+              <a href="{% url 'financial:invoice_finalize' invoice.pk %}" class="btn btn-outline-amber">
+                <i class="bi bi-check2-circle"></i> Finaliser la facture
+              </a>
+              {% endif %}
             {% endif %}
+
+            {% if invoice.phase == 'finale' %}
+              {% if invoice.status not in 'voided credit_note' %}
+              <a href="{% url 'financial:invoice_edit' invoice.pk %}" class="btn btn-ghost">
+                <i class="bi bi-pencil-fill"></i> Modifier (notes / échéance)
+              </a>
+              {% endif %}
+              {% if invoice.is_payable %}
+              <a href="{% url 'financial:payment_add' invoice.pk %}" class="btn btn-ghost">
+                <i class="bi bi-cash-coin"></i> Enregistrer un paiement
+              </a>
+              {% endif %}
+              {% if invoice.status == 'paid' or invoice.status == 'partially_paid' %}
+              <a href="{% url 'financial:credit_note_create' invoice.pk %}" class="btn btn-ghost">
+                <i class="bi bi-arrow-return-left"></i> Créer un avoir
+              </a>
+              {% endif %}
+            {% endif %}
+
           </div>
         </div>
       </div>
+
+      <!-- ── Admin zone ──────────────────────────────── -->
+      {% if request.user.profile.is_admin %}
+      <div class="isi-card mb-4" style="border-left:4px solid var(--danger);">
+        <div class="isi-card-header">
+          <div class="card-icon red"><i class="bi bi-shield-fill-exclamation"></i></div>
+          <h3 style="color:var(--danger);">Zone Administrateur</h3>
+        </div>
+        <div class="isi-card-body">
+
+          <!-- Mark as sent (proforma draft only) -->
+          {% if invoice.phase == 'proforma' and invoice.status == 'draft' %}
+          <form method="post" action="{% url 'financial:invoice_mark_sent' invoice.pk %}" class="mb-2">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-ghost w-100" style="justify-content:flex-start;"
+                    onclick="return confirm('Marquer cette proforma comme envoyée au client ?')">
+              <i class="bi bi-send-fill" style="color:var(--accent);"></i>
+              Marquer comme envoyée
+            </button>
+          </form>
+          {% endif %}
+
+          <!-- Status override (admin only) — for stuck invoices -->
+          {% if invoice.phase == 'finale' and invoice.status not in 'voided credit_note' %}
+          <div class="mb-3" style="padding:12px;background:rgba(239,68,68,.06);border-radius:8px;border:1px solid rgba(239,68,68,.15);">
+            <div style="font-size:12px;font-weight:600;color:var(--danger);margin-bottom:8px;">
+              <i class="bi bi-exclamation-triangle-fill"></i> Forcer le statut
+            </div>
+            <form method="post" action="{% url 'financial:invoice_void' invoice.pk %}">
+              {% csrf_token %}
+              <div class="mb-2">
+                <input type="text" name="reason" class="form-control form-control-sm"
+                       placeholder="Motif de l'annulation (obligatoire)" required>
+              </div>
+              <button type="submit" class="btn btn-danger-soft btn-sm w-100"
+                      onclick="return confirm('Annuler définitivement cette facture ? Le numéro est conservé dans la séquence.')">
+                <i class="bi bi-slash-circle-fill"></i> Annuler la facture (void)
+              </button>
+            </form>
+          </div>
+          {% endif %}
+
+          <!-- Delete proforma (irreversible) -->
+          {% if invoice.phase == 'proforma' %}
+          <div style="padding:12px;background:rgba(239,68,68,.06);border-radius:8px;border:1px solid rgba(239,68,68,.15);">
+            <div style="font-size:12px;font-weight:600;color:var(--danger);margin-bottom:6px;">
+              <i class="bi bi-exclamation-triangle-fill"></i> Suppression définitive
+            </div>
+            <p style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">
+              Supprime la proforma et libère son numéro de séquence. Impossible si des paiements existent.
+              Les factures finalisées ne peuvent pas être supprimées.
+            </p>
+            <form method="post" action="{% url 'financial:invoice_delete' invoice.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-danger-soft btn-sm w-100"
+                      onclick="return confirm('Supprimer définitivement la proforma {{ invoice.proforma_reference }} ? Cette action est IRRÉVERSIBLE.')">
+                <i class="bi bi-trash3-fill"></i> Supprimer la proforma
+              </button>
+            </form>
+          </div>
+          {% endif %}
+
+          {% if invoice.phase == 'finale' and invoice.status == 'voided' %}
+          <div style="padding:10px 12px;background:rgba(239,68,68,.06);border-radius:8px;
+                      border:1px solid rgba(239,68,68,.15);font-size:12.5px;color:var(--text-muted);">
+            <i class="bi bi-info-circle-fill" style="color:var(--danger);"></i>
+            Cette facture est annulée. Son numéro
+            <strong style="font-family:monospace;">{{ invoice.reference }}</strong> reste dans la séquence fiscale.
+            Pour la corriger, émettez un avoir sur la facture d'origine.
+          </div>
+          {% endif %}
+
+        </div>
+      </div>
+      {% endif %}
 
       <!-- Meta -->
       <div class="isi-card">
@@ -518,6 +878,12 @@
               <div class="stat-label mb-1">Modifiée le</div>
               <div style="font-weight:500;font-size:13.5px;">{{ invoice.updated_at|date:"d/m/Y à H:i" }}</div>
             </div>
+            {% if invoice.finalized_at %}
+            <div class="col-12">
+              <div class="stat-label mb-1">Finalisée le</div>
+              <div style="font-weight:500;font-size:13.5px;">{{ invoice.finalized_at|date:"d/m/Y à H:i" }}</div>
+            </div>
+            {% endif %}
           </div>
         </div>
       </div>

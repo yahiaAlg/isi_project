@@ -1,20 +1,20 @@
 """
-Financial models — Invoices, line items, payments, credit notes, expenses.
+Financial models — v3.0
+Invoices (3-stage lifecycle: proforma → BC → finale), line items with flexible
+pricing modes, payments, credit notes, expenses.
 
-Design principles
------------------
-* Invoice → InvoiceItem (line items) replaces the single-amount design so that
-  sessions with multiple participants, or projects with multiple deliverables,
-  can be itemised on a single invoice.
-* amount_paid / amount_remaining are maintained as real DB columns (updated by
-  Payment.save / delete) so that Client.outstanding_balance can use a plain
-  aggregate query instead of joining through payments at runtime.
-* CreditNote is a first-class model rather than a flag on Invoice; it carries
-  its own reference number and links back to the original invoice.
-* Expense approval follows the spec: flag for missing receipt and pending
-  approval, receipt upload, overhead vs allocated cost centre.
-* All monetary fields use max_digits=14, decimal_places=2 (Algerian Dinar —
-  large amounts are normal; no sub-unit precision needed).
+Key changes from v2.x
+─────────────────────
+* Invoice now has a `phase` (PROFORMA / FINALE) that drives all business logic.
+* `proforma_reference`  — sequential PF-F/E-YYYY-NNN, assigned at creation.
+* `reference`           — sequential F/E-YYYY-NNN, assigned only at finalization.
+* Bon de Commande fields added; BC number required to unlock finalization.
+* `amount_in_words` stored for mandatory printed mention.
+* InvoiceItem replaces quantity/unit with `pricing_mode` + `nb_persons` + `nb_days`;
+  total_ht formula varies per mode (see PricingMode docstring).
+* TVA default corrected to 9% for formations (Algerian fiscal code).
+* Payment.clean() guards phase=FINALE.
+* All TextChoices used throughout.
 """
 
 from decimal import Decimal
@@ -35,77 +35,110 @@ from core.base_models import TimeStampedModel
 
 class Invoice(TimeStampedModel):
     """
-    An invoice issued to a client after service delivery.
+    A proforma or final tax invoice issued to a client.
 
-    Business rules enforced here:
-    - Formation invoices may only be created when the linked session is
-      'completed'; this is checked in the view layer, not here.
-    - Invoice numbers are auto-generated, sequential, and unique per
-      business line (F-YYYY-NNN / E-YYYY-NNN).
-    - TVA rate is snapshotted at creation time from the relevant
-      FormationInfo / BureauEtudeInfo singleton.
-    - amount_paid and amount_remaining are maintained by Payment signals so
-      that aggregate queries on Client work with a single DB round-trip.
+    Lifecycle
+    ---------
+    PROFORMA phase
+        status = draft  → (mark as sent) → sent
+        Once a Bon de Commande number is recorded, the proforma may be finalized.
+
+    FINALE phase
+        status = unpaid → partially_paid → paid
+               unpaid   → voided
+               paid     → [issue CreditNote; cannot void directly]
+
+    Sequential numbers
+        proforma_reference  PF-F-{YEAR}-{NNN} / PF-E-{YEAR}-{NNN}  — set on create
+        reference           F-{YEAR}-{NNN}    / E-{YEAR}-{NNN}      — set on finalize
+
+    Business rules enforced here
+        * Line items cannot be edited after finalization (enforced in item.save()).
+        * TVA rate is snapshotted; auto-set to 0 when client.is_tva_exempt is True.
+        * amount_paid / amount_remaining are denormalized columns kept in sync by
+          Payment.save() / delete() so Client aggregate queries need no joins.
     """
 
-    # ---- Business line ----------------------------------------------- #
-    TYPE_FORMATION = "formation"
-    TYPE_ETUDE = "etude"
+    class InvoiceType(models.TextChoices):
+        FORMATION = "formation", "Formation"
+        ETUDE = "etude", "Étude"
 
-    TYPE_CHOICES = [
-        (TYPE_FORMATION, "Formation"),
-        (TYPE_ETUDE, "Étude"),
-    ]
+    class Phase(models.TextChoices):
+        PROFORMA = "proforma", "Facture Proforma"
+        FINALE = "finale", "Facture Finale"
 
-    # ---- Payment status ---------------------------------------------- #
-    STATUS_UNPAID = "unpaid"
-    STATUS_PARTIALLY_PAID = "partially_paid"
-    STATUS_PAID = "paid"
-    STATUS_VOIDED = "voided"
-    STATUS_CREDIT_NOTE = "credit_note"  # original invoice replaced by CN
+    class Status(models.TextChoices):
+        # Proforma statuses
+        DRAFT = "draft", "Brouillon"
+        SENT = "sent", "Envoyée au client"
+        # Finale statuses
+        UNPAID = "unpaid", "Non payée"
+        PARTIALLY_PAID = "partially_paid", "Partiellement payée"
+        PAID = "paid", "Payée"
+        VOIDED = "voided", "Annulée"
+        CREDIT_NOTE = "credit_note", "Avoir émis"
 
-    STATUS_CHOICES = [
-        (STATUS_UNPAID, "Non payée"),
-        (STATUS_PARTIALLY_PAID, "Partiellement payée"),
-        (STATUS_PAID, "Payée"),
-        (STATUS_VOIDED, "Annulée"),
-        (STATUS_CREDIT_NOTE, "Avoir émis"),
-    ]
-
-    # ---- Core fields ------------------------------------------------- #
+    # ---- Identity ---------------------------------------------------- #
     invoice_type = models.CharField(
         max_length=20,
-        choices=TYPE_CHOICES,
+        choices=InvoiceType.choices,
         verbose_name="Type",
+        db_index=True,
     )
+    phase = models.CharField(
+        max_length=10,
+        choices=Phase.choices,
+        default=Phase.PROFORMA,
+        verbose_name="Phase",
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        verbose_name="Statut",
+        db_index=True,
+    )
+
+    # ---- References -------------------------------------------------- #
+    # proforma_reference: PF-F-2026-001 — generated at creation
+    proforma_reference = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name="N° Proforma",
+        help_text="Généré automatiquement à la création.",
+    )
+    # reference: F-2026-001 — generated at finalization, null until then
     reference = models.CharField(
         max_length=50,
         unique=True,
-        verbose_name="Numéro de facture",
-        help_text="Ex. F-2026-001 ou E-2026-001 — généré automatiquement.",
+        null=True,
+        blank=True,
+        verbose_name="N° Facture finale",
+        help_text="Généré automatiquement à la finalisation — séquence indépendante.",
     )
+    # Optional internal ref visible on printed doc header
+    page_ref = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Réf. interne (en-tête)",
+        help_text="Ex. GSCOM — affiché en haut à droite du document imprimé.",
+    )
+
+    # ---- Parties ----------------------------------------------------- #
     client = models.ForeignKey(
         Client,
         on_delete=models.PROTECT,
         related_name="invoices",
         verbose_name="Client",
     )
-    invoice_date = models.DateField(verbose_name="Date de facturation")
-    due_date = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name="Date d'échéance",
-        help_text="Laissez vide pour paiement comptant.",
-    )
-
-    # ---- Links to business objects (optional but useful) -------------- #
     session = models.ForeignKey(
         "formations.Session",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="invoices",
-        verbose_name="Session",
+        verbose_name="Session (traçabilité)",
     )
     study_project = models.ForeignKey(
         "etudes.StudyProject",
@@ -113,16 +146,19 @@ class Invoice(TimeStampedModel):
         null=True,
         blank=True,
         related_name="invoices",
-        verbose_name="Projet d'étude",
+        verbose_name="Projet d'étude (traçabilité)",
     )
 
-    # ---- Snapshot of client info at invoice time --------------------- #
-    # Stored so that editing the client later does not alter printed invoices.
+    # ---- Client snapshot — frozen at finalization -------------------- #
+    # Stored so that editing the client record cannot alter printed invoices.
     client_name_snapshot = models.CharField(
         max_length=255, blank=True, verbose_name="Nom client (snapshot)"
     )
     client_address_snapshot = models.TextField(
         blank=True, verbose_name="Adresse client (snapshot)"
+    )
+    client_type_snapshot = models.CharField(
+        max_length=20, blank=True, verbose_name="Type client (snapshot)"
     )
     client_nif_snapshot = models.CharField(
         max_length=100, blank=True, verbose_name="NIF client (snapshot)"
@@ -133,8 +169,65 @@ class Invoice(TimeStampedModel):
     client_rc_snapshot = models.CharField(
         max_length=100, blank=True, verbose_name="RC client (snapshot)"
     )
+    client_ai_snapshot = models.CharField(
+        max_length=100, blank=True, verbose_name="A.I. client (snapshot)"
+    )
+    client_nin_snapshot = models.CharField(
+        max_length=20, blank=True, verbose_name="NIN client (snapshot)"
+    )
+    client_rib_snapshot = models.CharField(
+        max_length=255, blank=True, verbose_name="RIB client (snapshot)"
+    )
 
-    # ---- Amounts (all in DA) ----------------------------------------- #
+    # ---- Dates ------------------------------------------------------- #
+    invoice_date = models.DateField(
+        verbose_name="Date d'émission",
+        help_text="Date de la proforma; conservée sur la finale.",
+    )
+    validity_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Date de validité (proforma)",
+        help_text="Défaut : 30 jours après la date d'émission.",
+    )
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Date d'échéance (finale)",
+    )
+    finalized_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Date de finalisation",
+    )
+
+    # ---- Bon de Commande --------------------------------------------- #
+    bon_commande_number = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="N° Bon de Commande client",
+        help_text="Requis pour finaliser la facture.",
+    )
+    bon_commande_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Date du BC",
+    )
+    bon_commande_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Montant BC (vérification)",
+        help_text="Optionnel — pour cross-check avec le montant de la facture.",
+    )
+    bon_commande_scan = models.FileField(
+        upload_to="bons_commande/%Y/%m/",
+        blank=True,
+        verbose_name="Scan BC (optionnel)",
+    )
+
+    # ---- Amounts (DA) ------------------------------------------------ #
     amount_ht = models.DecimalField(
         max_digits=14,
         decimal_places=2,
@@ -144,8 +237,9 @@ class Invoice(TimeStampedModel):
     tva_rate = models.DecimalField(
         max_digits=5,
         decimal_places=4,
-        default=Decimal("0.19"),
+        default=Decimal("0.09"),
         verbose_name="Taux TVA",
+        help_text="9% pour les formations ; 19% pour les études. 0 si client exonéré.",
     )
     amount_tva = models.DecimalField(
         max_digits=14,
@@ -159,8 +253,7 @@ class Invoice(TimeStampedModel):
         default=Decimal("0.00"),
         verbose_name="Montant TTC (DA)",
     )
-
-    # Maintained by Payment.save() / delete() — used in Client aggregate queries
+    # Denormalized — maintained by Payment.save() / delete()
     amount_paid = models.DecimalField(
         max_digits=14,
         decimal_places=2,
@@ -173,52 +266,49 @@ class Invoice(TimeStampedModel):
         default=Decimal("0.00"),
         verbose_name="Reste à payer (DA)",
     )
-
-    # ---- Status ------------------------------------------------------ #
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_UNPAID,
-        verbose_name="Statut",
+    # Auto-generated: "Cent Neuf Mille Dinars Algériens" — mandatory on printed invoice
+    amount_in_words = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name="Montant en lettres",
+        help_text="Généré automatiquement lors de la finalisation.",
     )
 
-    # ---- Notes & footer --------------------------------------------- #
+    # ---- Notes & footer ---------------------------------------------- #
     notes = models.TextField(blank=True, verbose_name="Notes internes")
-    # Override the institute-level footer for this specific invoice if needed
     footer_text = models.TextField(
-        blank=True, verbose_name="Pied de page (personnalisé)"
+        blank=True,
+        verbose_name="Pied de page (personnalisé)",
+        help_text="Conditions de paiement, RIB, etc. Écrase le pied de page par défaut.",
     )
 
     class Meta:
         verbose_name = "Facture"
         verbose_name_plural = "Factures"
-        ordering = ["-invoice_date", "-reference"]
+        ordering = ["-invoice_date", "-proforma_reference"]
         indexes = [
-            models.Index(fields=["status"]),
-            models.Index(fields=["client", "status"]),
+            models.Index(fields=["phase", "status"]),
+            models.Index(fields=["client", "phase", "status"]),
             models.Index(fields=["invoice_type", "invoice_date"]),
         ]
 
     def __str__(self):
-        return f"{self.reference} — {self.client.name}"
+        ref = self.reference or self.proforma_reference
+        return f"{ref} — {self.client.name}"
 
     # ------------------------------------------------------------------ #
-    # Auto-reference generation
+    # Reference generation
     # ------------------------------------------------------------------ #
 
     @classmethod
-    def _next_reference(cls, invoice_type, year):
-        """
-        Generate the next sequential reference for a given type and year.
-        Uses select_for_update inside a transaction to prevent gaps or
-        duplicates under concurrent saves.
-        """
+    def _next_proforma_reference(cls, invoice_type: str, year: int) -> str:
+        """PF-F-YYYY-NNN / PF-E-YYYY-NNN — independent sequence."""
         from core.models import BureauEtudeInfo, FormationInfo
 
-        if invoice_type == cls.TYPE_FORMATION:
-            prefix = FormationInfo.get_instance().invoice_prefix or "F"
+        if invoice_type == cls.InvoiceType.FORMATION:
+            prefix = FormationInfo.get_instance().proforma_prefix or "PF-F"
         else:
-            prefix = BureauEtudeInfo.get_instance().invoice_prefix or "E"
+            prefix = BureauEtudeInfo.get_instance().proforma_prefix or "PF-E"
 
         with transaction.atomic():
             count = (
@@ -228,15 +318,103 @@ class Invoice(TimeStampedModel):
             ) + 1
         return f"{prefix}-{year}-{count:03d}"
 
+    @classmethod
+    def _next_final_reference(cls, invoice_type: str, year: int) -> str:
+        """F-YYYY-NNN / E-YYYY-NNN — independent sequence, gapless."""
+        from core.models import BureauEtudeInfo, FormationInfo
+
+        if invoice_type == cls.InvoiceType.FORMATION:
+            prefix = FormationInfo.get_instance().invoice_prefix or "F"
+        else:
+            prefix = BureauEtudeInfo.get_instance().invoice_prefix or "E"
+
+        with transaction.atomic():
+            count = (
+                cls.objects.select_for_update()
+                .filter(
+                    invoice_type=invoice_type,
+                    phase=cls.Phase.FINALE,
+                    finalized_at__year=year,
+                )
+                .count()
+            ) + 1
+        return f"{prefix}-{year}-{count:03d}"
+
+    # ------------------------------------------------------------------ #
+    # Finalization
+    # ------------------------------------------------------------------ #
+
+    def finalize(self, amount_in_words: str = "") -> None:
+        """
+        Promote a proforma to a finalized invoice.
+
+        Validates:
+          * BC number is present.
+          * Client profile is complete for their type.
+          * TVA rate is zeroed for exempt clients.
+
+        Assigns the final sequential reference, snapshots the client record,
+        sets status → UNPAID, records finalized_at.
+        """
+        if self.phase == self.Phase.FINALE:
+            raise ValidationError("Cette facture est déjà finalisée.")
+
+        if not self.bon_commande_number:
+            raise ValidationError(
+                "Impossible de finaliser sans numéro de Bon de Commande."
+            )
+
+        missing = self.client.missing_fields_for_invoice()
+        if missing:
+            raise ValidationError(
+                f"Profil client incomplet. Champs manquants : {', '.join(missing)}."
+            )
+
+        # Snapshot client fields
+        c = self.client
+        self.client_name_snapshot = c.name
+        self.client_address_snapshot = c.address
+        self.client_type_snapshot = c.client_type
+        self.client_nif_snapshot = c.nif
+        self.client_nis_snapshot = c.nis
+        self.client_rc_snapshot = c.rc
+        self.client_ai_snapshot = c.article_imposition
+        self.client_nin_snapshot = c.nin
+        self.client_rib_snapshot = c.rib
+
+        # Apply TVA exemption
+        if c.is_tva_exempt:
+            self.tva_rate = Decimal("0.00")
+            self.amount_tva = Decimal("0.00")
+            self.amount_ttc = self.amount_ht
+
+        # Assign final reference
+        year = timezone.now().year
+        self.reference = self._next_final_reference(self.invoice_type, year)
+
+        # Promote phase
+        self.phase = self.Phase.FINALE
+        self.status = self.Status.UNPAID
+        self.finalized_at = timezone.now()
+        self.amount_remaining = self.amount_ttc
+        if amount_in_words:
+            self.amount_in_words = amount_in_words
+
+        self.save()
+
     # ------------------------------------------------------------------ #
     # Amount calculation
     # ------------------------------------------------------------------ #
 
-    def recalculate_amounts(self):
+    def recalculate_amounts(self) -> None:
         """
-        Recompute HT from line items, then derive TVA and TTC.
-        Should be called whenever InvoiceItems are added or changed.
+        Recompute totals from line items.
+        Called by InvoiceItem.save() and InvoiceItem.delete().
+        No-op on finalized invoices (line items are locked).
         """
+        if self.phase == self.Phase.FINALE:
+            return  # Lock: do not mutate finalized amounts
+
         total_ht = self.items.aggregate(total=Sum("total_ht"))["total"] or Decimal("0")
         self.amount_ht = total_ht
         self.amount_tva = (total_ht * self.tva_rate).quantize(Decimal("0.01"))
@@ -246,39 +424,49 @@ class Invoice(TimeStampedModel):
             update_fields=["amount_ht", "amount_tva", "amount_ttc", "amount_remaining"]
         )
 
-    def refresh_payment_totals(self):
+    def refresh_payment_totals(self) -> None:
         """
-        Recompute amount_paid and amount_remaining from the payments table.
+        Recompute amount_paid / amount_remaining from confirmed payments.
         Called by Payment.save() and Payment.delete().
         """
-        paid = self.payments.filter(status=Payment.STATUS_CONFIRMED).aggregate(
+        paid = self.payments.filter(status=Payment.Status.CONFIRMED).aggregate(
             total=Sum("amount")
         )["total"] or Decimal("0")
         self.amount_paid = paid
         self.amount_remaining = max(self.amount_ttc - paid, Decimal("0"))
-        # Derive status
-        if self.status in [self.STATUS_VOIDED, self.STATUS_CREDIT_NOTE]:
-            pass  # Don't touch voided / credit-noted invoices
-        elif self.amount_remaining <= 0:
-            self.status = self.STATUS_PAID
-        elif self.amount_paid > 0:
-            self.status = self.STATUS_PARTIALLY_PAID
-        else:
-            self.status = self.STATUS_UNPAID
+
+        # Update status (only for finale invoices)
+        if self.phase == self.Phase.FINALE and self.status not in [
+            self.Status.VOIDED,
+            self.Status.CREDIT_NOTE,
+        ]:
+            if self.amount_remaining <= 0:
+                self.status = self.Status.PAID
+            elif self.amount_paid > 0:
+                self.status = self.Status.PARTIALLY_PAID
+            else:
+                self.status = self.Status.UNPAID
+
         self.save(update_fields=["amount_paid", "amount_remaining", "status"])
 
+    # ------------------------------------------------------------------ #
+    # Save
+    # ------------------------------------------------------------------ #
+
     def save(self, *args, **kwargs):
-        # Populate snapshot fields on first save
         if not self.pk:
-            self.client_name_snapshot = self.client.name
-            self.client_address_snapshot = self.client.address
-            self.client_nif_snapshot = self.client.nif
-            self.client_nis_snapshot = self.client.nis
-            self.client_rc_snapshot = self.client.registration_number
-        # Auto-generate reference
-        if not self.reference:
-            year = (self.invoice_date or timezone.now().date()).year
-            self.reference = self._next_reference(self.invoice_type, year)
+            # Auto-generate proforma reference on first save
+            if not self.proforma_reference:
+                year = (self.invoice_date or timezone.now().date()).year
+                self.proforma_reference = self._next_proforma_reference(
+                    self.invoice_type, year
+                )
+            # Default validity: +30 days
+            if not self.validity_date and self.invoice_date:
+                from datetime import timedelta
+
+                self.validity_date = self.invoice_date + timedelta(days=30)
+
         super().save(*args, **kwargs)
 
     # ------------------------------------------------------------------ #
@@ -286,40 +474,62 @@ class Invoice(TimeStampedModel):
     # ------------------------------------------------------------------ #
 
     @property
-    def is_overdue(self):
+    def is_locked(self) -> bool:
+        """True when the invoice is finalized — line items cannot be changed."""
+        return self.phase == self.Phase.FINALE
+
+    @property
+    def is_payable(self) -> bool:
+        return self.phase == self.Phase.FINALE and self.status in [
+            self.Status.UNPAID,
+            self.Status.PARTIALLY_PAID,
+        ]
+
+    @property
+    def has_bon_commande(self) -> bool:
+        return bool(self.bon_commande_number)
+
+    @property
+    def can_be_finalized(self) -> bool:
         return (
-            self.due_date
-            and self.due_date < timezone.now().date()
-            and self.status in [self.STATUS_UNPAID, self.STATUS_PARTIALLY_PAID]
+            self.phase == self.Phase.PROFORMA
+            and self.has_bon_commande
+            and self.client.is_invoice_ready
         )
 
     @property
-    def days_overdue(self):
+    def is_overdue(self) -> bool:
+        return (
+            self.due_date
+            and self.due_date < timezone.now().date()
+            and self.status in [self.Status.UNPAID, self.Status.PARTIALLY_PAID]
+        )
+
+    @property
+    def days_overdue(self) -> int:
         if not self.is_overdue:
             return 0
         return (timezone.now().date() - self.due_date).days
 
     @property
-    def is_payable(self):
-        return self.status in [self.STATUS_UNPAID, self.STATUS_PARTIALLY_PAID]
-
-    @property
-    def payment_completion_percent(self):
+    def payment_completion_percent(self) -> float:
         if not self.amount_ttc:
-            return 0
-        return round((self.amount_paid / self.amount_ttc) * 100, 1)
+            return 0.0
+        return round(float(self.amount_paid / self.amount_ttc) * 100, 1)
 
-    def void(self, reason: str = ""):
+    def void(self, reason: str = "") -> None:
         """
-        Mark the invoice as voided. A voided invoice cannot receive payments.
-        Prefer issuing a CreditNote over voiding when possible.
+        Mark a finalized invoice as voided.
+        The invoice retains its sequential number (gapless requirement).
+        Cannot void a fully-paid invoice — issue a credit note instead.
         """
-        if self.status == self.STATUS_PAID:
+        if self.phase != self.Phase.FINALE:
+            raise ValidationError("Seule une facture finale peut être annulée.")
+        if self.status == self.Status.PAID:
             raise ValidationError(
-                "Impossible d'annuler une facture déjà payée intégralement. "
-                "Émettez un avoir à la place."
+                "Impossible d'annuler une facture déjà payée. Émettez un avoir."
             )
-        self.status = self.STATUS_VOIDED
+        self.status = self.Status.VOIDED
         if reason:
             self.notes = f"[ANNULÉ] {reason}\n\n{self.notes}".strip()
         self.save(update_fields=["status", "notes"])
@@ -334,10 +544,24 @@ class InvoiceItem(TimeStampedModel):
     """
     A single line on an invoice.
 
-    Separating line items from the invoice header allows invoices that span
-    multiple participants, multiple training days, or multiple project phases
-    to be itemised cleanly — matching what a professional invoice should show.
+    PricingMode determines how total_ht is computed:
+
+        per_person           → unit_price_ht × nb_persons
+        per_day              → unit_price_ht × nb_days
+        per_person_per_day   → unit_price_ht × nb_persons × nb_days
+        forfait              → unit_price_ht (fixed, nb_persons=nb_days=1)
+
+    An optional line-level discount_percent is applied after the base
+    calculation before rounding.
+
+    Editing is blocked when the parent invoice is finalized (phase=FINALE).
     """
+
+    class PricingMode(models.TextChoices):
+        PER_PERSON = "per_person", "Par personne"
+        PER_DAY = "per_day", "Par jour"
+        PER_PERSON_PER_DAY = "per_person_per_day", "Par personne × par jour"
+        FORFAIT = "forfait", "Forfait"
 
     invoice = models.ForeignKey(
         Invoice,
@@ -345,25 +569,37 @@ class InvoiceItem(TimeStampedModel):
         related_name="items",
         verbose_name="Facture",
     )
-    description = models.CharField(max_length=500, verbose_name="Désignation")
-    quantity = models.DecimalField(
-        max_digits=10,
+    order = models.PositiveIntegerField(default=1, verbose_name="Ordre")
+    description = models.CharField(
+        max_length=500,
+        verbose_name="Désignation",
+        help_text="Titre de la formation ou du livrable d'étude.",
+    )
+
+    # ---- Pricing mode ------------------------------------------------ #
+    pricing_mode = models.CharField(
+        max_length=20,
+        choices=PricingMode.choices,
+        default=PricingMode.PER_PERSON,
+        verbose_name="Mode de tarification",
+    )
+    nb_persons = models.DecimalField(
+        max_digits=8,
         decimal_places=2,
         default=Decimal("1.00"),
-        verbose_name="Quantité",
+        verbose_name="Nombre de personnes",
+        help_text="Utilisé pour per_person et per_person_per_day.",
     )
-    unit = models.CharField(
-        max_length=50,
-        blank=True,
-        verbose_name="Unité",
-        help_text="Ex. participant, jour, heure, forfait.",
+    nb_days = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        verbose_name="Nombre de jours",
+        help_text="Utilisé pour per_day et per_person_per_day.",
     )
     unit_price_ht = models.DecimalField(
-        max_digits=14,
-        decimal_places=2,
-        verbose_name="Prix unitaire HT (DA)",
+        max_digits=14, decimal_places=2, verbose_name="Prix unitaire HT (DA)"
     )
-    # Optional line-level discount
     discount_percent = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -374,28 +610,8 @@ class InvoiceItem(TimeStampedModel):
         max_digits=14,
         decimal_places=2,
         verbose_name="Total HT (DA)",
-        help_text="Calculé automatiquement.",
+        help_text="Calculé automatiquement selon le mode de tarification.",
     )
-
-    # Optional link to help with reporting
-    session = models.ForeignKey(
-        "formations.Session",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="invoice_items",
-        verbose_name="Session liée",
-    )
-    project_phase = models.ForeignKey(
-        "etudes.ProjectPhase",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="invoice_items",
-        verbose_name="Phase liée",
-    )
-
-    order = models.PositiveIntegerField(default=1, verbose_name="Ordre")
 
     class Meta:
         verbose_name = "Ligne de facture"
@@ -403,18 +619,36 @@ class InvoiceItem(TimeStampedModel):
         ordering = ["invoice", "order"]
 
     def __str__(self):
-        return f"{self.invoice.reference} — {self.description}"
+        return f"{self.invoice.proforma_reference} — {self.description}"
+
+    def _compute_total_ht(self) -> Decimal:
+        mode = self.pricing_mode
+        if mode == self.PricingMode.PER_PERSON:
+            base = self.unit_price_ht * self.nb_persons
+        elif mode == self.PricingMode.PER_DAY:
+            base = self.unit_price_ht * self.nb_days
+        elif mode == self.PricingMode.PER_PERSON_PER_DAY:
+            base = self.unit_price_ht * self.nb_persons * self.nb_days
+        else:  # forfait
+            base = self.unit_price_ht
+        discount = base * (self.discount_percent / Decimal("100"))
+        return (base - discount).quantize(Decimal("0.01"))
 
     def save(self, *args, **kwargs):
-        # Recompute line total before saving
-        base = self.quantity * self.unit_price_ht
-        discount = base * (self.discount_percent / Decimal("100"))
-        self.total_ht = (base - discount).quantize(Decimal("0.01"))
+        if self.invoice.is_locked:
+            raise ValidationError(
+                "Les lignes d'une facture finalisée ne peuvent pas être modifiées. "
+                "Émettez un avoir si nécessaire."
+            )
+        self.total_ht = self._compute_total_ht()
         super().save(*args, **kwargs)
-        # Cascade up to the invoice header
         self.invoice.recalculate_amounts()
 
     def delete(self, *args, **kwargs):
+        if self.invoice.is_locked:
+            raise ValidationError(
+                "Les lignes d'une facture finalisée ne peuvent pas être supprimées."
+            )
         invoice = self.invoice
         super().delete(*args, **kwargs)
         invoice.recalculate_amounts()
@@ -427,31 +661,23 @@ class InvoiceItem(TimeStampedModel):
 
 class Payment(TimeStampedModel):
     """
-    A single payment instalment against an invoice.
-    Supports partial payments; multiple Payment records per Invoice are allowed.
+    A single payment instalment against a finalized invoice.
+    Multiple Payment records per Invoice are allowed (partial payments).
+
+    Payments are only accepted on invoices with phase=FINALE and status in
+    [unpaid, partially_paid].
     """
 
-    METHOD_CASH = "cash"
-    METHOD_BANK_TRANSFER = "bank_transfer"
-    METHOD_CHEQUE = "cheque"
-    METHOD_OTHER = "other"
+    class Method(models.TextChoices):
+        VIREMENT = "virement", "Virement bancaire"
+        CHEQUE = "cheque", "Chèque"
+        ESPECES = "especes", "Espèces"
+        OTHER = "autre", "Autre"
 
-    METHOD_CHOICES = [
-        (METHOD_CASH, "Espèces"),
-        (METHOD_BANK_TRANSFER, "Virement bancaire"),
-        (METHOD_CHEQUE, "Chèque"),
-        (METHOD_OTHER, "Autre"),
-    ]
-
-    STATUS_PENDING = "pending"  # Cheque received but not yet cleared
-    STATUS_CONFIRMED = "confirmed"  # Cleared / confirmed
-    STATUS_REVERSED = "reversed"  # Chargeback or reversal
-
-    STATUS_CHOICES = [
-        (STATUS_PENDING, "En attente"),
-        (STATUS_CONFIRMED, "Confirmé"),
-        (STATUS_REVERSED, "Annulé / retourné"),
-    ]
+    class Status(models.TextChoices):
+        PENDING = "pending", "En attente de confirmation"
+        CONFIRMED = "confirmed", "Confirmé"
+        REVERSED = "reversed", "Annulé / retourné"
 
     invoice = models.ForeignKey(
         Invoice,
@@ -464,23 +690,22 @@ class Payment(TimeStampedModel):
         max_digits=14, decimal_places=2, verbose_name="Montant (DA)"
     )
     method = models.CharField(
-        max_length=20,
-        choices=METHOD_CHOICES,
-        default=METHOD_BANK_TRANSFER,
+        max_length=10,
+        choices=Method.choices,
+        default=Method.VIREMENT,
         verbose_name="Mode de paiement",
     )
     status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_CONFIRMED,
+        max_length=10,
+        choices=Status.choices,
+        default=Status.CONFIRMED,
         verbose_name="Statut",
     )
-    # Bank / cheque reference number
     reference = models.CharField(
         max_length=100,
         blank=True,
         verbose_name="Référence",
-        help_text="Numéro de virement, numéro de chèque, etc.",
+        help_text="N° virement, n° chèque, etc.",
     )
     notes = models.TextField(blank=True, verbose_name="Notes")
 
@@ -495,28 +720,36 @@ class Payment(TimeStampedModel):
     def clean(self):
         if not self.invoice_id:
             return
-        # Only block NEW payments on a closed invoice — edits to existing
-        # payments must always be allowed (e.g. correcting a status)
+
+        # Phase guard — payments only on finalized invoices
+        if self.invoice.phase != Invoice.Phase.FINALE:
+            raise ValidationError(
+                "Les paiements ne sont acceptés que sur les factures finalisées."
+            )
+
         if self.pk is None and not self.invoice.is_payable:
             raise ValidationError(
                 f"La facture {self.invoice.reference} n'est pas en attente de paiement."
             )
+
         if self.amount and self.amount <= 0:
             raise ValidationError("Le montant doit être positif.")
-        # Warn if this payment would overpay the invoice
+
+        # Overpayment guard
         already_paid = self.invoice.amount_paid
         if self.pk:
-            # Exclude self when editing
-            already_paid -= (
+            existing_amount = (
                 Payment.objects.filter(pk=self.pk)
                 .values_list("amount", flat=True)
                 .first()
                 or 0
             )
+            already_paid -= Decimal(str(existing_amount))
+
         if self.amount and (already_paid + self.amount) > self.invoice.amount_ttc:
             raise ValidationError(
-                f"Ce paiement ({self.amount} DA) dépasserait le montant total de la "
-                f"facture ({self.invoice.amount_ttc} DA)."
+                f"Ce paiement ({self.amount} DA) dépasserait le montant total "
+                f"de la facture ({self.invoice.amount_ttc} DA)."
             )
 
     def save(self, *args, **kwargs):
@@ -529,8 +762,8 @@ class Payment(TimeStampedModel):
         invoice.refresh_payment_totals()
 
     @property
-    def is_confirmed(self):
-        return self.status == self.STATUS_CONFIRMED
+    def is_confirmed(self) -> bool:
+        return self.status == self.Status.CONFIRMED
 
 
 # ======================================================================= #
@@ -540,12 +773,11 @@ class Payment(TimeStampedModel):
 
 class CreditNote(TimeStampedModel):
     """
-    A credit note (avoir) issued to partially or fully reverse an invoice.
+    A credit note (avoir) that partially or fully reverses a finalized invoice.
 
-    A CreditNote is not an Invoice subclass; it is a separate document that
-    references the original invoice and carries its own reference number.
-    The original invoice's status is set to STATUS_CREDIT_NOTE when a full
-    credit note is issued.
+    CreditNote is a separate document referencing the original invoice.
+    When is_full_reversal is True, the original invoice's status is set to
+    STATUS_CREDIT_NOTE.
     """
 
     original_invoice = models.ForeignKey(
@@ -557,8 +789,8 @@ class CreditNote(TimeStampedModel):
     reference = models.CharField(
         max_length=50,
         unique=True,
-        verbose_name="Numéro d'avoir",
-        help_text="Généré automatiquement (ex. AV-2026-001).",
+        verbose_name="N° Avoir",
+        help_text="Généré automatiquement — ex. AV-2026-001.",
     )
     date = models.DateField(verbose_name="Date")
     reason = models.TextField(verbose_name="Motif")
@@ -566,10 +798,7 @@ class CreditNote(TimeStampedModel):
         max_digits=14, decimal_places=2, verbose_name="Montant HT (DA)"
     )
     tva_rate = models.DecimalField(
-        max_digits=5,
-        decimal_places=4,
-        default=Decimal("0.19"),
-        verbose_name="Taux TVA",
+        max_digits=5, decimal_places=4, default=Decimal("0.09"), verbose_name="Taux TVA"
     )
     amount_tva = models.DecimalField(
         max_digits=14, decimal_places=2, verbose_name="Montant TVA (DA)"
@@ -577,7 +806,6 @@ class CreditNote(TimeStampedModel):
     amount_ttc = models.DecimalField(
         max_digits=14, decimal_places=2, verbose_name="Montant TTC (DA)"
     )
-    # True = full reversal; False = partial credit
     is_full_reversal = models.BooleanField(
         default=False, verbose_name="Annulation totale"
     )
@@ -592,7 +820,7 @@ class CreditNote(TimeStampedModel):
         return f"{self.reference} — avoir sur {self.original_invoice.reference}"
 
     @classmethod
-    def _next_reference(cls, year):
+    def _next_reference(cls, year: int) -> str:
         with transaction.atomic():
             count = (
                 cls.objects.select_for_update().filter(date__year=year).count()
@@ -603,22 +831,19 @@ class CreditNote(TimeStampedModel):
         if not self.reference:
             year = (self.date or timezone.now().date()).year
             self.reference = self._next_reference(year)
-        # Derive TVA + TTC
         self.amount_tva = (self.amount_ht * self.tva_rate).quantize(Decimal("0.01"))
         self.amount_ttc = self.amount_ht + self.amount_tva
         super().save(*args, **kwargs)
-        # Update original invoice status if full reversal
         if self.is_full_reversal:
             Invoice.objects.filter(pk=self.original_invoice_id).update(
-                status=Invoice.STATUS_CREDIT_NOTE
+                status=Invoice.Status.CREDIT_NOTE
             )
 
     @property
-    def coverage_percent(self):
-        """What percentage of the original invoice does this credit note cover."""
+    def coverage_percent(self) -> float:
         if not self.original_invoice.amount_ttc:
-            return 0
-        return round((self.amount_ttc / self.original_invoice.amount_ttc) * 100, 1)
+            return 0.0
+        return round(float(self.amount_ttc / self.original_invoice.amount_ttc) * 100, 1)
 
 
 # ======================================================================= #
@@ -628,24 +853,16 @@ class CreditNote(TimeStampedModel):
 
 class ExpenseCategory(TimeStampedModel):
     """
-    Configurable expense category (replaces hard-coded choices).
-    Pre-populated with the categories from the spec; the owner can add more.
+    Configurable expense category. Pre-seeded with spec-defined presets;
+    the owner can add more.
     """
-
-    PRESET_TRANSPORT = "transport"
-    PRESET_MATERIEL = "materiel_consommable"
-    PRESET_SOUS_TRAITANCE = "sous_traitance"
-    PRESET_LOYER = "loyer"
-    PRESET_TELECOM = "telecommunications"
-    PRESET_DIVERS = "divers"
 
     name = models.CharField(max_length=100, unique=True, verbose_name="Catégorie")
     description = models.TextField(blank=True, verbose_name="Description")
-    # Used for grouping in reports
     is_direct_cost = models.BooleanField(
         default=True,
         verbose_name="Coût direct",
-        help_text="Coût direct = imputable à un service. Indirect = frais généraux.",
+        help_text="Coût direct = imputable à un service ou projet. Indirect = frais généraux.",
     )
     color = models.CharField(
         max_length=7, default="#6B7280", verbose_name="Couleur (hex)"
@@ -664,27 +881,20 @@ class Expense(TimeStampedModel):
     """
     An operational expenditure incurred by the institute.
 
-    Allocation model
-    ----------------
-    Each expense is allocated to exactly one of three cost centres:
-    - A formation session  (allocated_to_session)
-    - A study project      (allocated_to_project)
-    - Overhead             (is_overhead = True)
-    Enforced by clean().
+    Allocation model — mutually exclusive cost centres:
+        allocated_to_session    → direct cost for a training session
+        allocated_to_project    → direct cost for a consulting project
+        is_overhead = True      → general overhead (frais généraux)
+
+    clean() enforces exactly one cost centre per expense.
     """
 
-    # ---- Approval workflow ------------------------------------------ #
-    APPROVAL_PENDING = "pending"
-    APPROVAL_APPROVED = "approved"
-    APPROVAL_REJECTED = "rejected"
+    class ApprovalStatus(models.TextChoices):
+        PENDING = "pending", "En attente"
+        APPROVED = "approved", "Approuvée"
+        REJECTED = "rejected", "Refusée"
 
-    APPROVAL_CHOICES = [
-        (APPROVAL_PENDING, "En attente"),
-        (APPROVAL_APPROVED, "Approuvée"),
-        (APPROVAL_REJECTED, "Refusée"),
-    ]
-
-    # ---- Core fields ------------------------------------------------- #
+    # ---- Core -------------------------------------------------------- #
     date = models.DateField(verbose_name="Date")
     category = models.ForeignKey(
         ExpenseCategory,
@@ -696,16 +906,14 @@ class Expense(TimeStampedModel):
     amount = models.DecimalField(
         max_digits=14, decimal_places=2, verbose_name="Montant (DA)"
     )
-    # Optional: which supplier / payee
     supplier = models.CharField(
         max_length=255, blank=True, verbose_name="Fournisseur / bénéficiaire"
     )
-    # Payment reference (bank transfer number, cheque, etc.)
     payment_reference = models.CharField(
         max_length=100, blank=True, verbose_name="Référence de paiement"
     )
 
-    # ---- Cost centre allocation -------------------------------------- #
+    # ---- Cost centre ------------------------------------------------- #
     allocated_to_session = models.ForeignKey(
         "formations.Session",
         on_delete=models.SET_NULL,
@@ -722,34 +930,26 @@ class Expense(TimeStampedModel):
         related_name="expenses",
         verbose_name="Projet",
     )
-    # When neither session nor project is set, the expense is treated as overhead
     is_overhead = models.BooleanField(
         default=False,
         verbose_name="Frais généraux",
-        help_text="Cocher si la dépense n'est pas imputable à un service ou projet.",
+        help_text="Cocher si non imputable à un service ou projet.",
     )
 
-    # ---- Receipt & justification ------------------------------------- #
+    # ---- Receipt & approval ------------------------------------------ #
     receipt = models.FileField(
-        upload_to="receipts/%Y/%m/",
-        blank=True,
-        verbose_name="Justificatif",
+        upload_to="receipts/%Y/%m/", blank=True, verbose_name="Justificatif"
     )
     receipt_missing = models.BooleanField(
-        default=False,
-        verbose_name="Justificatif manquant",
-        help_text="Cocher si le justificatif n'est pas encore disponible.",
+        default=False, verbose_name="Justificatif manquant"
     )
-
-    # ---- Approval ---------------------------------------------------- #
     approval_status = models.CharField(
-        max_length=20,
-        choices=APPROVAL_CHOICES,
-        default=APPROVAL_APPROVED,  # Owner approves own entries by default
+        max_length=10,
+        choices=ApprovalStatus.choices,
+        default=ApprovalStatus.APPROVED,
         verbose_name="Statut d'approbation",
     )
     approval_notes = models.TextField(blank=True, verbose_name="Notes d'approbation")
-
     notes = models.TextField(blank=True, verbose_name="Notes")
 
     class Meta:
@@ -782,11 +982,8 @@ class Expense(TimeStampedModel):
                 "Une dépense ne peut être imputée qu'à un seul centre de coût."
             )
 
-    # ---- Convenience properties -------------------------------------- #
-
     @property
-    def cost_centre_label(self):
-        """Human-readable cost centre for display."""
+    def cost_centre_label(self) -> str:
         if self.allocated_to_session_id:
             return str(self.allocated_to_session)
         if self.allocated_to_project_id:
@@ -794,47 +991,39 @@ class Expense(TimeStampedModel):
         return "Frais généraux"
 
     @property
-    def needs_action(self):
-        """True if the expense requires attention (missing receipt or pending approval)."""
-        return self.receipt_missing or self.approval_status == self.APPROVAL_PENDING
+    def needs_action(self) -> bool:
+        return (
+            self.receipt_missing or self.approval_status == self.ApprovalStatus.PENDING
+        )
 
     @property
-    def is_approved(self):
-        return self.approval_status == self.APPROVAL_APPROVED
+    def is_approved(self) -> bool:
+        return self.approval_status == self.ApprovalStatus.APPROVED
 
 
 # ======================================================================= #
-# Financial period (helper for reporting)
+# Financial period (reporting helper)
 # ======================================================================= #
 
 
 class FinancialPeriod(TimeStampedModel):
     """
-    A named financial period (typically a fiscal year or quarter) used to
-    group invoices and expenses for reporting.
-
-    Optional — the reporting app can operate without it by filtering on
-    invoice_date ranges, but explicit periods make it easier to lock
-    data once a period is closed and prevent retroactive changes.
+    A named financial period used to group finalized invoices and expenses
+    for reporting.  Optional — the reporting app can filter on invoice_date
+    ranges directly, but explicit periods simplify period-close workflows.
     """
 
-    PERIOD_YEAR = "year"
-    PERIOD_QUARTER = "quarter"
-    PERIOD_MONTH = "month"
-    PERIOD_CUSTOM = "custom"
-
-    PERIOD_TYPE_CHOICES = [
-        (PERIOD_YEAR, "Exercice annuel"),
-        (PERIOD_QUARTER, "Trimestre"),
-        (PERIOD_MONTH, "Mois"),
-        (PERIOD_CUSTOM, "Période personnalisée"),
-    ]
+    class PeriodType(models.TextChoices):
+        YEAR = "year", "Exercice annuel"
+        QUARTER = "quarter", "Trimestre"
+        MONTH = "month", "Mois"
+        CUSTOM = "custom", "Période personnalisée"
 
     name = models.CharField(
-        max_length=100, verbose_name="Nom", help_text="Ex. Exercice 2026, Q1 2026."
+        max_length=100, verbose_name="Nom", help_text="Ex. Exercice 2026."
     )
     period_type = models.CharField(
-        max_length=10, choices=PERIOD_TYPE_CHOICES, default=PERIOD_YEAR
+        max_length=10, choices=PeriodType.choices, default=PeriodType.YEAR
     )
     date_start = models.DateField(verbose_name="Début")
     date_end = models.DateField(verbose_name="Fin")
@@ -849,64 +1038,59 @@ class FinancialPeriod(TimeStampedModel):
         verbose_name = "Période financière"
         verbose_name_plural = "Périodes financières"
         ordering = ["-date_start"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(date_end__gte=models.F("date_start")),
+                name="financial_period_end_after_start",
+            )
+        ]
 
     def __str__(self):
         return self.name
 
-    # ------------------------------------------------------------------ #
-    # Aggregate snapshots for the period
-    # ------------------------------------------------------------------ #
+    # ---- Aggregates — all scoped to FINALE invoices only ------------- #
 
-    @property
-    def total_invoiced_ht(self):
+    def _invoice_qs(self):
         return Invoice.objects.filter(
+            phase=Invoice.Phase.FINALE,
             invoice_date__range=[self.date_start, self.date_end],
             status__in=[
-                Invoice.STATUS_UNPAID,
-                Invoice.STATUS_PARTIALLY_PAID,
-                Invoice.STATUS_PAID,
+                Invoice.Status.UNPAID,
+                Invoice.Status.PARTIALLY_PAID,
+                Invoice.Status.PAID,
             ],
-        ).aggregate(total=Sum("amount_ht"))["total"] or Decimal("0")
+        )
 
     @property
-    def total_collected(self):
-        """Sum of confirmed payments within the period."""
+    def total_invoiced_ht(self) -> Decimal:
+        return self._invoice_qs().aggregate(t=Sum("amount_ht"))["t"] or Decimal("0")
+
+    @property
+    def total_collected(self) -> Decimal:
         return Payment.objects.filter(
             date__range=[self.date_start, self.date_end],
-            status=Payment.STATUS_CONFIRMED,
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+            status=Payment.Status.CONFIRMED,
+        ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
 
     @property
-    def total_expenses(self):
+    def total_expenses(self) -> Decimal:
         return Expense.objects.filter(
             date__range=[self.date_start, self.date_end],
-            approval_status=Expense.APPROVAL_APPROVED,
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+            approval_status=Expense.ApprovalStatus.APPROVED,
+        ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
 
     @property
-    def gross_margin(self):
+    def gross_margin(self) -> Decimal:
         return self.total_invoiced_ht - self.total_expenses
 
     @property
-    def formation_revenue_ht(self):
-        return Invoice.objects.filter(
-            invoice_date__range=[self.date_start, self.date_end],
-            invoice_type=Invoice.TYPE_FORMATION,
-            status__in=[
-                Invoice.STATUS_UNPAID,
-                Invoice.STATUS_PARTIALLY_PAID,
-                Invoice.STATUS_PAID,
-            ],
-        ).aggregate(total=Sum("amount_ht"))["total"] or Decimal("0")
+    def formation_revenue_ht(self) -> Decimal:
+        return self._invoice_qs().filter(
+            invoice_type=Invoice.InvoiceType.FORMATION
+        ).aggregate(t=Sum("amount_ht"))["t"] or Decimal("0")
 
     @property
-    def etude_revenue_ht(self):
-        return Invoice.objects.filter(
-            invoice_date__range=[self.date_start, self.date_end],
-            invoice_type=Invoice.TYPE_ETUDE,
-            status__in=[
-                Invoice.STATUS_UNPAID,
-                Invoice.STATUS_PARTIALLY_PAID,
-                Invoice.STATUS_PAID,
-            ],
-        ).aggregate(total=Sum("amount_ht"))["total"] or Decimal("0")
+    def etude_revenue_ht(self) -> Decimal:
+        return self._invoice_qs().filter(
+            invoice_type=Invoice.InvoiceType.ETUDE
+        ).aggregate(t=Sum("amount_ht"))["t"] or Decimal("0")

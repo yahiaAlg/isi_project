@@ -202,3 +202,12 @@ Views check `request.user.profile.is_admin` to restrict access to financial data
 ## License
 
 Proprietary - Institut de Sécurité Industrielle
+
+# Run from your project root (Git Bash)
+
+find . -path "./.venv" -prune -o -path "_/migrations/0_.py" -print | xargs rm -f
+
+python manage.py makemigrations core clients accounts etudes formations resources financial
+rm db.sqlite3
+python manage.py migrate
+python manage.py seed_db

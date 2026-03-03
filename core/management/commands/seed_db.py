@@ -1,5 +1,5 @@
 """
-Management command: seed_db
+Management command: seed_db  —  v3.0
 
 Populates the database with a realistic base dataset for the ISI system.
 Safe to run multiple times — uses get_or_create / update_or_create throughout.
@@ -53,9 +53,12 @@ INSTITUTE = {
     "phone": "023 56 78 90",
     "email": "contact@isi-algerie.dz",
     "website": "https://www.isi-algerie.dz",
-    "registration_number": "16/00-1234567B19",
+    # v3: rc replaces registration_number; article_imposition + agrement_number added
+    "rc": "16/00-1234567B19",
     "nif": "001623456789012",
     "nis": "162345678901234",
+    "article_imposition": "16123456789",
+    "agrement_number": "AGR/FORM/2019/0042",
     "bank_name": "BNA — Agence Bir Mourad Raïs",
     "bank_account": "00200123456789",
     "bank_rib": "002 00100 00200123456789 56",
@@ -86,96 +89,150 @@ USERS = [
     },
 ]
 
+# v3: 4 client types — entreprise, particulier, auto_entrepreneur, startup
 CLIENTS = [
     {
         "name": "Sonatrach SPA",
-        "client_type": "company",
+        "client_type": "entreprise",  # v3
+        "forme_juridique": "SPA",
         "city": "Alger",
         "address": "Djenane El Malik, Hydra",
         "postal_code": "16035",
         "phone": "021 54 60 00",
         "email": "hse@sonatrach.dz",
         "activity_sector": "Pétrole & Gaz",
-        "registration_number": "16/00-5555001B19",
+        "rc": "16/00-5555001B19",  # v3
         "nif": "001600555500101",
         "nis": "160055550010123",
+        "article_imposition": "16555500101",
         "contact_name": "Mohamed Aït Saïd",
         "contact_phone": "0551 22 33 44",
         "contact_email": "m.aitsaid@sonatrach.dz",
+        "is_tva_exempt": False,
     },
     {
         "name": "Cevital Industries",
-        "client_type": "company",
+        "client_type": "entreprise",
+        "forme_juridique": "SPA",
         "city": "Béjaïa",
         "address": "Zone Industrielle, Port de Béjaïa",
         "postal_code": "06000",
         "phone": "034 22 50 00",
         "email": "securite@cevital.com",
         "activity_sector": "Agroalimentaire",
-        "registration_number": "06/00-3333002B19",
+        "rc": "06/00-3333002B19",
         "nif": "000600333300201",
         "nis": "060033330020134",
+        "article_imposition": "06333300201",
         "contact_name": "Lynda Moussaoui",
         "contact_phone": "0661 44 55 66",
         "contact_email": "l.moussaoui@cevital.com",
+        "is_tva_exempt": False,
     },
     {
         "name": "Groupe Hasnaoui",
-        "client_type": "company",
+        "client_type": "entreprise",
+        "forme_juridique": "SARL",
         "city": "Sidi Bel Abbès",
         "address": "Route Nationale 7, Zone d'Activité",
         "postal_code": "22000",
         "phone": "048 75 10 10",
         "email": "direction@groupe-hasnaoui.dz",
         "activity_sector": "BTP / Construction",
-        "registration_number": "22/00-7777003B19",
+        "rc": "22/00-7777003B19",
         "nif": "002200777700301",
         "nis": "220077770030145",
+        "article_imposition": "22777700301",
         "contact_name": "Rachid Hasnaoui",
         "contact_phone": "0771 88 99 00",
         "contact_email": "r.hasnaoui@groupe-hasnaoui.dz",
+        "is_tva_exempt": False,
     },
     {
         "name": "Lafarge Algérie",
-        "client_type": "company",
+        "client_type": "entreprise",
+        "forme_juridique": "SPA",
         "city": "M'Sila",
         "address": "Usine de Meftah — Zone Industrielle",
         "postal_code": "28000",
         "phone": "035 55 00 10",
         "email": "hse@lafarge.dz",
         "activity_sector": "Matériaux de Construction",
-        "registration_number": "28/00-2222004B19",
+        "rc": "28/00-2222004B19",
         "nif": "002800222200401",
         "nis": "280022220040156",
+        "article_imposition": "28222200401",
         "contact_name": "Nadia Benali",
         "contact_phone": "0560 11 22 33",
         "contact_email": "n.benali@lafarge.dz",
+        "is_tva_exempt": False,
     },
     {
         "name": "Entreprise Nationale des Travaux aux Puits — ENTP",
-        "client_type": "company",
+        "client_type": "entreprise",
+        "forme_juridique": "SPA",
         "city": "Hassi Messaoud",
         "address": "BP 199, Hassi Messaoud",
         "postal_code": "30500",
         "phone": "029 73 00 01",
         "email": "securite@entp.dz",
         "activity_sector": "Services Pétroliers",
-        "registration_number": "30/00-9999005B19",
+        "rc": "30/00-9999005B19",
         "nif": "003000999900501",
         "nis": "300099990050167",
+        "article_imposition": "30999900501",
         "contact_name": "Omar Zerrouki",
         "contact_phone": "0772 55 66 77",
         "contact_email": "o.zerrouki@entp.dz",
+        "is_tva_exempt": False,
     },
     {
+        # v3: particulier type — requires NIN, no TVA
         "name": "Dr. Samy Belkacem",
-        "client_type": "individual",
+        "client_type": "particulier",  # v3
         "city": "Alger",
         "address": "15 Cité des Pins, El Biar",
         "postal_code": "16030",
         "phone": "0550 33 44 55",
         "email": "s.belkacem@gmail.com",
         "activity_sector": "Médecine du Travail",
+        "nin": "198506160160042",  # 18-digit NIN
+        "is_tva_exempt": True,  # auto-set by model.save()
+    },
+    {
+        # v3: auto_entrepreneur type — NIF + carte AE, no TVA
+        "name": "Meziani Conseil HSE",
+        "client_type": "auto_entrepreneur",  # v3
+        "city": "Sétif",
+        "address": "Cité El Hidhab, Bloc 12, Sétif",
+        "postal_code": "19000",
+        "phone": "0770 12 34 56",
+        "email": "a.meziani.hse@gmail.com",
+        "activity_sector": "Conseil HSE",
+        "nif": "001905678901234",
+        "article_imposition": "19567890123",
+        "carte_auto_entrepreneur": "AE-2023-19-00587",
+        "is_tva_exempt": True,
+    },
+    {
+        # v3: startup type — all entreprise fields + label_startup
+        "name": "SafetyTech DZ",
+        "client_type": "startup",  # v3
+        "forme_juridique": "SARL",
+        "city": "Alger",
+        "address": "Cyber Parc Sidi Abdallah, Bâtiment B",
+        "postal_code": "16303",
+        "phone": "023 12 34 56",
+        "email": "contact@safetytech.dz",
+        "activity_sector": "Technologies HSE / SaaS",
+        "rc": "16/00-8888007B23",
+        "nif": "001600888800701",
+        "nis": "160088880070189",
+        "article_imposition": "16888800701",
+        "label_startup_number": "ANIE-2023-ST-04521",
+        "label_startup_date": date(2023, 6, 15),
+        "programme_accompagnement": "NEXUS",
+        "is_tva_exempt": False,
     },
 ]
 
@@ -421,6 +478,7 @@ STUDY_PROJECTS = [
         "site_address": "Complexe GL2Z, Arzew, Oran",
         "start_date": past(120),
         "end_date": past(30),
+        "actual_end_date": past(32),
         "budget": Decimal("850000.00"),
         "status": "completed",
         "priority": "high",
@@ -684,7 +742,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------ #
 
     def _seed_accounts(self):
-        from core.models import InstituteInfo, BureauEtudeInfo, FormationInfo
+        from core.models import BureauEtudeInfo, FormationInfo, InstituteInfo
         from accounts.models import UserProfile
 
         self._log("Seeding institute configuration…")
@@ -695,8 +753,9 @@ class Command(BaseCommand):
             defaults={
                 "name": "Bureau d'Étude ISI",
                 "invoice_prefix": "E",
+                "proforma_prefix": "PF-E",  # v3
                 "tva_applicable": True,
-                "tva_rate": Decimal("0.19"),
+                "tva_rate": Decimal("0.19"),  # 19% for consulting
                 "chief_engineer_name": "Karim Messaoud",
                 "chief_engineer_title": "Ingénieur d'État en Hygiène et Sécurité Industrielle",
             },
@@ -707,8 +766,9 @@ class Command(BaseCommand):
             defaults={
                 "name": "Centre de Formation ISI",
                 "invoice_prefix": "F",
+                "proforma_prefix": "PF-F",  # v3
                 "tva_applicable": True,
-                "tva_rate": Decimal("0.19"),
+                "tva_rate": Decimal("0.09"),  # v3: 9% for professional training
                 "attestation_validity_years": 5,
                 "min_attendance_percent": 80,
                 "director_name": "Karim Messaoud",
@@ -785,7 +845,6 @@ class Command(BaseCommand):
             )
             self._ok(f"  {'Created' if created else 'Updated'} equipment: {equip.name}")
 
-            # Add an initial maintenance log for equipment that is due or past due
             if not equip.maintenance_logs.exists():
                 last_maintenance_date = equip.purchase_date + timedelta(
                     days=equip.maintenance_interval_days
@@ -846,7 +905,7 @@ class Command(BaseCommand):
         rooms = list(TrainingRoom.objects.all())
 
         session_specs = [
-            # --- Completed sessions (invoiceable) ---
+            # --- Completed sessions (ready to invoice) ---
             {
                 "formation": "Prévention et Lutte Contre l'Incendie",
                 "client_name": "Sonatrach SPA",
@@ -860,6 +919,7 @@ class Command(BaseCommand):
                     ("Mourad", "Ziani", "Sonatrach SPA", True),
                     ("Nadia", "Hamdi", "Sonatrach SPA", True),
                     ("Kamel", "Bouzid", "Sonatrach SPA", False),  # absent
+                    ("Lila", "Sahraoui", "Sonatrach SPA", True),
                 ],
             },
             {
@@ -954,7 +1014,6 @@ class Command(BaseCommand):
             action = "Created" if created else "Found"
             self._ok(f"  {action} session: {formation.title} ({spec['date_start']})")
 
-            # Participants
             for first, last, employer, attended in spec["participants"]:
                 participant, _ = Participant.objects.get_or_create(
                     session=session,
@@ -967,7 +1026,6 @@ class Command(BaseCommand):
                     },
                 )
 
-                # Issue attestations for completed sessions with attending participants
                 if (
                     session.status == "completed"
                     and attended
@@ -1013,7 +1071,8 @@ class Command(BaseCommand):
                 client=client,
                 defaults={**spec, "client": client},
             )
-            spec["client_name"] = client_name  # restore
+            spec["client_name"] = client_name  # restore for idempotency
+            spec["phases"] = phases_data
 
             self._ok(
                 f"  {'Created' if created else 'Updated'} project: {project.title}"
@@ -1027,7 +1086,8 @@ class Command(BaseCommand):
                 )
 
     # ------------------------------------------------------------------ #
-    # Financial — expense categories, expenses, invoices, payments
+    # Financial — expense categories, periods, invoices (full lifecycle),
+    #             payments, overhead expenses
     # ------------------------------------------------------------------ #
 
     def _seed_financial(self):
@@ -1041,6 +1101,7 @@ class Command(BaseCommand):
             InvoiceItem,
             Payment,
         )
+        from financial.utils import amount_to_words_fr
         from formations.models import Session
 
         # ---- Expense categories ---- #
@@ -1058,7 +1119,7 @@ class Command(BaseCommand):
         FinancialPeriod.objects.update_or_create(
             name=f"Exercice {year}",
             defaults={
-                "period_type": "year",
+                "period_type": FinancialPeriod.PeriodType.YEAR,  # v3 TextChoices
                 "date_start": date(year, 1, 1),
                 "date_end": date(year, 12, 31),
                 "is_closed": False,
@@ -1068,51 +1129,103 @@ class Command(BaseCommand):
             FinancialPeriod.objects.update_or_create(
                 name=f"Exercice {year - 1}",
                 defaults={
-                    "period_type": "year",
+                    "period_type": FinancialPeriod.PeriodType.YEAR,
                     "date_start": date(year - 1, 1, 1),
                     "date_end": date(year - 1, 12, 31),
                     "is_closed": True,
                 },
             )
 
-        # ---- Invoices for completed sessions ---- #
-        self._log("Seeding invoices (formations)…")
-        completed_sessions = Session.objects.filter(status="completed").select_related(
-            "formation", "client"
-        )
         transport_cat = cat_map["Transport & Déplacements"]
         honoraires_cat = cat_map["Honoraires Formateurs"]
         materiel_cat = cat_map["Matériel Consommable"]
 
+        # ------------------------------------------------------------------ #
+        # Invoices for completed sessions
+        # v3 lifecycle: proforma → record BC → finalize
+        # ------------------------------------------------------------------ #
+        self._log("Seeding invoices (formations)…")
+        completed_sessions = Session.objects.filter(status="completed").select_related(
+            "formation", "client"
+        )
+
         for session in completed_sessions:
             if not session.client:
                 continue
-            if Invoice.objects.filter(session=session).exists():
+            # Skip if a finale invoice already exists for this session
+            if Invoice.objects.filter(
+                session=session, phase=Invoice.Phase.FINALE
+            ).exists():
+                continue
+            # Skip if client is not invoice-ready (missing mandatory fields)
+            if not session.client.is_invoice_ready:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  Skipping invoice for session '{session.formation.title}': "
+                        f"client '{session.client.name}' profile incomplete."
+                    )
+                )
                 continue
 
-            invoice = Invoice.objects.create(
-                invoice_type=Invoice.TYPE_FORMATION,
-                client=session.client,
-                invoice_date=session.date_end,
-                due_date=session.date_end + timedelta(days=30),
-                session=session,
+            attended = session.participants.filter(attended=True).count()
+            if attended == 0:
+                continue
+
+            invoice_date = session.date_end
+            # Determine TVA rate from FormationInfo singleton
+            from core.models import FormationInfo
+
+            tva_rate = (
+                Decimal("0.00")
+                if session.client.is_tva_exempt
+                else FormationInfo.get_instance().tva_rate
             )
 
-            attended = session.participants.filter(attended=True).count()
-            InvoiceItem.objects.create(
+            # ── Stage 1: create proforma ──
+            invoice = Invoice(
+                invoice_type=Invoice.InvoiceType.FORMATION,  # v3 TextChoices
+                phase=Invoice.Phase.PROFORMA,
+                status=Invoice.Status.DRAFT,
+                client=session.client,
+                invoice_date=invoice_date,
+                validity_date=invoice_date + timedelta(days=30),
+                tva_rate=tva_rate,
+                session=session,
+            )
+            invoice.save()  # proforma_reference auto-generated
+
+            # v3 InvoiceItem: pricing_mode + nb_persons (per_person mode)
+            item = InvoiceItem(
                 invoice=invoice,
-                description=f"Formation « {session.formation.title} » — {attended} participant(s)",
-                quantity=Decimal(str(attended)),
-                unit="participant",
+                description=(
+                    f"Formation « {session.formation.title} » — "
+                    f"{attended} participant(s)"
+                ),
+                pricing_mode=InvoiceItem.PricingMode.PER_PERSON,  # v3
+                nb_persons=Decimal(str(attended)),
+                nb_days=Decimal("1"),
                 unit_price_ht=session.effective_price,
                 order=1,
             )
+            item.save()  # triggers invoice.recalculate_amounts()
+
+            # ── Stage 2: record simulated BC ──
+            invoice.bon_commande_number = (
+                f"BC-{session.client.name[:3].upper()}-{invoice.proforma_reference}"
+            )
+            invoice.bon_commande_date = invoice_date + timedelta(days=3)
+            invoice.save(update_fields=["bon_commande_number", "bon_commande_date"])
+
+            # ── Stage 3: finalize → assigns F-YYYY-NNN reference ──
+            words = amount_to_words_fr(invoice.amount_ttc)
+            invoice.finalize(amount_in_words=words)
 
             self._ok(
-                f"  Created invoice {invoice.reference} for session: {session.formation.title}"
+                f"  Created invoice {invoice.reference} for session: "
+                f"{session.formation.title}"
             )
 
-            # Add matching session expenses
+            # Matching session expenses
             Expense.objects.get_or_create(
                 date=session.date_start,
                 description=f"Honoraires formateur — {session.formation.title}",
@@ -1124,7 +1237,7 @@ class Command(BaseCommand):
                         else Decimal("12000.00")
                     ),
                     "allocated_to_session": session,
-                    "approval_status": "approved",
+                    "approval_status": Expense.ApprovalStatus.APPROVED,  # v3
                 },
             )
             Expense.objects.get_or_create(
@@ -1134,47 +1247,91 @@ class Command(BaseCommand):
                     "category": materiel_cat,
                     "amount": Decimal("3500.00"),
                     "allocated_to_session": session,
-                    "approval_status": "approved",
+                    "approval_status": Expense.ApprovalStatus.APPROVED,
                 },
             )
 
-        # ---- Invoices for completed study projects ---- #
+        # ------------------------------------------------------------------ #
+        # Invoices for completed study projects
+        # ------------------------------------------------------------------ #
         self._log("Seeding invoices (études)…")
         completed_projects = StudyProject.objects.filter(
             status="completed"
         ).select_related("client")
+
         for project in completed_projects:
-            if Invoice.objects.filter(study_project=project).exists():
+            if Invoice.objects.filter(
+                study_project=project, phase=Invoice.Phase.FINALE
+            ).exists():
+                continue
+            if not project.client.is_invoice_ready:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  Skipping invoice for project '{project.title}': "
+                        f"client '{project.client.name}' profile incomplete."
+                    )
+                )
                 continue
 
-            invoice = Invoice.objects.create(
-                invoice_type=Invoice.TYPE_ETUDE,
+            invoice_date = project.actual_end_date or project.end_date or date.today()
+            from core.models import BureauEtudeInfo
+
+            tva_rate = (
+                Decimal("0.00")
+                if project.client.is_tva_exempt
+                else BureauEtudeInfo.get_instance().tva_rate
+            )
+
+            # ── Stage 1: create proforma ──
+            invoice = Invoice(
+                invoice_type=Invoice.InvoiceType.ETUDE,  # v3
+                phase=Invoice.Phase.PROFORMA,
+                status=Invoice.Status.DRAFT,
                 client=project.client,
-                invoice_date=project.actual_end_date
-                or project.end_date
-                or date.today(),
-                due_date=(project.actual_end_date or date.today()) + timedelta(days=30),
+                invoice_date=invoice_date,
+                validity_date=invoice_date + timedelta(days=30),
+                tva_rate=tva_rate,
                 study_project=project,
             )
-            InvoiceItem.objects.create(
+            invoice.save()
+
+            # v3 InvoiceItem: forfait pricing mode
+            item = InvoiceItem(
                 invoice=invoice,
                 description=f"Mission d'ingénierie HSE — {project.title}",
-                quantity=Decimal("1.00"),
-                unit="forfait",
+                pricing_mode=InvoiceItem.PricingMode.FORFAIT,  # v3
+                nb_persons=Decimal("1"),
+                nb_days=Decimal("1"),
                 unit_price_ht=project.budget,
                 order=1,
             )
+            item.save()
+
+            # ── Stage 2: record BC ──
+            invoice.bon_commande_number = (
+                f"BC-{project.client.name[:3].upper()}-{invoice.proforma_reference}"
+            )
+            invoice.bon_commande_date = invoice_date + timedelta(days=5)
+            invoice.save(update_fields=["bon_commande_number", "bon_commande_date"])
+
+            # ── Stage 3: finalize ──
+            words = amount_to_words_fr(invoice.amount_ttc)
+            invoice.finalize(amount_in_words=words)
+
             self._ok(
                 f"  Created invoice {invoice.reference} for project: {project.title}"
             )
 
-        # ---- Payments for invoices ---- #
+        # ------------------------------------------------------------------ #
+        # Payments for finalized invoices
+        # ------------------------------------------------------------------ #
         self._log("Seeding payments…")
-        invoices = Invoice.objects.filter(
-            status__in=[Invoice.STATUS_UNPAID, Invoice.STATUS_PARTIALLY_PAID]
+        finale_invoices = Invoice.objects.filter(
+            phase=Invoice.Phase.FINALE,
+            status__in=[Invoice.Status.UNPAID, Invoice.Status.PARTIALLY_PAID],  # v3
         ).order_by("invoice_date")
 
-        for i, invoice in enumerate(invoices):
+        for i, invoice in enumerate(finale_invoices):
             if i % 3 == 0:
                 # Fully paid
                 Payment.objects.get_or_create(
@@ -1182,30 +1339,34 @@ class Command(BaseCommand):
                     date=invoice.invoice_date + timedelta(days=15),
                     defaults={
                         "amount": invoice.amount_ttc,
-                        "method": Payment.METHOD_BANK_TRANSFER,
-                        "status": Payment.STATUS_CONFIRMED,
+                        "method": Payment.Method.VIREMENT,  # v3
+                        "status": Payment.Status.CONFIRMED,  # v3
                         "reference": f"VIR-{invoice.reference}",
                     },
                 )
             elif i % 3 == 1:
-                # Partial payment (50%)
+                # 50% partial
                 Payment.objects.get_or_create(
                     invoice=invoice,
                     date=invoice.invoice_date + timedelta(days=10),
                     defaults={
                         "amount": (invoice.amount_ttc / 2).quantize(Decimal("0.01")),
-                        "method": Payment.METHOD_CHEQUE,
-                        "status": Payment.STATUS_CONFIRMED,
+                        "method": Payment.Method.CHEQUE,  # v3
+                        "status": Payment.Status.CONFIRMED,
                         "reference": f"CHQ-{invoice.reference}-01",
                     },
                 )
-            # i % 3 == 2 → left unpaid
+            # i % 3 == 2 → left unpaid intentionally
 
-        # ---- Overhead expenses ---- #
+        # ------------------------------------------------------------------ #
+        # Overhead and project-allocated expenses
+        # ------------------------------------------------------------------ #
         self._log("Seeding overhead expenses…")
         loyer_cat = cat_map["Loyer & Charges Locatives"]
         telecom_cat = cat_map["Télécommunications"]
         bureau_cat = cat_map["Fournitures de Bureau"]
+
+        arzew_project = StudyProject.objects.filter(title__icontains="Arzew").first()
 
         overhead_expenses = [
             {
@@ -1214,7 +1375,7 @@ class Command(BaseCommand):
                 "description": "Loyer mensuel — locaux ISI",
                 "amount": Decimal("45000.00"),
                 "is_overhead": True,
-                "approval_status": "approved",
+                "approval_status": Expense.ApprovalStatus.APPROVED,
             },
             {
                 "date": past(30),
@@ -1222,7 +1383,7 @@ class Command(BaseCommand):
                 "description": "Loyer mensuel — locaux ISI",
                 "amount": Decimal("45000.00"),
                 "is_overhead": True,
-                "approval_status": "approved",
+                "approval_status": Expense.ApprovalStatus.APPROVED,
             },
             {
                 "date": past(55),
@@ -1230,18 +1391,7 @@ class Command(BaseCommand):
                 "description": "Abonnement Internet & téléphonie fixe",
                 "amount": Decimal("8500.00"),
                 "is_overhead": True,
-                "approval_status": "approved",
-            },
-            {
-                "date": past(50),
-                "category": transport_cat,
-                "description": "Déplacement Alger–Arzew (mission audit Sonatrach)",
-                "amount": Decimal("12000.00"),
-                "is_overhead": False,
-                "allocated_to_project": StudyProject.objects.filter(
-                    title__icontains="Arzew"
-                ).first(),
-                "approval_status": "approved",
+                "approval_status": Expense.ApprovalStatus.APPROVED,
             },
             {
                 "date": past(20),
@@ -1249,19 +1399,32 @@ class Command(BaseCommand):
                 "description": "Achats fournitures bureau et consommables imprimante",
                 "amount": Decimal("6200.00"),
                 "is_overhead": True,
-                "approval_status": "approved",
+                "approval_status": Expense.ApprovalStatus.APPROVED,
                 "receipt_missing": True,
             },
         ]
 
+        # Project-allocated transport expense (only if project exists)
+        if arzew_project:
+            overhead_expenses.append(
+                {
+                    "date": past(50),
+                    "category": transport_cat,
+                    "description": "Déplacement Alger–Arzew (mission audit Sonatrach)",
+                    "amount": Decimal("12000.00"),
+                    "is_overhead": False,
+                    "allocated_to_project": arzew_project,
+                    "approval_status": Expense.ApprovalStatus.APPROVED,
+                }
+            )
+
         for exp_data in overhead_expenses:
-            # Skip if an expense with same date+description already exists
             if not Expense.objects.filter(
                 date=exp_data["date"], description=exp_data["description"]
             ).exists():
                 Expense.objects.create(**exp_data)
 
-        self._ok(f"  Overhead expenses seeded.")
+        self._ok("  Overhead expenses seeded.")
 
     # ------------------------------------------------------------------ #
     # Logging helpers

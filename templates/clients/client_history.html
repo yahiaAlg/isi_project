@@ -27,7 +27,14 @@
   <div class="page-header">
     <div class="page-header-left">
       <h1>Historique — {{ client.name }}</h1>
-      <p>Activité complète : factures, formations et projets</p>
+      <p>
+        Factures finalisées, formations et projets
+        {% if client.is_tva_exempt %}
+          <span class="isi-badge gray ms-2" style="font-size:11px;vertical-align:middle;">
+            <i class="bi bi-shield-check-fill"></i> Exonéré TVA
+          </span>
+        {% endif %}
+      </p>
     </div>
     <a href="{% url 'clients:client_detail' client.pk %}" class="btn btn-ghost">
       <i class="bi bi-arrow-left"></i> Retour à la fiche
@@ -44,7 +51,7 @@
           </div>
           <div>
             <div class="stat-value">{{ invoices|length }}</div>
-            <div class="stat-label">Factures</div>
+            <div class="stat-label">Factures finalisées</div>
           </div>
         </div>
       </div>
@@ -127,12 +134,12 @@
     </div>
   </div>
 
-  <!-- ── Invoices tab ────────────────────────────────────── -->
+  <!-- ── Invoices tab (FINALE phase only) ───────────────── -->
   <div id="tab-invoices" class="tab-content">
     <div class="isi-card">
       <div class="isi-card-header">
         <div class="card-icon green"><i class="bi bi-receipt-cutoff"></i></div>
-        <h3>Factures</h3>
+        <h3>Factures finalisées</h3>
       </div>
       {% if invoices %}
       <div style="overflow-x:auto;">
@@ -157,7 +164,8 @@
                   {{ invoice.reference }}
                 </span>
               </td>
-              <td><span style="color:var(--text-muted);font-size:13px;">{{ invoice.date|date:"d/m/Y" }}</span></td>
+              <!-- v3: field is invoice_date, not date -->
+              <td><span style="color:var(--text-muted);font-size:13px;">{{ invoice.invoice_date|date:"d/m/Y" }}</span></td>
               <td>
                 {% if invoice.invoice_type == 'formation' %}
                   <span class="isi-badge amber"><i class="bi bi-mortarboard-fill"></i> Formation</span>
@@ -172,6 +180,10 @@
                   <span class="isi-badge green"><i class="bi bi-check-circle-fill"></i> Payée</span>
                 {% elif invoice.status == 'partially_paid' %}
                   <span class="isi-badge amber"><i class="bi bi-clock-fill"></i> Partielle</span>
+                {% elif invoice.status == 'voided' %}
+                  <span class="isi-badge gray"><i class="bi bi-slash-circle-fill"></i> Annulée</span>
+                {% elif invoice.status == 'credit_note' %}
+                  <span class="isi-badge blue"><i class="bi bi-arrow-return-left"></i> Avoir émis</span>
                 {% else %}
                   <span class="isi-badge red"><i class="bi bi-exclamation-circle-fill"></i> Non payée</span>
                 {% endif %}
@@ -192,7 +204,7 @@
       {% else %}
       <div class="isi-card-body text-center" style="padding:48px 24px;">
         <div style="font-size:40px;color:#e2e8f0;margin-bottom:12px;"><i class="bi bi-receipt"></i></div>
-        <p style="color:var(--text-muted);font-size:14px;margin:0;">Aucune facture pour ce client.</p>
+        <p style="color:var(--text-muted);font-size:14px;margin:0;">Aucune facture finalisée pour ce client.</p>
       </div>
       {% endif %}
     </div>
@@ -227,7 +239,7 @@
               </td>
               <td><span style="color:var(--text-muted);font-size:13px;">{{ session.date_start|date:"d/m/Y" }}</span></td>
               <td><span style="color:var(--text-muted);font-size:13px;">{{ session.date_end|date:"d/m/Y"|default:"—" }}</span></td>
-              <td><span style="color:var(--text-muted);font-size:13px;">{{ session.trainer.name|default:"—" }}</span></td>
+              <td><span style="color:var(--text-muted);font-size:13px;">{{ session.trainer.full_name|default:"—" }}</span></td>
               <td>
                 <span style="font-weight:500;">{{ session.participants.count }} / {{ session.capacity }}</span>
               </td>
@@ -367,11 +379,9 @@
       e.preventDefault();
       const target = tab.dataset.tab;
 
-      // Update tab styles
       tabs.forEach(t => {
         t.style.borderBottomColor = 'transparent';
         t.style.color = 'var(--text-muted)';
-        // Reset badge style
         const badge = t.querySelector('span');
         if (badge) { badge.style.background = '#f1f5f9'; badge.style.color = '#475569'; }
       });
@@ -380,7 +390,6 @@
       const activeBadge = tab.querySelector('span');
       if (activeBadge) { activeBadge.style.background = 'var(--accent)'; activeBadge.style.color = '#0f172a'; }
 
-      // Show/hide content
       contents.forEach(c => c.style.display = 'none');
       document.getElementById('tab-' + target).style.display = 'block';
     });

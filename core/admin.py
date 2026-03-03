@@ -1,5 +1,5 @@
 # =============================================================================
-# core/admin.py
+# core/admin.py  —  v3.0
 # =============================================================================
 
 from django.contrib import admin
@@ -14,7 +14,10 @@ class InstituteInfoAdmin(admin.ModelAdmin):
             "Coordonnées",
             {"fields": ["address", "postal_code", "city", "phone", "email", "website"]},
         ),
-        ("Enregistrement", {"fields": ["registration_number", "nif", "nis"]}),
+        (
+            "Enregistrement fiscal",
+            {"fields": ["rc", "nif", "nis", "article_imposition", "agrement_number"]},
+        ),
         ("Banque", {"fields": ["bank_name", "bank_account", "bank_rib"]}),
         (
             "Direction",
@@ -35,7 +38,17 @@ class FormationInfoAdmin(admin.ModelAdmin):
     fieldsets = [
         ("Identité", {"fields": ["name", "description"]}),
         ("Coordonnées", {"fields": ["address", "phone", "email"]}),
-        ("Facturation", {"fields": ["invoice_prefix", "tva_applicable", "tva_rate"]}),
+        (
+            "Facturation",
+            {
+                "fields": [
+                    "invoice_prefix",
+                    "proforma_prefix",
+                    "tva_applicable",
+                    "tva_rate",
+                ]
+            },
+        ),
         (
             "Direction",
             {"fields": ["director_name", "director_title", "director_signature"]},
@@ -58,7 +71,17 @@ class BureauEtudeInfoAdmin(admin.ModelAdmin):
     fieldsets = [
         ("Identité", {"fields": ["name", "description"]}),
         ("Coordonnées", {"fields": ["address", "phone", "email"]}),
-        ("Facturation", {"fields": ["invoice_prefix", "tva_applicable", "tva_rate"]}),
+        (
+            "Facturation",
+            {
+                "fields": [
+                    "invoice_prefix",
+                    "proforma_prefix",
+                    "tva_applicable",
+                    "tva_rate",
+                ]
+            },
+        ),
         (
             "Ingénieur en chef",
             {

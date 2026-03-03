@@ -14,6 +14,7 @@ urlpatterns = [
     path("<int:pk>/", views.client_detail, name="client_detail"),
     path("<int:pk>/edit/", views.client_edit, name="client_edit"),
     path("<int:pk>/deactivate/", views.client_deactivate, name="client_deactivate"),
+    path("<int:pk>/delete/", views.client_delete, name="client_delete"),
     # Contacts (sub-resource of client)
     path("<int:client_pk>/contacts/add/", views.contact_add, name="contact_add"),
     path(

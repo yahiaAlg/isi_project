@@ -1,24 +1,32 @@
-# financial/views.py
+# =============================================================================
+# financial/views.py  —  v3.0
+# 3-stage invoice lifecycle: proforma → BC recording → finale → payments
+# =============================================================================
 
 from decimal import Decimal
 
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
+from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from core.utils import admin_required
 from financial.forms import (
+    BonCommandeForm,
     CreditNoteForm,
     ExpenseCategoryForm,
     ExpenseFilterForm,
     ExpenseForm,
+    FinalizeInvoiceForm,
     FinancialPeriodForm,
     InvoiceFilterForm,
-    InvoiceForm,
     InvoiceItemForm,
     PaymentForm,
+    ProformaCreateForm,
     ReportFilterForm,
 )
 from financial.models import (
@@ -31,8 +39,12 @@ from financial.models import (
     Payment,
 )
 from financial.utils import (
+    amount_to_words_fr,
     current_year_range,
     outstanding_invoices,
+    project_margin,
+    proformas_pending_bc,
+    proformas_ready_to_finalize,
     resolve_date_range,
     revenue_by_month,
     revenue_summary,
@@ -41,18 +53,21 @@ from financial.utils import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Invoices
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────── #
+# Invoices — list & detail
+# ─────────────────────────────────────────────────────────────────────────── #
 
 
 @admin_required
 def invoice_list(request):
-    qs = Invoice.objects.select_related("client").all()
+    qs = Invoice.objects.select_related("client").order_by(
+        "-invoice_date", "-proforma_reference"
+    )
     form = InvoiceFilterForm(request.GET or None)
 
     if form.is_valid():
         q = form.cleaned_data.get("q")
+        phase = form.cleaned_data.get("phase")
         status = form.cleaned_data.get("status")
         invoice_type = form.cleaned_data.get("invoice_type")
         date_from = form.cleaned_data.get("date_from")
@@ -60,9 +75,13 @@ def invoice_list(request):
         client = form.cleaned_data.get("client")
 
         if q:
-            from django.db.models import Q
-
-            qs = qs.filter(Q(reference__icontains=q) | Q(client__name__icontains=q))
+            qs = qs.filter(
+                Q(proforma_reference__icontains=q)
+                | Q(reference__icontains=q)
+                | Q(client__name__icontains=q)
+            )
+        if phase:
+            qs = qs.filter(phase=phase)
         if status:
             qs = qs.filter(status=status)
         if invoice_type:
@@ -74,213 +93,411 @@ def invoice_list(request):
         if client:
             qs = qs.filter(client=client)
 
-    paginator = Paginator(qs.order_by("-invoice_date"), 25)
+    paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
-
     return render(
         request,
         "financial/invoice_list.html",
-        {"page_obj": page_obj, "filter_form": form, "today": timezone.now().date()},
+        {"page_obj": page_obj, "filter_form": form},
     )
 
 
 @admin_required
 def invoice_detail(request, pk):
-    invoice = get_object_or_404(
-        Invoice.objects.select_related("client").prefetch_related("items", "payments"),
-        pk=pk,
+    invoice = get_object_or_404(Invoice.objects.select_related("client"), pk=pk)
+    items = invoice.items.all().order_by("order")
+    payments = invoice.payments.all().order_by("-date")
+    credit_notes = invoice.credit_notes.all().order_by("-date")
+
+    from datetime import date
+
+    payment_form = PaymentForm(
+        initial={"amount": invoice.amount_remaining, "date": date.today()}
     )
-    return render(request, "financial/invoice_detail.html", {"invoice": invoice})
+
+    return render(
+        request,
+        "financial/invoice_detail.html",
+        {
+            "invoice": invoice,
+            "items": items,
+            "payments": payments,
+            "credit_notes": credit_notes,
+            "payment_form": payment_form,
+            "bc_form": BonCommandeForm(instance=invoice),
+            "item_form": InvoiceItemForm(),
+        },
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Invoices — Stage 1: create proforma
+# ─────────────────────────────────────────────────────────────────────────── #
 
 
 @admin_required
 def invoice_create(request):
-    form = InvoiceForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        invoice = form.save()
-        messages.success(request, f"Facture {invoice.reference} créée.")
-        return redirect("financial:invoice_detail", pk=invoice.pk)
-    return render(
-        request,
-        "financial/invoice_form.html",
-        {"form": form, "action": "Nouvelle facture"},
-    )
-
-
-@admin_required
-def invoice_create_from_session(request, session_pk):
-    """Pre-populate an invoice from a completed training session."""
-    from formations.models import Session
-
-    session = get_object_or_404(Session, pk=session_pk)
-
-    if not session.can_be_invoiced:
-        messages.error(
-            request, "La session doit être terminée avant de pouvoir être facturée."
-        )
-        return redirect("formations:session_detail", pk=session_pk)
-
-    initial = {
-        "client": session.client,
-        "invoice_type": Invoice.TYPE_FORMATION,
-        "invoice_date": timezone.now().date(),
-    }
-    form = InvoiceForm(request.POST or None, initial=initial)
+    """Create a new proforma invoice (Stage 1)."""
+    form = ProformaCreateForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
         invoice = form.save(commit=False)
+        invoice.phase = Invoice.Phase.PROFORMA
+        invoice.status = Invoice.Status.DRAFT
         invoice.save()
-        # Auto-create a line item from session data
-        InvoiceItem.objects.create(
-            invoice=invoice,
-            description=f"{session.formation.title} — {session.date_start} au {session.date_end}",
-            quantity=session.attended_count,
-            unit_price=session.effective_price,
-        )
         messages.success(
-            request, f"Facture {invoice.reference} créée depuis la session."
+            request,
+            f"Proforma {invoice.proforma_reference} créé. "
+            "Ajoutez les lignes de prestation ci-dessous.",
         )
         return redirect("financial:invoice_detail", pk=invoice.pk)
 
     return render(
         request,
         "financial/invoice_form.html",
-        {"form": form, "action": "Facturer la session", "source_session": session},
-    )
-
-
-@admin_required
-def invoice_create_from_project(request, project_pk):
-    """Pre-populate an invoice from a study project."""
-    from etudes.models import StudyProject
-
-    project = get_object_or_404(StudyProject, pk=project_pk)
-
-    initial = {
-        "client": project.client,
-        "invoice_type": Invoice.TYPE_ETUDE,
-        "invoice_date": timezone.now().date(),
-    }
-    form = InvoiceForm(request.POST or None, initial=initial)
-
-    if request.method == "POST" and form.is_valid():
-        invoice = form.save(commit=False)
-        invoice.save()
-        InvoiceItem.objects.create(
-            invoice=invoice,
-            description=f"{project.title}",
-            quantity=1,
-            unit_price=project.budget,
-        )
-        messages.success(
-            request, f"Facture {invoice.reference} créée depuis le projet."
-        )
-        return redirect("financial:invoice_detail", pk=invoice.pk)
-
-    return render(
-        request,
-        "financial/invoice_form.html",
-        {"form": form, "action": "Facturer le projet", "source_project": project},
+        {"form": form, "action": "Nouvelle facture proforma"},
     )
 
 
 @admin_required
 def invoice_edit(request, pk):
+    """Edit a proforma invoice. Blocked once finalized."""
     invoice = get_object_or_404(Invoice, pk=pk)
-    if invoice.status == Invoice.STATUS_VOIDED:
-        messages.error(request, "Une facture annulée ne peut pas être modifiée.")
+
+    if invoice.is_locked:
+        messages.error(
+            request,
+            "Cette facture est finalisée et ne peut plus être modifiée. "
+            "Émettez un avoir si nécessaire.",
+        )
         return redirect("financial:invoice_detail", pk=pk)
 
-    form = InvoiceForm(request.POST or None, instance=invoice)
+    form = ProformaCreateForm(request.POST or None, instance=invoice)
+
     if request.method == "POST" and form.is_valid():
         form.save()
-        messages.success(request, "Facture mise à jour.")
+        messages.success(request, "Facture proforma mise à jour.")
         return redirect("financial:invoice_detail", pk=pk)
 
     return render(
         request,
         "financial/invoice_form.html",
-        {"form": form, "action": "Modifier", "invoice": invoice},
+        {"form": form, "action": "Modifier la proforma", "invoice": invoice},
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────── #
+# Invoices — Stage 2: record Bon de Commande
+# ─────────────────────────────────────────────────────────────────────────── #
+
+
 @admin_required
-def invoice_void(request, pk):
+def invoice_record_bc(request, pk):
+    """
+    Record the client's Bon de Commande against a proforma (Stage 2).
+    Once a BC number is saved the proforma becomes eligible for finalization.
+    """
     invoice = get_object_or_404(Invoice, pk=pk)
-    if invoice.status == Invoice.STATUS_VOIDED:
-        messages.error(request, "Cette facture est déjà annulée.")
+
+    if invoice.phase != Invoice.Phase.PROFORMA:
+        messages.error(request, "Le BC ne peut être enregistré que sur une proforma.")
         return redirect("financial:invoice_detail", pk=pk)
 
-    form = VoidInvoiceForm(request.POST or None)
+    form = BonCommandeForm(
+        request.POST or None, request.FILES or None, instance=invoice
+    )
+
     if request.method == "POST" and form.is_valid():
-        invoice.status = Invoice.STATUS_VOIDED
-        reason = form.cleaned_data.get("reason", "")
-        if reason:
-            invoice.notes = (invoice.notes + "\nAnnulation: " + reason).strip()
-        invoice.save(update_fields=["status", "notes"])
-        messages.success(request, f"Facture {invoice.reference} annulée.")
+        form.save()
+        messages.success(
+            request,
+            f"Bon de Commande N° {invoice.bon_commande_number} enregistré. "
+            "La proforma est prête à être finalisée.",
+        )
         return redirect("financial:invoice_detail", pk=pk)
 
     return render(
         request,
-        "financial/invoice_void.html",
+        "financial/invoice_record_bc.html",
         {"form": form, "invoice": invoice},
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────── #
+# Invoices — Stage 3: finalize
+# ─────────────────────────────────────────────────────────────────────────── #
+
+
+@admin_required
+def invoice_finalize(request, pk):
+    """
+    GET  — Show the finalization confirmation page.
+           Computes blockers, the next sequential reference preview,
+           and pre-fills the amount-in-words from the current totals.
+    POST — Execute finalization: assign final reference, snapshot client,
+           lock amounts, set status → UNPAID.
+    """
+    invoice = get_object_or_404(Invoice.objects.select_related("client"), pk=pk)
+
+    # Already finalized — nothing to do
+    if invoice.phase == Invoice.Phase.FINALE:
+        messages.info(request, "Cette facture est déjà finalisée.")
+        return redirect("financial:invoice_detail", pk=pk)
+
+    # ── Compute blockers ─────────────────────────────────────────────────
+    blockers = []
+    if not invoice.bon_commande_number:
+        blockers.append("Numéro de Bon de Commande manquant.")
+    missing_client_fields = invoice.client.missing_fields_for_invoice()
+    if missing_client_fields:
+        blockers.append(
+            f"Profil client incomplet — champs manquants : "
+            f"{', '.join(missing_client_fields)}."
+        )
+    if invoice.amount_ttc <= 0:
+        blockers.append("La facture ne contient aucune ligne de facturation.")
+
+    # ── Preview next reference (read-only, not consuming a number) ───────
+    year = timezone.now().year
+    next_reference = Invoice._next_final_reference(invoice.invoice_type, year)
+
+    # ── GET — show confirmation page ─────────────────────────────────────
+    if request.method == "GET":
+        initial_words = amount_to_words_fr(invoice.amount_ttc) if not blockers else ""
+        form = FinalizeInvoiceForm(
+            initial={
+                "amount_in_words": initial_words,
+                "due_date": invoice.due_date,
+            }
+        )
+        return render(
+            request,
+            "financial/invoice_finalize.html",
+            {
+                "invoice": invoice,
+                "form": form,
+                "blockers": blockers,
+                "next_reference": next_reference,
+            },
+        )
+
+    # ── POST — execute finalization ──────────────────────────────────────
+    if blockers:
+        for b in blockers:
+            messages.error(request, b)
+        return redirect("financial:invoice_finalize", pk=pk)
+
+    form = FinalizeInvoiceForm(request.POST)
+    if not form.is_valid():
+        return render(
+            request,
+            "financial/invoice_finalize.html",
+            {
+                "invoice": invoice,
+                "form": form,
+                "blockers": blockers,
+                "next_reference": next_reference,
+            },
+        )
+
+    amount_in_words = form.cleaned_data.get("amount_in_words") or amount_to_words_fr(
+        invoice.amount_ttc
+    )
+    due_date = form.cleaned_data.get("due_date")
+
+    try:
+        invoice.finalize(amount_in_words=amount_in_words)
+        if due_date:
+            invoice.due_date = due_date
+            invoice.save(update_fields=["due_date"])
+        messages.success(
+            request,
+            f"Facture {invoice.reference} finalisée avec succès. "
+            "Le paiement est maintenant activé.",
+        )
+    except ValidationError as exc:
+        for msg in exc.messages:
+            messages.error(request, msg)
+        return redirect("financial:invoice_finalize", pk=pk)
+
+    return redirect("financial:invoice_detail", pk=pk)
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Invoices — void
+# ─────────────────────────────────────────────────────────────────────────── #
+
+
+@admin_required
+@require_POST
+def invoice_void(request, pk):
+    """Void a finalized unpaid invoice. The number is retained (gapless rule)."""
+    invoice = get_object_or_404(Invoice, pk=pk)
+    reason = request.POST.get("reason", "").strip()
+
+    try:
+        invoice.void(reason=reason)
+        messages.success(
+            request,
+            f"Facture {invoice.reference} annulée. "
+            "Le numéro est conservé dans la séquence.",
+        )
+    except ValidationError as exc:
+        for msg in exc.messages:
+            messages.error(request, msg)
+
+    return redirect("financial:invoice_detail", pk=pk)
+
+
+@admin_required
+@require_POST
+def invoice_delete(request, pk):
+    """
+    Hard-delete a PROFORMA invoice.
+    Only proformas in DRAFT or SENT status with no payments can be deleted.
+    Finalized invoices must be voided instead (gapless sequence requirement).
+    """
+    invoice = get_object_or_404(Invoice, pk=pk)
+
+    if invoice.phase == Invoice.Phase.FINALE:
+        messages.error(
+            request,
+            "Une facture finalisée ne peut pas être supprimée — utilisez l'annulation. "
+            "Le numéro doit rester dans la séquence.",
+        )
+        return redirect("financial:invoice_detail", pk=pk)
+
+    if invoice.payments.exists():
+        messages.error(
+            request, "Impossible de supprimer une facture ayant des paiements."
+        )
+        return redirect("financial:invoice_detail", pk=pk)
+
+    ref = invoice.proforma_reference
+    invoice.delete()
+    messages.success(request, f"Proforma {ref} supprimée définitivement.")
+    return redirect("financial:invoice_list")
+
+
+@admin_required
+@require_POST
+def invoice_mark_sent(request, pk):
+    """
+    Mark a DRAFT proforma as SENT (admin shortcut — normally done from the detail page).
+    """
+    invoice = get_object_or_404(Invoice, pk=pk)
+
+    if (
+        invoice.phase != Invoice.Phase.PROFORMA
+        or invoice.status != Invoice.Status.DRAFT
+    ):
+        messages.error(
+            request,
+            "Seules les proformas en brouillon peuvent être marquées comme envoyées.",
+        )
+        return redirect("financial:invoice_detail", pk=pk)
+
+    invoice.status = Invoice.Status.SENT
+    invoice.save(update_fields=["status"])
+    messages.success(
+        request, f"{invoice.proforma_reference} marquée comme envoyée au client."
+    )
+    return redirect("financial:invoice_detail", pk=pk)
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Invoices — print (proforma or finale)
+# ─────────────────────────────────────────────────────────────────────────── #
+
+
 @admin_required
 def invoice_print(request, pk):
+    invoice = get_object_or_404(Invoice.objects.select_related("client"), pk=pk)
+    items = invoice.items.all().order_by("order")
+
     from core.models import BureauEtudeInfo, FormationInfo, InstituteInfo
 
-    invoice = get_object_or_404(
-        Invoice.objects.select_related("client").prefetch_related("items"),
-        pk=pk,
-    )
     institute = InstituteInfo.get_instance()
-    business_info = (
-        FormationInfo.get_instance()
-        if invoice.invoice_type == Invoice.TYPE_FORMATION
-        else BureauEtudeInfo.get_instance()
+    if invoice.invoice_type == Invoice.InvoiceType.FORMATION:
+        business_line = FormationInfo.get_instance()
+    else:
+        business_line = BureauEtudeInfo.get_instance()
+
+    template = (
+        "financial/invoice_print.html"
+        if invoice.phase == Invoice.Phase.PROFORMA
+        else "financial/invoice_print_finale.html"
     )
+
     return render(
         request,
-        "financial/invoice_print.html",
-        {"invoice": invoice, "institute": institute, "business_info": business_info},
+        template,
+        {
+            "invoice": invoice,
+            "items": items,
+            "institute": institute,
+            "business_line": business_line,
+        },
     )
 
 
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────── #
 # Invoice line items
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────── #
+
+
+def _get_source_list(invoice):
+    if invoice.invoice_type == Invoice.InvoiceType.FORMATION:
+        from formations.models import Formation
+
+        return Formation.objects.filter(is_active=True).order_by("title")
+    else:
+        from etudes.models import StudyProject
+
+        return (
+            StudyProject.objects.filter(
+                status__in=[
+                    StudyProject.STATUS_IN_PROGRESS,
+                    StudyProject.STATUS_COMPLETED,
+                ]
+            )
+            .select_related("client")
+            .order_by("title")
+        )
 
 
 @admin_required
 def item_add(request, invoice_pk):
     invoice = get_object_or_404(Invoice, pk=invoice_pk)
+
+    if invoice.is_locked:
+        messages.error(
+            request, "Impossible d'ajouter des lignes à une facture finalisée."
+        )
+        return redirect("financial:invoice_detail", pk=invoice_pk)
+
     form = InvoiceItemForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
         item.invoice = invoice
-        item.save()
-        # Signal fires recalculate_amounts()
-        if request.headers.get("x-requested-with") == "XMLHttpRequest":
-            return JsonResponse(
-                {
-                    "status": "ok",
-                    "amount_ht": str(invoice.amount_ht),
-                    "amount_ttc": str(invoice.amount_ttc),
-                }
-            )
-        messages.success(request, "Ligne ajoutée.")
+        try:
+            item.save()
+            messages.success(request, "Ligne ajoutée.")
+        except ValidationError as exc:
+            for msg in exc.messages:
+                messages.error(request, msg)
         return redirect("financial:invoice_detail", pk=invoice_pk)
 
-    if request.headers.get("x-requested-with") == "XMLHttpRequest":
-        return JsonResponse({"status": "error", "errors": form.errors}, status=400)
     return render(
         request,
-        "financial/item_form.html",
-        {"form": form, "invoice": invoice, "action": "Ajouter une ligne"},
+        "financial/invoice_item_form.html",
+        {
+            "form": form,
+            "invoice": invoice,
+            "action": "Ajouter une ligne",
+            "source_list": _get_source_list(invoice),
+        },
     )
 
 
@@ -288,128 +505,184 @@ def item_add(request, invoice_pk):
 def item_edit(request, invoice_pk, pk):
     invoice = get_object_or_404(Invoice, pk=invoice_pk)
     item = get_object_or_404(InvoiceItem, pk=pk, invoice=invoice)
+
+    if invoice.is_locked:
+        messages.error(
+            request, "Impossible de modifier les lignes d'une facture finalisée."
+        )
+        return redirect("financial:invoice_detail", pk=invoice_pk)
+
     form = InvoiceItemForm(request.POST or None, instance=item)
 
     if request.method == "POST" and form.is_valid():
-        form.save()
-        if request.headers.get("x-requested-with") == "XMLHttpRequest":
-            return JsonResponse({"status": "ok"})
-        messages.success(request, "Ligne mise à jour.")
+        try:
+            form.save()
+            messages.success(request, "Ligne mise à jour.")
+        except ValidationError as exc:
+            for msg in exc.messages:
+                messages.error(request, msg)
         return redirect("financial:invoice_detail", pk=invoice_pk)
 
-    if request.headers.get("x-requested-with") == "XMLHttpRequest":
-        return JsonResponse({"status": "error", "errors": form.errors}, status=400)
     return render(
         request,
-        "financial/item_form.html",
-        {"form": form, "invoice": invoice, "action": "Modifier"},
+        "financial/invoice_item_form.html",
+        {
+            "form": form,
+            "invoice": invoice,
+            "item": item,
+            "action": "Modifier la ligne",
+            "source_list": _get_source_list(invoice),
+        },
     )
 
 
 @admin_required
+@require_POST
 def item_delete(request, invoice_pk, pk):
-    if request.method != "POST":
+    invoice = get_object_or_404(Invoice, pk=invoice_pk)
+    item = get_object_or_404(InvoiceItem, pk=pk, invoice=invoice)
+
+    if invoice.is_locked:
+        messages.error(
+            request, "Impossible de supprimer les lignes d'une facture finalisée."
+        )
         return redirect("financial:invoice_detail", pk=invoice_pk)
-    item = get_object_or_404(InvoiceItem, pk=pk, invoice_id=invoice_pk)
-    item.delete()
-    if request.headers.get("x-requested-with") == "XMLHttpRequest":
-        return JsonResponse({"status": "ok"})
-    messages.success(request, "Ligne supprimée.")
+
+    try:
+        item.delete()
+        messages.success(request, "Ligne supprimée.")
+    except ValidationError as exc:
+        for msg in exc.messages:
+            messages.error(request, msg)
+
     return redirect("financial:invoice_detail", pk=invoice_pk)
 
 
-# ---------------------------------------------------------------------------
-# Payments
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────── #
+# Payments  —  only on FINALE invoices
+# ─────────────────────────────────────────────────────────────────────────── #
 
 
 @admin_required
 def payment_add(request, invoice_pk, pk=None):
+    """Add or edit a payment instalment on a finalized invoice."""
     invoice = get_object_or_404(Invoice, pk=invoice_pk)
-    is_edit = pk is not None
 
-    if not is_edit and invoice.status in [Invoice.STATUS_PAID, Invoice.STATUS_VOIDED]:
-        messages.error(request, "Cette facture ne peut plus recevoir de paiement.")
+    if not invoice.is_payable and pk is None:
+        messages.error(request, _payment_blocked_reason(invoice))
         return redirect("financial:invoice_detail", pk=invoice_pk)
 
-    if is_edit:
-        payment = get_object_or_404(Payment, pk=pk, invoice=invoice)
+    instance = get_object_or_404(Payment, pk=pk, invoice=invoice) if pk else None
+    if instance:
+        initial = {}
     else:
-        payment_count = invoice.payments.count() + 1
-        auto_reference = (
-            f"PAY-{timezone.now().year}-{invoice.reference}-{payment_count:04d}"
+        date_str = invoice.invoice_date.strftime("%Y%m%d")
+        prefix = f"REF-{date_str}-"
+        last = (
+            Payment.objects.filter(reference__startswith=prefix)
+            .order_by("reference")
+            .values_list("reference", flat=True)
+            .last()
         )
-        payment = Payment(
-            invoice=invoice,
-            date=timezone.now().date(),
-            amount=invoice.amount_remaining,
-            reference=auto_reference,
-        )
+        if last:
+            try:
+                seq = int(last.split("-")[-1]) + 1
+            except (ValueError, IndexError):
+                seq = 1
+        else:
+            seq = 1
+        initial = {
+            "amount": invoice.amount_remaining,
+            "reference": f"{prefix}{seq:04d}",
+        }
+    form = PaymentForm(request.POST or None, instance=instance, initial=initial)
 
-    if request.method == "POST":
-        form = PaymentForm(request.POST, instance=payment)
-        if form.is_valid():
-            form.save()
-            messages.success(
-                request,
-                "Paiement mis à jour." if is_edit else "Paiement enregistré.",
-            )
-            return redirect("financial:invoice_detail", pk=invoice_pk)
-    else:
-        form = PaymentForm(instance=payment)
+    if request.method == "POST" and form.is_valid():
+        payment = form.save(commit=False)
+        payment.invoice = invoice
+        try:
+            payment.full_clean()
+            payment.save()
+            action = "mis à jour" if pk else "enregistré"
+            messages.success(request, f"Paiement {action}.")
+        except ValidationError as exc:
+            for msg in exc.messages:
+                messages.error(request, msg)
+        return redirect("financial:invoice_detail", pk=invoice_pk)
 
+    action = "Modifier le paiement" if pk else "Enregistrer un paiement"
     return render(
         request,
         "financial/payment_form.html",
         {
             "form": form,
             "invoice": invoice,
-            "action": "Modifier le paiement" if is_edit else "Enregistrer un paiement",
+            "action": action,
+            "next_ref": initial.get("reference", ""),
         },
     )
 
 
 @admin_required
+@require_POST
 def payment_delete(request, invoice_pk, pk):
-    if request.method != "POST":
-        return redirect("financial:invoice_detail", pk=invoice_pk)
-    payment = get_object_or_404(Payment, pk=pk, invoice_id=invoice_pk)
+    invoice = get_object_or_404(Invoice, pk=invoice_pk)
+    payment = get_object_or_404(Payment, pk=pk, invoice=invoice)
     payment.delete()
     messages.success(request, "Paiement supprimé.")
     return redirect("financial:invoice_detail", pk=invoice_pk)
 
 
 @admin_required
+@require_POST
 def payment_confirm(request, invoice_pk, pk):
-    if request.method != "POST":
-        return redirect("financial:invoice_detail", pk=invoice_pk)
-    payment = get_object_or_404(Payment, pk=pk, invoice_id=invoice_pk)
-    payment.status = Payment.STATUS_CONFIRMED
+    invoice = get_object_or_404(Invoice, pk=invoice_pk)
+    payment = get_object_or_404(Payment, pk=pk, invoice=invoice)
+    payment.status = Payment.Status.CONFIRMED
     payment.save(update_fields=["status"])
+    invoice.refresh_payment_totals()
     messages.success(request, "Paiement confirmé.")
     return redirect("financial:invoice_detail", pk=invoice_pk)
 
 
 @admin_required
+@require_POST
 def payment_reverse(request, invoice_pk, pk):
-    if request.method != "POST":
-        return redirect("financial:invoice_detail", pk=invoice_pk)
-    payment = get_object_or_404(Payment, pk=pk, invoice_id=invoice_pk)
-    payment.status = Payment.STATUS_REVERSED
+    invoice = get_object_or_404(Invoice, pk=invoice_pk)
+    payment = get_object_or_404(Payment, pk=pk, invoice=invoice)
+    payment.status = Payment.Status.REVERSED
     payment.save(update_fields=["status"])
-    messages.success(request, "Paiement annulé/reversé.")
+    invoice.refresh_payment_totals()
+    messages.success(request, "Paiement annulé / retourné.")
     return redirect("financial:invoice_detail", pk=invoice_pk)
 
 
-# ---------------------------------------------------------------------------
+def _payment_blocked_reason(invoice: Invoice) -> str:
+    if invoice.phase == Invoice.Phase.PROFORMA:
+        return (
+            "Impossible d'enregistrer un paiement sur une proforma. "
+            "Finalisez d'abord la facture."
+        )
+    if invoice.status == Invoice.Status.PAID:
+        return "Cette facture est déjà intégralement payée."
+    if invoice.status == Invoice.Status.VOIDED:
+        return "Cette facture est annulée."
+    if invoice.status == Invoice.Status.CREDIT_NOTE:
+        return "Un avoir a été émis sur cette facture."
+    return "Cette facture n'est pas en attente de paiement."
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
 # Credit notes
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────── #
 
 
 @admin_required
 def credit_note_list(request):
-    notes = CreditNote.objects.select_related("invoice__client").order_by("-date")
-    paginator = Paginator(notes, 25)
+    credit_notes = CreditNote.objects.select_related(
+        "original_invoice", "original_invoice__client"
+    ).order_by("-date")
+    paginator = Paginator(credit_notes, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
     return render(request, "financial/credit_note_list.html", {"page_obj": page_obj})
 
@@ -417,56 +690,82 @@ def credit_note_list(request):
 @admin_required
 def credit_note_create(request, invoice_pk):
     invoice = get_object_or_404(Invoice, pk=invoice_pk)
+
+    if invoice.phase != Invoice.Phase.FINALE:
+        messages.error(
+            request, "Un avoir ne peut être émis que sur une facture finalisée."
+        )
+        return redirect("financial:invoice_detail", pk=invoice_pk)
+
+    if invoice.status == Invoice.Status.VOIDED:
+        messages.error(request, "Cette facture est déjà annulée.")
+        return redirect("financial:invoice_detail", pk=invoice_pk)
+
     form = CreditNoteForm(request.POST or None)
+    if not request.POST:
+        form.fields["tva_rate"].initial = invoice.tva_rate
 
     if request.method == "POST" and form.is_valid():
         cn = form.save(commit=False)
-        cn.invoice = invoice
+        cn.original_invoice = invoice
         cn.save()
-        messages.success(request, f"Avoir {cn.reference} créé.")
+        messages.success(
+            request, f"Avoir {cn.reference} émis sur la facture {invoice.reference}."
+        )
         return redirect("financial:credit_note_detail", pk=cn.pk)
 
     return render(
-        request,
-        "financial/credit_note_form.html",
-        {"form": form, "invoice": invoice},
+        request, "financial/credit_note_form.html", {"form": form, "invoice": invoice}
     )
 
 
 @admin_required
 def credit_note_detail(request, pk):
-    cn = get_object_or_404(CreditNote.objects.select_related("invoice__client"), pk=pk)
-    return render(request, "financial/credit_note_detail.html", {"credit_note": cn})
+    cn = get_object_or_404(
+        CreditNote.objects.select_related(
+            "original_invoice", "original_invoice__client"
+        ),
+        pk=pk,
+    )
+    return render(request, "financial/credit_note_detail.html", {"cn": cn})
 
 
 @admin_required
 def credit_note_print(request, pk):
+    cn = get_object_or_404(
+        CreditNote.objects.select_related(
+            "original_invoice", "original_invoice__client"
+        ),
+        pk=pk,
+    )
     from core.models import BureauEtudeInfo, FormationInfo, InstituteInfo
 
-    cn = get_object_or_404(CreditNote.objects.select_related("invoice__client"), pk=pk)
     institute = InstituteInfo.get_instance()
-    business_info = (
+    inv = cn.original_invoice
+    business_line = (
         FormationInfo.get_instance()
-        if cn.invoice.invoice_type == Invoice.TYPE_FORMATION
+        if inv.invoice_type == Invoice.InvoiceType.FORMATION
         else BureauEtudeInfo.get_instance()
     )
     return render(
         request,
         "financial/credit_note_print.html",
-        {"credit_note": cn, "institute": institute, "business_info": business_info},
+        {"cn": cn, "institute": institute, "business_line": business_line},
     )
 
 
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────── #
 # Expenses
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────── #
 
 
 @admin_required
 def expense_list(request):
+    from django.utils.timezone import now
+
     qs = Expense.objects.select_related(
-        "category", "allocated_to_session__formation", "allocated_to_project__client"
-    ).all()
+        "category", "allocated_to_session", "allocated_to_project"
+    ).order_by("-date")
     form = ExpenseFilterForm(request.GET or None)
 
     if form.is_valid():
@@ -476,11 +775,10 @@ def expense_list(request):
         date_from = form.cleaned_data.get("date_from")
         date_to = form.cleaned_data.get("date_to")
         allocation = form.cleaned_data.get("allocation")
+        missing_receipt = form.cleaned_data.get("missing_receipt")
 
         if q:
-            from django.db.models import Q
-
-            qs = qs.filter(Q(description__icontains=q) | Q(category__name__icontains=q))
+            qs = qs.filter(Q(description__icontains=q) | Q(supplier__icontains=q))
         if category:
             qs = qs.filter(category=category)
         if approval_status:
@@ -494,27 +792,67 @@ def expense_list(request):
         elif allocation == "project":
             qs = qs.filter(allocated_to_project__isnull=False)
         elif allocation == "overhead":
-            qs = qs.filter(
-                allocated_to_session__isnull=True, allocated_to_project__isnull=True
-            )
+            qs = qs.filter(is_overhead=True)
+        if missing_receipt:
+            qs = qs.filter(receipt="", receipt_missing=False)
 
-    paginator = Paginator(qs.order_by("-date"), 25)
+    today = now().date()
+    first_of_month = today.replace(day=1)
+    first_of_year = today.replace(month=1, day=1)
+    pending_qs = Expense.objects.filter(approval_status=Expense.ApprovalStatus.PENDING)
+    kpis = {
+        "pending_count": pending_qs.count(),
+        "pending_amount": pending_qs.aggregate(s=Sum("amount"))["s"] or Decimal("0"),
+        "approved_month": Expense.objects.filter(
+            approval_status=Expense.ApprovalStatus.APPROVED,
+            date__gte=first_of_month,
+        ).aggregate(s=Sum("amount"))["s"]
+        or Decimal("0"),
+        "missing_receipt_count": Expense.objects.filter(
+            receipt="", receipt_missing=False
+        ).count(),
+        "total_year": Expense.objects.filter(
+            date__gte=first_of_year,
+            approval_status=Expense.ApprovalStatus.APPROVED,
+        ).aggregate(s=Sum("amount"))["s"]
+        or Decimal("0"),
+    }
+
+    paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
-
     return render(
         request,
         "financial/expense_list.html",
-        {"page_obj": page_obj, "filter_form": form},
+        {"page_obj": page_obj, "filter_form": form, "kpis": kpis},
     )
+
+
+@admin_required
+def expense_detail(request, pk):
+    expense = get_object_or_404(
+        Expense.objects.select_related(
+            "category", "allocated_to_session", "allocated_to_project"
+        ),
+        pk=pk,
+    )
+    return render(request, "financial/expense_detail.html", {"expense": expense})
 
 
 @admin_required
 def expense_create(request):
     form = ExpenseForm(request.POST or None, request.FILES or None)
+
     if request.method == "POST" and form.is_valid():
-        expense = form.save()
-        messages.success(request, "Dépense enregistrée.")
-        return redirect("financial:expense_list")
+        expense = form.save(commit=False)
+        try:
+            expense.full_clean()
+            expense.save()
+            messages.success(request, "Dépense enregistrée.")
+            return redirect("financial:expense_detail", pk=expense.pk)
+        except ValidationError as exc:
+            for msg in exc.messages:
+                messages.error(request, msg)
+
     return render(
         request,
         "financial/expense_form.html",
@@ -526,21 +864,28 @@ def expense_create(request):
 def expense_edit(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
     form = ExpenseForm(request.POST or None, request.FILES or None, instance=expense)
+
     if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Dépense mise à jour.")
-        return redirect("financial:expense_list")
+        try:
+            expense = form.save(commit=False)
+            expense.full_clean()
+            expense.save()
+            messages.success(request, "Dépense mise à jour.")
+            return redirect("financial:expense_detail", pk=expense.pk)
+        except ValidationError as exc:
+            for msg in exc.messages:
+                messages.error(request, msg)
+
     return render(
         request,
         "financial/expense_form.html",
-        {"form": form, "action": "Modifier", "expense": expense},
+        {"form": form, "expense": expense, "action": "Modifier la dépense"},
     )
 
 
 @admin_required
+@require_POST
 def expense_delete(request, pk):
-    if request.method != "POST":
-        return redirect("financial:expense_list")
     expense = get_object_or_404(Expense, pk=pk)
     expense.delete()
     messages.success(request, "Dépense supprimée.")
@@ -548,43 +893,60 @@ def expense_delete(request, pk):
 
 
 @admin_required
+@require_POST
 def expense_approve(request, pk):
-    if request.method != "POST":
-        return redirect("financial:expense_list")
     expense = get_object_or_404(Expense, pk=pk)
-    expense.approval_status = Expense.APPROVAL_APPROVED
+    expense.approval_status = Expense.ApprovalStatus.APPROVED
     expense.save(update_fields=["approval_status"])
     messages.success(request, "Dépense approuvée.")
-    return redirect("financial:expense_list")
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER", "")
+    if next_url:
+        return redirect(next_url)
+    return redirect("financial:expense_detail", pk=pk)
 
 
 @admin_required
+@require_POST
 def expense_reject(request, pk):
-    if request.method != "POST":
-        return redirect("financial:expense_list")
     expense = get_object_or_404(Expense, pk=pk)
-    expense.approval_status = Expense.APPROVAL_REJECTED
-    expense.save(update_fields=["approval_status"])
-    messages.success(request, "Dépense rejetée.")
-    return redirect("financial:expense_list")
+    reason = request.POST.get("reason", "").strip()
+    expense.approval_status = Expense.ApprovalStatus.REJECTED
+    if reason:
+        expense.approval_notes = reason
+    expense.save(update_fields=["approval_status", "approval_notes"])
+    messages.success(request, "Dépense refusée.")
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER", "")
+    if next_url:
+        return redirect(next_url)
+    return redirect("financial:expense_detail", pk=pk)
 
 
-# ---------------------------------------------------------------------------
-# Expense categories
-# ---------------------------------------------------------------------------
+# ─── Expense categories ─────────────────────────────────────────────────── #
 
 
 @admin_required
 def expense_category_list(request):
-    categories = ExpenseCategory.objects.annotate(
-        expense_count=__import__("django.db.models", fromlist=["Count"]).Count(
-            "expenses"
+    from django.utils.timezone import now
+
+    today = now().date()
+    first_of_month = today.replace(day=1)
+    categories = (
+        ExpenseCategory.objects.all()
+        .order_by("name")
+        .annotate(
+            expense_count_month=Sum(
+                "expenses__id",
+                filter=Q(expenses__date__gte=first_of_month),
+                distinct=True,
+            ),
+            expense_total_month=Sum(
+                "expenses__amount",
+                filter=Q(expenses__date__gte=first_of_month),
+            ),
         )
     )
     return render(
-        request,
-        "financial/expense_category_list.html",
-        {"categories": categories},
+        request, "financial/expense_category_list.html", {"categories": categories}
     )
 
 
@@ -592,8 +954,8 @@ def expense_category_list(request):
 def expense_category_create(request):
     form = ExpenseCategoryForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        cat = form.save()
-        messages.success(request, f"Catégorie « {cat.name} » créée.")
+        form.save()
+        messages.success(request, "Catégorie créée.")
         return redirect("financial:expense_category_list")
     return render(
         request,
@@ -613,13 +975,13 @@ def expense_category_edit(request, pk):
     return render(
         request,
         "financial/expense_category_form.html",
-        {"form": form, "action": "Modifier"},
+        {"form": form, "category": category, "action": "Modifier la catégorie"},
     )
 
 
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────── #
 # Financial periods
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────── #
 
 
 @admin_required
@@ -632,9 +994,9 @@ def period_list(request):
 def period_create(request):
     form = FinancialPeriodForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        period = form.save()
-        messages.success(request, f"Période « {period} » créée.")
-        return redirect("financial:period_detail", pk=period.pk)
+        form.save()
+        messages.success(request, "Période créée.")
+        return redirect("financial:period_list")
     return render(
         request,
         "financial/period_form.html",
@@ -645,17 +1007,15 @@ def period_create(request):
 @admin_required
 def period_detail(request, pk):
     period = get_object_or_404(FinancialPeriod, pk=pk)
-    summary = revenue_summary(period.date_start, period.date_end)
-    return render(
-        request,
-        "financial/period_detail.html",
-        {"period": period, "summary": summary},
-    )
+    return render(request, "financial/period_detail.html", {"period": period})
 
 
 @admin_required
 def period_edit(request, pk):
     period = get_object_or_404(FinancialPeriod, pk=pk)
+    if period.is_closed:
+        messages.error(request, "Une période clôturée ne peut pas être modifiée.")
+        return redirect("financial:period_detail", pk=pk)
     form = FinancialPeriodForm(request.POST or None, instance=period)
     if request.method == "POST" and form.is_valid():
         form.save()
@@ -664,48 +1024,42 @@ def period_edit(request, pk):
     return render(
         request,
         "financial/period_form.html",
-        {"form": form, "action": "Modifier", "period": period},
+        {"form": form, "action": "Modifier la période"},
     )
 
 
 @admin_required
+@require_POST
 def period_close(request, pk):
-    if request.method != "POST":
-        return redirect("financial:period_detail", pk=pk)
     period = get_object_or_404(FinancialPeriod, pk=pk)
-    if period.is_closed:
-        messages.error(request, "Cette période est déjà clôturée.")
-        return redirect("financial:period_detail", pk=pk)
     period.is_closed = True
     period.save(update_fields=["is_closed"])
-    messages.success(request, f"Période « {period} » clôturée.")
+    messages.success(request, f"Période « {period.name} » clôturée.")
     return redirect("financial:period_detail", pk=pk)
 
 
-# ---------------------------------------------------------------------------
-# Analytics & reports
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────── #
+# Analytics & reporting
+# ─────────────────────────────────────────────────────────────────────────── #
 
 
 @admin_required
 def financial_analytics(request):
     date_from, date_to = current_year_range()
-    summary_all = revenue_summary(date_from, date_to)
-    summary_formation = revenue_summary(
-        date_from, date_to, invoice_type=Invoice.TYPE_FORMATION
-    )
-    summary_etude = revenue_summary(date_from, date_to, invoice_type=Invoice.TYPE_ETUDE)
-    unpaid = outstanding_invoices()[:10]
+    summary = revenue_summary(date_from, date_to)
+    pending_bc = proformas_pending_bc()[:10]
+    ready_to_finalize = proformas_ready_to_finalize()[:10]
+    overdue = outstanding_invoices().filter(invoice_date__lt=timezone.now().date())[:10]
     top_clients = top_clients_by_revenue(limit=5, date_from=date_from, date_to=date_to)
 
     return render(
         request,
-        "financial/analytics.html",
+        "financial/analytics_dashboard.html",
         {
-            "summary_all": summary_all,
-            "summary_formation": summary_formation,
-            "summary_etude": summary_etude,
-            "unpaid_invoices": unpaid,
+            "summary": summary,
+            "pending_bc": pending_bc,
+            "ready_to_finalize": ready_to_finalize,
+            "overdue": overdue,
             "top_clients": top_clients,
             "date_from": date_from,
             "date_to": date_to,
@@ -716,162 +1070,151 @@ def financial_analytics(request):
 @admin_required
 def revenue_report(request):
     form = ReportFilterForm(request.GET or None)
-    date_from, date_to = current_year_range()
+    context = {"filter_form": form}
 
     if form.is_valid():
         date_from, date_to = resolve_date_range(form.cleaned_data)
+        invoice_type = form.cleaned_data.get("invoice_type") or None
+        context["summary"] = revenue_summary(date_from, date_to, invoice_type)
+        context["monthly"] = revenue_by_month(date_from, date_to)
+        context["date_from"] = date_from
+        context["date_to"] = date_to
 
-    summary = revenue_summary(date_from, date_to)
-    summary_formation = revenue_summary(
-        date_from, date_to, invoice_type=Invoice.TYPE_FORMATION
-    )
-    summary_etude = revenue_summary(date_from, date_to, invoice_type=Invoice.TYPE_ETUDE)
-    monthly = revenue_by_month(date_from, date_to)
-    top_clients = top_clients_by_revenue(limit=10, date_from=date_from, date_to=date_to)
-
-    return render(
-        request,
-        "financial/revenue_report.html",
-        {
-            "form": form,
-            "summary": summary,
-            "summary_formation": summary_formation,
-            "summary_etude": summary_etude,
-            "monthly": monthly,
-            "top_clients": top_clients,
-            "date_from": date_from,
-            "date_to": date_to,
-        },
-    )
+    return render(request, "financial/revenue_report.html", context)
 
 
 @admin_required
 def outstanding_report(request):
-    invoices = outstanding_invoices()
-    from django.db.models import Sum
+    overdue_finals = outstanding_invoices()
+    pending = proformas_pending_bc()
+    ready = proformas_ready_to_finalize()
 
-    total_outstanding = invoices.aggregate(total=Sum("amount_remaining"))[
-        "total"
-    ] or Decimal("0")
     return render(
         request,
         "financial/outstanding_report.html",
-        {"invoices": invoices, "total_outstanding": total_outstanding},
+        {
+            "overdue_finals": overdue_finals,
+            "pending_bc": pending,
+            "ready_to_finalize": ready,
+        },
     )
 
 
 @admin_required
 def expense_report(request):
-    from django.db.models import Sum
+    from django.db.models import Count
 
     form = ReportFilterForm(request.GET or None)
-    date_from, date_to = current_year_range()
+    context = {"form": form}
 
     if form.is_valid():
         date_from, date_to = resolve_date_range(form.cleaned_data)
 
-    qs = Expense.objects.filter(
-        date__range=[date_from, date_to],
-        approval_status=Expense.APPROVAL_APPROVED,
-    )
-    total = qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        base_qs = Expense.objects.filter(
+            date__range=[date_from, date_to],
+            approval_status=Expense.ApprovalStatus.APPROVED,
+        ).select_related("category")
 
-    by_category = (
-        qs.values("category__name").annotate(total=Sum("amount")).order_by("-total")
-    )
-    by_session = qs.filter(allocated_to_session__isnull=False).aggregate(
-        total=Sum("amount")
-    )["total"] or Decimal("0")
-    by_project = qs.filter(allocated_to_project__isnull=False).aggregate(
-        total=Sum("amount")
-    )["total"] or Decimal("0")
-    overhead = qs.filter(
-        allocated_to_session__isnull=True, allocated_to_project__isnull=True
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        agg = base_qs.aggregate(
+            total=Sum("amount"),
+            by_session=Sum("amount", filter=Q(allocated_to_session__isnull=False)),
+            by_project=Sum("amount", filter=Q(allocated_to_project__isnull=False)),
+            overhead=Sum("amount", filter=Q(is_overhead=True)),
+        )
 
-    return render(
-        request,
-        "financial/expense_report.html",
-        {
-            "form": form,
-            "total": total,
-            "by_category": by_category,
-            "by_session": by_session,
-            "by_project": by_project,
-            "overhead": overhead,
-            "date_from": date_from,
-            "date_to": date_to,
-        },
-    )
+        by_category = (
+            base_qs.values(
+                "category__name", "category__color", "category__is_direct_cost"
+            )
+            .annotate(total=Sum("amount"), count=Count("id"))
+            .order_by("-total")
+        )
+
+        all_qs = Expense.objects.filter(date__range=[date_from, date_to])
+        approval_agg = all_qs.aggregate(
+            approved_total=Sum(
+                "amount", filter=Q(approval_status=Expense.ApprovalStatus.APPROVED)
+            ),
+            approved_count=Count(
+                "id", filter=Q(approval_status=Expense.ApprovalStatus.APPROVED)
+            ),
+            pending_total=Sum(
+                "amount", filter=Q(approval_status=Expense.ApprovalStatus.PENDING)
+            ),
+            pending_count=Count(
+                "id", filter=Q(approval_status=Expense.ApprovalStatus.PENDING)
+            ),
+            rejected_total=Sum(
+                "amount", filter=Q(approval_status=Expense.ApprovalStatus.REJECTED)
+            ),
+            rejected_count=Count(
+                "id", filter=Q(approval_status=Expense.ApprovalStatus.REJECTED)
+            ),
+        )
+        missing_qs = all_qs.filter(receipt="", receipt_missing=False)
+
+        context.update(
+            {
+                "date_from": date_from,
+                "date_to": date_to,
+                "total": agg["total"] or Decimal("0"),
+                "by_session": agg["by_session"] or Decimal("0"),
+                "by_project": agg["by_project"] or Decimal("0"),
+                "overhead": agg["overhead"] or Decimal("0"),
+                "by_category": by_category,
+                "approved_total": approval_agg["approved_total"] or Decimal("0"),
+                "approved_count": approval_agg["approved_count"] or 0,
+                "pending_total": approval_agg["pending_total"] or Decimal("0"),
+                "pending_count": approval_agg["pending_count"] or 0,
+                "rejected_total": approval_agg["rejected_total"] or Decimal("0"),
+                "rejected_count": approval_agg["rejected_count"] or 0,
+                "missing_receipt_count": missing_qs.count(),
+                "missing_receipt_amount": missing_qs.aggregate(s=Sum("amount"))["s"]
+                or Decimal("0"),
+            }
+        )
+
+    return render(request, "financial/expense_report.html", context)
 
 
 @admin_required
 def margin_report(request):
     from formations.models import Session
-
-    form = ReportFilterForm(request.GET or None)
-    date_from, date_to = current_year_range()
-
-    if form.is_valid():
-        date_from, date_to = resolve_date_range(form.cleaned_data)
-
-    completed_sessions = Session.objects.filter(
-        status=Session.STATUS_COMPLETED,
-        date_start__gte=date_from,
-        date_end__lte=date_to,
-    ).select_related("formation", "client")
-
-    session_margins = [{"session": s, **session_margin(s)} for s in completed_sessions]
-
     from etudes.models import StudyProject
 
-    projects = StudyProject.objects.filter(
-        status=StudyProject.STATUS_COMPLETED,
-        actual_end_date__range=[date_from, date_to],
-    ).select_related("client")
-
-    project_margins = [
-        {
-            "project": p,
-            "budget": p.budget,
-            "expenses": p.total_expenses,
-            "margin": p.margin,
-            "margin_rate": p.margin_rate,
-        }
-        for p in projects
-    ]
+    sessions = (
+        Session.objects.filter(status=Session.STATUS_COMPLETED)
+        .select_related("formation", "client")
+        .order_by("-date_start")[:50]
+    )
+    projects = (
+        StudyProject.objects.filter(status=StudyProject.STATUS_COMPLETED)
+        .select_related("client")
+        .order_by("-start_date")[:50]
+    )
 
     return render(
         request,
         "financial/margin_report.html",
         {
-            "form": form,
-            "session_margins": session_margins,
-            "project_margins": project_margins,
-            "date_from": date_from,
-            "date_to": date_to,
+            "session_margins": [{"session": s, **session_margin(s)} for s in sessions],
+            "project_margins": [{"project": p, **project_margin(p)} for p in projects],
         },
     )
 
 
 @admin_required
 def revenue_chart_data(request):
-    """AJAX — monthly revenue breakdown for charting."""
     form = ReportFilterForm(request.GET or None)
-    date_from, date_to = current_year_range()
-
-    if form.is_valid():
+    if not form.is_valid():
+        date_from, date_to = current_year_range()
+    else:
         date_from, date_to = resolve_date_range(form.cleaned_data)
 
-    monthly = revenue_by_month(date_from, date_to)
-    # Convert Decimal to float for JSON serialisation
-    payload = [
-        {
-            "month": row["month"],
-            "formation_ht": float(row["formation_ht"]),
-            "etude_ht": float(row["etude_ht"]),
-            "total_ht": float(row["total_ht"]),
-        }
-        for row in monthly
-    ]
-    return JsonResponse({"data": payload})
+    data = revenue_by_month(date_from, date_to)
+    for row in data:
+        row["formation_ht"] = float(row["formation_ht"])
+        row["etude_ht"] = float(row["etude_ht"])
+        row["total_ht"] = float(row["total_ht"])
+
+    return JsonResponse({"data": data})

@@ -1,4 +1,4 @@
-# core/forms.py
+# core/forms.py  —  v3.0
 
 from django import forms
 from core.models import BureauEtudeInfo, FormationInfo, InstituteInfo
@@ -17,9 +17,11 @@ class InstituteInfoForm(forms.ModelForm):
             "phone": "Téléphone",
             "email": "Email",
             "website": "Site web",
-            "registration_number": "Numéro RC",
+            "rc": "Numéro RC",
             "nif": "NIF",
             "nis": "NIS",
+            "article_imposition": "Article d'imposition (A.I.)",
+            "agrement_number": "N° Agrément",
             "bank_name": "Banque",
             "bank_account": "Numéro de compte",
             "bank_rib": "RIB",
@@ -51,7 +53,8 @@ class FormationInfoForm(forms.ModelForm):
             "address": "Adresse spécifique",
             "phone": "Téléphone",
             "email": "Email",
-            "invoice_prefix": "Préfixe des factures",
+            "invoice_prefix": "Préfixe des factures finales",
+            "proforma_prefix": "Préfixe des proformas",
             "tva_applicable": "TVA applicable",
             "tva_rate": "Taux de TVA",
             "director_name": "Nom du directeur",
@@ -69,7 +72,7 @@ class FormationInfoForm(forms.ModelForm):
         rate = self.cleaned_data.get("tva_rate")
         if rate is not None and not (0 <= rate <= 1):
             raise forms.ValidationError(
-                "Le taux de TVA doit être compris entre 0 et 1 (ex. 0.19 pour 19%)."
+                "Le taux doit être compris entre 0 et 1 (ex. 0.09 pour 9%)."
             )
         return rate
 
@@ -81,10 +84,23 @@ class FormationInfoForm(forms.ModelForm):
             )
         return val
 
-    def clean_invoice_prefix(self):
-        prefix = self.cleaned_data.get("invoice_prefix", "").strip().upper()
+    def _clean_prefix(self, field_name):
+        prefix = self.cleaned_data.get(field_name, "").strip().upper()
         if not prefix:
             raise forms.ValidationError("Le préfixe est obligatoire.")
+        return prefix
+
+    def clean_invoice_prefix(self):
+        return self._clean_prefix("invoice_prefix")
+
+    def clean_proforma_prefix(self):
+        prefix = self._clean_prefix("proforma_prefix")
+        # Must differ from the final invoice prefix
+        final = self.cleaned_data.get("invoice_prefix", "").strip().upper()
+        if final and prefix == final:
+            raise forms.ValidationError(
+                "Le préfixe proforma doit être différent du préfixe des factures finales."
+            )
         return prefix
 
 
@@ -98,7 +114,8 @@ class BureauEtudeInfoForm(forms.ModelForm):
             "address": "Adresse spécifique",
             "phone": "Téléphone",
             "email": "Email",
-            "invoice_prefix": "Préfixe des factures",
+            "invoice_prefix": "Préfixe des factures finales",
+            "proforma_prefix": "Préfixe des proformas",
             "tva_applicable": "TVA applicable",
             "tva_rate": "Taux de TVA",
             "chief_engineer_name": "Ingénieur en chef",
@@ -114,19 +131,36 @@ class BureauEtudeInfoForm(forms.ModelForm):
         rate = self.cleaned_data.get("tva_rate")
         if rate is not None and not (0 <= rate <= 1):
             raise forms.ValidationError(
-                "Le taux de TVA doit être compris entre 0 et 1 (ex. 0.19 pour 19%)."
+                "Le taux doit être compris entre 0 et 1 (ex. 0.19 pour 19%)."
             )
         return rate
 
-    def clean_invoice_prefix(self):
-        prefix = self.cleaned_data.get("invoice_prefix", "").strip().upper()
+    def _clean_prefix(self, field_name):
+        prefix = self.cleaned_data.get(field_name, "").strip().upper()
         if not prefix:
             raise forms.ValidationError("Le préfixe est obligatoire.")
-        # Ensure prefix doesn't clash with the other business line
-        from core.models import FormationInfo
+        return prefix
 
-        other = FormationInfo.get_instance().invoice_prefix
-        if prefix == other:
+    def clean_invoice_prefix(self):
+        prefix = self._clean_prefix("invoice_prefix")
+        # Must not clash with the formations final prefix
+        formation_prefix = FormationInfo.get_instance().invoice_prefix.upper()
+        if prefix == formation_prefix:
+            raise forms.ValidationError(
+                f"Le préfixe « {prefix} » est déjà utilisé par le centre de formation."
+            )
+        return prefix
+
+    def clean_proforma_prefix(self):
+        prefix = self._clean_prefix("proforma_prefix")
+        final = self.cleaned_data.get("invoice_prefix", "").strip().upper()
+        if final and prefix == final:
+            raise forms.ValidationError(
+                "Le préfixe proforma doit être différent du préfixe des factures finales."
+            )
+        # Also must not clash with formation proforma prefix
+        formation_pf_prefix = FormationInfo.get_instance().proforma_prefix.upper()
+        if prefix == formation_pf_prefix:
             raise forms.ValidationError(
                 f"Le préfixe « {prefix} » est déjà utilisé par le centre de formation."
             )
