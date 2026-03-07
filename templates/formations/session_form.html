@@ -10,6 +10,11 @@
 {% endblock %}
 {% block breadcrumb_active %}{{ action }}{% endblock %}
 
+{% block extra_head %}
+<!-- Flatpickr — DD/MM/YYYY date display -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+{% endblock %}
+
 {% block content %}
 <div class="fade-up">
 
@@ -27,7 +32,7 @@
     {% csrf_token %}
     <div class="row g-4">
 
-      <!-- ── Main column ──────────────────────────────────────────── -->
+      <!-- ── Main column ─────────────────────────────────────────── -->
       <div class="col-lg-8">
         <div class="isi-card mb-4">
           <div class="isi-card-header">
@@ -71,27 +76,36 @@
             <div class="form-section-title">Dates</div>
             <div class="row g-3 mb-4">
               <div class="col-sm-6">
-                <label class="form-label" for="{{ form.date_start.id_for_label }}">Date de début <span style="color:var(--danger);">*</span></label>
+                <label class="form-label" for="{{ form.date_start.id_for_label }}">
+                  Date de début <span style="color:var(--danger);">*</span>
+                </label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-calendar-event-fill"></i>
-                  <input type="date" name="{{ form.date_start.html_name }}" id="{{ form.date_start.id_for_label }}"
+                  <!-- type="text" + flatpickr → displays DD/MM/YYYY, submits YYYY-MM-DD via hidden alt input -->
+                  <input type="text" id="{{ form.date_start.id_for_label }}_display"
                          class="form-control {% if form.date_start.errors %}is-invalid{% endif %}"
+                         placeholder="JJ/MM/AAAA" autocomplete="off">
+                  <input type="hidden" name="{{ form.date_start.html_name }}" id="{{ form.date_start.id_for_label }}"
                          value="{{ form.date_start.value|default:'' }}">
                 </div>
                 {% if form.date_start.errors %}<div class="invalid-feedback d-block">{{ form.date_start.errors|join:", " }}</div>{% endif %}
               </div>
               <div class="col-sm-6">
-                <label class="form-label" for="{{ form.date_end.id_for_label }}">Date de fin <span style="color:var(--danger);">*</span></label>
+                <label class="form-label" for="{{ form.date_end.id_for_label }}">
+                  Date de fin <span style="color:var(--danger);">*</span>
+                </label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-calendar-event-fill"></i>
-                  <input type="date" name="{{ form.date_end.html_name }}" id="{{ form.date_end.id_for_label }}"
+                  <input type="text" id="{{ form.date_end.id_for_label }}_display"
                          class="form-control {% if form.date_end.errors %}is-invalid{% endif %}"
+                         placeholder="JJ/MM/AAAA" autocomplete="off">
+                  <input type="hidden" name="{{ form.date_end.html_name }}" id="{{ form.date_end.id_for_label }}"
                          value="{{ form.date_end.value|default:'' }}">
                 </div>
                 {% if form.date_end.errors %}<div class="invalid-feedback d-block">{{ form.date_end.errors|join:", " }}</div>{% endif %}
               </div>
 
-              <!-- ── Duration overflow notification ─────────────── -->
+              <!-- Duration overflow notification -->
               <div class="col-12" id="notif-duration-wrap" style="display:none;">
                 <div class="sn-box sn-warning">
                   <i class="bi bi-exclamation-triangle-fill sn-icon"></i>
@@ -103,7 +117,6 @@
                   </div>
                 </div>
               </div>
-              <!-- ─────────────────────────────────────────────────── -->
             </div>
 
             <!-- Lieu et intervenant -->
@@ -124,7 +137,18 @@
                   {% endfor %}
                 </select>
                 {% if form.trainer.errors %}<div class="invalid-feedback d-block">{{ form.trainer.errors|join:", " }}</div>{% endif %}
-                <!-- Trainer quick-action (always visible) -->
+                <!-- Trainer booking conflict -->
+                <div id="notif-trainer-wrap" style="display:none;margin-top:8px;">
+                  <div class="sn-box sn-warning">
+                    <i class="bi bi-person-fill-exclamation sn-icon"></i>
+                    <div class="sn-body">
+                      <div class="sn-text" id="notif-trainer-text"></div>
+                      <a href="{% url 'resources:trainer_create' %}" class="sn-action" target="_blank">
+                        <i class="bi bi-plus-lg"></i> Ajouter un nouveau formateur
+                      </a>
+                    </div>
+                  </div>
+                </div>
                 <div class="sn-box sn-info" style="margin-top:8px;">
                   <i class="bi bi-person-plus-fill sn-icon" style="color:var(--accent);"></i>
                   <div class="sn-body" style="flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -155,6 +179,18 @@
                     <i class="bi bi-door-closed-fill sn-icon"></i>
                     <div class="sn-body">
                       <div class="sn-text" id="notif-room-text"></div>
+                      <a href="{% url 'resources:room_create' %}" class="sn-action" target="_blank">
+                        <i class="bi bi-plus-lg"></i> Créer une nouvelle salle
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <!-- Room booking conflict -->
+                <div id="notif-room-booking-wrap" style="display:none;margin-top:8px;">
+                  <div class="sn-box sn-warning">
+                    <i class="bi bi-calendar-x-fill sn-icon"></i>
+                    <div class="sn-body">
+                      <div class="sn-text" id="notif-room-booking-text"></div>
                       <a href="{% url 'resources:room_create' %}" class="sn-action" target="_blank">
                         <i class="bi bi-plus-lg"></i> Créer une nouvelle salle
                       </a>
@@ -229,16 +265,16 @@
               <input type="number" name="{{ form.session_hours.html_name }}" id="{{ form.session_hours.id_for_label }}"
                      class="form-control {% if form.session_hours.errors %}is-invalid{% endif %}"
                      value="{{ form.session_hours.value|default:'' }}" min="0.5" step="0.5"
-                     placeholder="Ex. 8">
+                     placeholder="Auto-calculé depuis les dates">
               {% if form.session_hours.errors %}<div class="invalid-feedback d-block">{{ form.session_hours.errors|join:", " }}</div>{% endif %}
               <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
-                Sert au calcul automatique du prix : prix_formation / h_totales × h_session.
+                Calculé automatiquement : h/jour × jours de la session.
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Tarif -->
+        <!-- Tarification -->
         <div class="isi-card mb-4">
           <div class="isi-card-header">
             <div class="card-icon amber"><i class="bi bi-currency-exchange"></i></div>
@@ -255,11 +291,11 @@
                      placeholder="Auto-calculé">
               {% if form.price_per_participant.errors %}<div class="invalid-feedback d-block">{{ form.price_per_participant.errors|join:", " }}</div>{% endif %}
               <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
-                Auto-calculé depuis la formation. Modifiable manuellement.
+                = prix_base ÷ h_totales × h_session. Modifiable manuellement.
               </div>
             </div>
 
-            <!-- ── Auto-price hint ──────────────────────────────── -->
+            <!-- Auto-price formula hint -->
             <div id="price-hint" style="display:none;margin-top:10px;" class="sn-box sn-info">
               <i class="bi bi-calculator sn-icon" style="color:var(--accent);"></i>
               <div class="sn-body">
@@ -267,7 +303,7 @@
               </div>
             </div>
 
-            <!-- ── Revenue overflow notification ──────────────── -->
+            <!-- Revenue overflow (per-person) -->
             <div id="notif-revenue-wrap" style="display:none;margin-top:10px;">
               <div class="sn-box sn-warning">
                 <i class="bi bi-graph-up-arrow sn-icon"></i>
@@ -279,7 +315,6 @@
                 </div>
               </div>
             </div>
-            <!-- ─────────────────────────────────────────────────── -->
           </div>
         </div>
 
@@ -289,7 +324,7 @@
   </form>
 </div>
 
-<!-- ── Notification styles ────────────────────────────────────────── -->
+<!-- ── Styles ─────────────────────────────────────────────────────── -->
 <style>
 .sn-box { display:flex; align-items:flex-start; gap:10px; border-radius:8px; padding:10px 14px; font-size:12.5px; line-height:1.5; }
 .sn-warning { background:#fffbeb; border:1px solid #fcd34d; }
@@ -303,26 +338,42 @@
   border:1px solid currentColor; border-radius:5px; width:fit-content; transition:background .15s;
 }
 .sn-action:hover { background:#fef3c7; color:var(--accent,#F59E0B); }
+
+/* Flatpickr calendar accent override */
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover { background: var(--accent,#F59E0B); border-color: var(--accent,#F59E0B); }
 </style>
 
-<!-- ── Smart-notification JS ──────────────────────────────────────── -->
+<!-- ── Flatpickr ───────────────────────────────────────────────────── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/fr.min.js"></script>
+
+<!-- ── Smart JS ───────────────────────────────────────────────────── -->
 <script>
 (function () {
-  /* ── Server-side data ─────────────────────────────────────────── */
-  const ROOM_CAPS   = {{ room_capacities_json|safe }};
-  const FORM_DATA   = {{ formation_data_json|safe }};
+  /* ── Server data ───────────────────────────────────────────────── */
+  const ROOM_CAPS        = {{ room_capacities_json|safe }};
+  const FORM_DATA        = {{ formation_data_json|safe }};
+  const TRAINER_BOOKINGS = {{ trainer_bookings_json|safe }};
+  const ROOM_BOOKINGS    = {{ room_bookings_json|safe }};
 
   /* ── DOM refs ──────────────────────────────────────────────────── */
   const selFormation = document.getElementById('{{ form.formation.id_for_label }}');
   const selRoom      = document.getElementById('{{ form.room.id_for_label }}');
+  const selTrainer   = document.getElementById('{{ form.trainer.id_for_label }}');
+  const selClient    = document.getElementById('{{ form.client.id_for_label }}');
   const inpCapacity  = document.getElementById('{{ form.capacity.id_for_label }}');
-  const inpStart     = document.getElementById('{{ form.date_start.id_for_label }}');
-  const inpEnd       = document.getElementById('{{ form.date_end.id_for_label }}');
+  const hidStart     = document.getElementById('{{ form.date_start.id_for_label }}');
+  const hidEnd       = document.getElementById('{{ form.date_end.id_for_label }}');
   const inpHours     = document.getElementById('{{ form.session_hours.id_for_label }}');
   const inpPrice     = document.getElementById('{{ form.price_per_participant.id_for_label }}');
 
   const roomWrap    = document.getElementById('notif-room-wrap');
   const roomText    = document.getElementById('notif-room-text');
+  const roomBkWrap  = document.getElementById('notif-room-booking-wrap');
+  const roomBkText  = document.getElementById('notif-room-booking-text');
+  const trnrWrap    = document.getElementById('notif-trainer-wrap');
+  const trnrText    = document.getElementById('notif-trainer-text');
   const durWrap     = document.getElementById('notif-duration-wrap');
   const durText     = document.getElementById('notif-duration-text');
   const durLink     = document.getElementById('notif-duration-link');
@@ -332,9 +383,41 @@
   const priceHint   = document.getElementById('price-hint');
   const priceHintTx = document.getElementById('price-hint-text');
 
+  /* ── Prev-session dynamic banner ──────────────────────────────── */
+  const _prevBanner = (() => {
+    const el = document.createElement('div');
+    el.id = 'js-prev-session-banner';
+    el.style.cssText = 'display:none;align-items:flex-start;gap:10px;border-radius:8px;padding:11px 16px;margin-bottom:20px;font-size:13px;background:#eff6ff;border:1px solid #bfdbfe;';
+    el.innerHTML = '<i class="bi bi-people-fill" style="flex-shrink:0;margin-top:2px;color:#3B82F6;"></i><span id="_prev-banner-txt" style="color:#1e40af;"></span>';
+    const formEl = document.querySelector('form[method="post"]');
+    if (formEl) formEl.parentNode.insertBefore(el, formEl);
+    return el;
+  })();
+  function updatePrevBanner(fd) {
+    const txt = document.getElementById('_prev-banner-txt');
+    if (!_prevBanner || !txt) return;
+    if (fd && fd.prev_session_date) {
+      if (fd.prev_participant_count > 0) {
+        txt.innerHTML = '<strong>' + fd.prev_participant_count + ' participant(s) de la session précédente</strong> (' + fd.prev_session_date + ') seront copiés automatiquement à la création. Vous pourrez les modifier ensuite.';
+      } else if (fd.prev_client_name) {
+        txt.textContent = 'Client pré-rempli d\'après la session précédente (' + fd.prev_session_date + '). Aucun participant à copier.';
+      } else { _prevBanner.style.display = 'none'; return; }
+      _prevBanner.style.display = 'flex';
+    } else {
+      _prevBanner.style.display = 'none';
+    }
+  }
+
   /* ── Helpers ───────────────────────────────────────────────────── */
   const show = el => { if (el) el.style.display = 'block'; };
   const hide = el => { if (el) el.style.display = 'none';  };
+  const fmt  = n  => Math.round(n).toLocaleString('fr-DZ');
+
+  function isoDate(d) {
+    return d.getFullYear() + '-'
+      + String(d.getMonth() + 1).padStart(2, '0') + '-'
+      + String(d.getDate()).padStart(2, '0');
+  }
 
   function daysBetween(s, e) {
     if (!s || !e) return null;
@@ -343,15 +426,63 @@
     return Math.round((ed - sd) / 86400000) + 1;
   }
 
-  function fmt(n) {
-    /* Format a number with spaces as thousand separators, no decimals */
-    return Math.round(n).toLocaleString('fr-DZ');
+  /* ── Flatpickr setup — DD/MM/YYYY display, hidden YYYY-MM-DD value */
+  function makePicker(displayId, hiddenEl, onDateChange) {
+    const displayEl = document.getElementById(displayId);
+    if (!displayEl || !hiddenEl) return null;
+
+    const initDate = hiddenEl.value || null;
+
+    function syncAndNotify(selectedDates) {
+      hiddenEl.value = selectedDates.length ? isoDate(selectedDates[0]) : '';
+      onDateChange && onDateChange();
+    }
+
+    return flatpickr(displayEl, {
+      locale: 'fr',
+      dateFormat: 'd/m/Y',
+      allowInput: true,
+      defaultDate: initDate,
+      onChange: syncAndNotify,
+      onClose:  syncAndNotify,
+      onReady(selectedDates) {
+        if (selectedDates.length) hiddenEl.value = isoDate(selectedDates[0]);
+        setTimeout(() => { onDateChange && onDateChange(); }, 0);
+      },
+    });
   }
 
-  /* Track whether the price was set by auto-calc so manual edits are respected */
-  let _autoCalcActive = false;
+  const fpStart = makePicker(
+    '{{ form.date_start.id_for_label }}_display', hidStart,
+    () => { autoFillSessionHours(); checkDuration(); checkTrainer(); checkRoomBooking(); }
+  );
+  const fpEnd = makePicker(
+    '{{ form.date_end.id_for_label }}_display', hidEnd,
+    () => { autoFillSessionHours(); checkDuration(); checkTrainer(); checkRoomBooking(); }
+  );
 
-  /* ── 1. Auto-calculate price from session_hours + formation ───── */
+  /* ── Track whether price was manually edited ───────────────────── */
+  let _priceManual = false;
+  inpPrice && inpPrice.addEventListener('input', () => {
+    _priceManual = true;
+    checkRevenue();
+  });
+
+  /* ── Auto-fill session_hours from date range ───────────────────── */
+  function autoFillSessionHours() {
+    const pk = selFormation ? selFormation.value : '';
+    const fd = pk ? FORM_DATA[pk] : null;
+    if (!fd || !fd.hours_per_day) return;
+
+    const days = daysBetween(hidStart ? hidStart.value : '', hidEnd ? hidEnd.value : '');
+    if (days === null) return;
+
+    const computed = Math.round(fd.hours_per_day * days * 10) / 10;  // 1 decimal
+    if (inpHours) inpHours.value = computed;
+    calcPrice();
+  }
+
+  /* ── Auto-calculate price = base_price / duration_hours × session_hours */
   function calcPrice() {
     const pk = selFormation ? selFormation.value : '';
     const fd = pk ? FORM_DATA[pk] : null;
@@ -364,21 +495,19 @@
 
     const suggested = Math.round(fd.base_price / fd.duration_hours * sh);
 
-    /* Show hint always */
     priceHintTx.textContent =
-      `Prix suggéré : ${fmt(suggested)} DA ` +
+      `Prix suggéré : ${fmt(suggested)} DA/pers. ` +
       `(${fmt(fd.base_price)} DA ÷ ${fd.duration_hours}h × ${sh}h)`;
     show(priceHint);
 
-    /* Only auto-fill if field is empty or was previously auto-filled */
-    const current = parseFloat(inpPrice ? inpPrice.value : '');
-    if (inpPrice && (isNaN(current) || _autoCalcActive)) {
+    if (inpPrice && (!_priceManual || inpPrice.value === '')) {
       inpPrice.value = suggested;
-      _autoCalcActive = true;
+      _priceManual = false;
     }
+    checkRevenue();
   }
 
-  /* ── 2. Room capacity check ────────────────────────────────────── */
+  /* ── Room capacity check ───────────────────────────────────────── */
   function checkRoom() {
     const pk  = selRoom ? selRoom.value : '';
     const cap = parseInt(inpCapacity ? inpCapacity.value : '', 10);
@@ -394,10 +523,52 @@
     hide(roomWrap);
   }
 
-  /* ── 3. Formation day-duration overflow ────────────────────────── */
+  /* ── Overlap helper ────────────────────────────────────────────── */
+  function overlaps(aStart, aEnd, bStart, bEnd) {
+    return aStart <= bEnd && aEnd >= bStart;
+  }
+  function getDateRange() {
+    return { s: hidStart ? hidStart.value : '', e: hidEnd ? hidEnd.value : '' };
+  }
+
+  /* ── Trainer booking conflict check ───────────────────────────── */
+  function checkTrainer() {
+    const pk = selTrainer ? selTrainer.value : '';
+    hide(trnrWrap);
+    if (!pk) return;
+    const { s, e } = getDateRange();
+    if (!s || !e) return;
+    const bookings = TRAINER_BOOKINGS[pk] || [];
+    const conflict = bookings.find(b => overlaps(s, e, b.date_start, b.date_end));
+    if (conflict) {
+      trnrText.textContent =
+        `Ce formateur est déjà affecté à la session « ${conflict.label} » ` +
+        `qui chevauche cette période. Choisissez un autre formateur ou ajoutez-en un nouveau.`;
+      show(trnrWrap);
+    }
+  }
+
+  /* ── Room booking conflict check ──────────────────────────────── */
+  function checkRoomBooking() {
+    const pk = selRoom ? selRoom.value : '';
+    hide(roomBkWrap);
+    if (!pk) return;
+    const { s, e } = getDateRange();
+    if (!s || !e) return;
+    const bookings = ROOM_BOOKINGS[pk] || [];
+    const conflict = bookings.find(b => overlaps(s, e, b.date_start, b.date_end));
+    if (conflict) {
+      roomBkText.textContent =
+        `Cette salle est déjà réservée pour la session « ${conflict.label} » ` +
+        `qui chevauche cette période. Choisissez une autre salle ou créez-en une nouvelle.`;
+      show(roomBkWrap);
+    }
+  }
+
+  /* ── Formation day-duration overflow ───────────────────────────── */
   function checkDuration() {
     const pk   = selFormation ? selFormation.value : '';
-    const days = daysBetween(inpStart ? inpStart.value : '', inpEnd ? inpEnd.value : '');
+    const days = daysBetween(hidStart ? hidStart.value : '', hidEnd ? hidEnd.value : '');
     const fd   = pk ? FORM_DATA[pk] : null;
     if (!fd || fd.duration_days === null || days === null) { hide(durWrap); return; }
 
@@ -415,31 +586,34 @@
     }
   }
 
-  /* ── 4. Total revenue overflow ─────────────────────────────────── */
+  /* ── Per-person price overflow ─────────────────────────────────── */
+  /*
+   * base_price is the price per participant for the FULL programme.
+   * The sum of price_per_participant across all sessions for this formation
+   * should not exceed base_price.
+   */
   function checkRevenue() {
     const pk  = selFormation ? selFormation.value : '';
     const fd  = pk ? FORM_DATA[pk] : null;
     if (!fd || !fd.base_price) { hide(revWrap); return; }
 
     const price = parseFloat(inpPrice ? inpPrice.value : '');
-    const cap   = parseInt(inpCapacity ? inpCapacity.value : '', 10);
-    if (isNaN(price) || isNaN(cap) || cap <= 0) { hide(revWrap); return; }
+    if (isNaN(price) || price <= 0) { hide(revWrap); return; }
 
-    const thisRevenue  = price * cap;
-    const totalRevenue = fd.existing_revenue + thisRevenue;
+    const totalPerPerson = fd.existing_price_sum + price;
 
-    if (totalRevenue > fd.base_price) {
-      const excess   = totalRevenue - fd.base_price;
-      const newPrice = Math.ceil(totalRevenue);   // suggested new base_price
+    if (totalPerPerson > fd.base_price) {
+      const excess    = totalPerPerson - fd.base_price;
+      const newBase   = Math.ceil(totalPerPerson);
 
       revText.textContent =
-        `Le chiffre d'affaires total de cette formation après cette session serait de ` +
-        `${fmt(totalRevenue)} DA — soit ${fmt(excess)} DA de plus que le prix de base ` +
-        `(${fmt(fd.base_price)} DA). Mettez à jour le prix de base pour refléter cela.`;
+        `La somme des prix par participant sur toutes les sessions de cette formation ` +
+        `atteindrait ${fmt(totalPerPerson)} DA/pers. — soit ${fmt(excess)} DA de plus ` +
+        `que le prix de base (${fmt(fd.base_price)} DA/pers.). ` +
+        `Mettez à jour le prix de base pour refléter cela.`;
 
-      /* Build edit URL with pre-filled suggest_base_price param */
       const editUrl = new URL(fd.edit_url, window.location.origin);
-      editUrl.searchParams.set('suggest_base_price', newPrice);
+      editUrl.searchParams.set('suggest_base_price', newBase);
       revLink.href = editUrl.toString();
       show(revWrap);
     } else {
@@ -448,32 +622,69 @@
   }
 
   /* ── Wire events ───────────────────────────────────────────────── */
-  /* Price becomes "manual" if the user edits the field directly */
-  inpPrice && inpPrice.addEventListener('input', () => { _autoCalcActive = false; checkRevenue(); });
+  selFormation && selFormation.addEventListener('change', () => {
+    _priceManual = false;
+    const pk = selFormation.value;
+    const fd = pk ? FORM_DATA[pk] : null;
 
-  [selFormation, inpHours].forEach(el => {
-    if (!el) return;
-    el.addEventListener('change', () => { calcPrice(); checkRevenue(); checkDuration(); });
-    el.addEventListener('input',  () => { calcPrice(); checkRevenue(); });
+    if (fd) {
+      const todayIso = isoDate(new Date());
+      if (!hidStart.value) {
+        hidStart.value = todayIso;
+        if (fpStart) fpStart.setDate(new Date(), false);
+      }
+      if (!hidEnd.value) {
+        hidEnd.value = todayIso;
+        if (fpEnd) fpEnd.setDate(new Date(), false);
+      }
+      if (fd.max_participants && inpCapacity) inpCapacity.value = fd.max_participants;
+      // Pre-fill client from previous session
+      if (selClient && fd.prev_client_id) selClient.value = fd.prev_client_id;
+      updatePrevBanner(fd);
+    } else {
+      updatePrevBanner(null);
+    }
+
+    autoFillSessionHours();
+    calcPrice();
+    checkDuration();
+    checkRevenue();
+    checkTrainer();
+    checkRoomBooking();
   });
+
+  inpHours && inpHours.addEventListener('input', () => { _priceManual = false; calcPrice(); });
 
   [selRoom, inpCapacity].forEach(el => {
     if (!el) return;
-    el.addEventListener('change', () => { checkRoom(); checkRevenue(); });
-    el.addEventListener('input',  () => { checkRoom(); checkRevenue(); });
+    el.addEventListener('change', () => { checkRoom(); checkRoomBooking(); });
+    el.addEventListener('input',  () => { checkRoom(); checkRoomBooking(); });
   });
 
-  [inpStart, inpEnd].forEach(el => {
-    if (!el) return;
-    el.addEventListener('change', checkDuration);
-    el.addEventListener('input',  checkDuration);
-  });
+  selTrainer && selTrainer.addEventListener('change', checkTrainer);
 
-  /* Run once on load for pre-filled forms */
-  calcPrice();
+  /* ── Initial run ───────────────────────────────────────────────── */
+  // If a formation is already selected on page load (e.g. ?formation=X) but
+  // dates were not pre-populated by the server, default both to today so that
+  // onReady → autoFillSessionHours → calcPrice produce correct values.
+  if (selFormation && selFormation.value && FORM_DATA[selFormation.value]) {
+    const todayIso = isoDate(new Date());
+    if (!hidStart.value) hidStart.value = todayIso;
+    if (!hidEnd.value)   hidEnd.value   = todayIso;
+    // Update the flatpickr display inputs to match (no triggerChange needed —
+    // onReady will fire autoFillSessionHours via the deferred setTimeout).
+    if (fpStart && !fpStart.selectedDates.length) fpStart.setDate(hidStart.value, false);
+    if (fpEnd   && !fpEnd.selectedDates.length)   fpEnd.setDate(hidEnd.value,   false);
+    // Also set capacity from formation if field is still at default
+    const fd = FORM_DATA[selFormation.value];
+    if (fd && fd.max_participants && inpCapacity && !inpCapacity.dataset.userEdited) {
+      inpCapacity.value = fd.max_participants;
+    }
+  }
   checkRoom();
-  checkDuration();
   checkRevenue();
+  checkTrainer();
+  checkRoomBooking();
 })();
 </script>
 {% endblock %}

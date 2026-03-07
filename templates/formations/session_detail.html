@@ -188,7 +188,14 @@
           </div>
         </div>
 
+        {% if participants and session.status == 'planned' and messages %}{% endif %}
         {% if participants %}
+        {% for msg in messages %}{% if 'repris' in msg.message %}
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 20px;background:#eff6ff;border-bottom:1px solid #bfdbfe;font-size:12.5px;">
+          <i class="bi bi-people-fill" style="color:#3B82F6;flex-shrink:0;margin-top:1px;"></i>
+          <span style="color:#1e40af;">{{ msg.message }}</span>
+        </div>
+        {% endif %}{% endfor %}
         <div style="overflow-x:auto;">
           <table class="isi-table">
             <thead>

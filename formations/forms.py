@@ -125,6 +125,7 @@ class SessionForm(forms.ModelForm):
             "room",
             "external_location",
             "capacity",
+            "session_hours",
             "price_per_participant",
             "notes",
         ]
@@ -137,6 +138,7 @@ class SessionForm(forms.ModelForm):
             "room": "Salle",
             "external_location": "Lieu externe",
             "capacity": "Capacité",
+            "session_hours": "Durée de la session (heures)",
             "price_per_participant": "Prix / participant (DA)",
             "notes": "Notes",
         }

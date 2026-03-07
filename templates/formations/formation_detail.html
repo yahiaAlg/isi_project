@@ -69,9 +69,40 @@
               </div>
               <div>
                 <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;font-weight:600;margin-bottom:3px;">Capacité</div>
-                <div style="font-weight:600;">{{ formation.min_participants }}–{{ formation.max_participants }}</div>
+                <div style="font-weight:600;">{{ formation.min_participants }}–{{ formation.max_participants }}
+                  {% if capacity_conflicts %}<i class="bi bi-exclamation-triangle-fill" style="color:#F59E0B;font-size:13px;margin-left:4px;"></i>{% endif %}
+                </div>
               </div>
             </div>
+
+            {% if capacity_conflicts %}
+            <div class="section-divider" style="margin:4px 0;"></div>
+            <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;font-size:12px;">
+              <div style="font-weight:700;color:#92400e;margin-bottom:6px;">
+                <i class="bi bi-exclamation-triangle-fill" style="color:#F59E0B;"></i> Conflit de capacité
+              </div>
+              <div style="color:#92400e;margin-bottom:8px;">
+                {{ capacity_conflicts|length }} session(s) ont une capacité de <strong>{{ max_session_capacity }}</strong> participants,
+                supérieure au maximum actuel de <strong>{{ formation.max_participants }}</strong>.
+              </div>
+              <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:8px;">
+                {% for c in capacity_conflicts %}
+                <div style="font-size:11.5px;color:#78350f;">
+                  <i class="bi bi-calendar3-fill" style="color:#F59E0B;"></i>
+                  Session du {{ c.date }} — {{ c.capacity }} participants
+                </div>
+                {% endfor %}
+              </div>
+              <form method="post" action="{% url 'formations:formation_sync_capacities' formation.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit"
+                        onclick="return confirm('Ramener la capacité de toutes les sessions à {{ formation.max_participants }} participants ?')"
+                        style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:#F59E0B;background:none;border:1px solid #F59E0B;border-radius:5px;padding:3px 10px;cursor:pointer;">
+                  <i class="bi bi-arrow-down-circle-fill"></i> Aligner les sessions (→ {{ formation.max_participants }})
+                </button>
+              </form>
+            </div>
+            {% endif %}
 
             {% if formation.accreditation_body %}
             <div class="section-divider" style="margin:4px 0;"></div>
@@ -164,6 +195,29 @@
             <i class="bi bi-plus-lg"></i> Planifier
           </a>
         </div>
+
+        {% if duration_reached %}
+        <div style="padding:10px 20px 0;">
+          <div style="display:flex;align-items:flex-start;gap:10px;border-radius:8px;padding:10px 14px;font-size:12.5px;background:#fffbeb;border:1px solid #fcd34d;">
+            <i class="bi bi-hourglass-bottom" style="flex-shrink:0;margin-top:2px;color:#F59E0B;"></i>
+            <div>
+              <strong style="color:#92400e;">Durée totale atteinte —</strong>
+              <span style="color:#92400e;"> {{ used_days }}j planifié(s) sur {{ formation.duration_days }}j prévus. Les nouvelles sessions dépasseront la durée définie.</span>
+              <a href="{% url 'formations:formation_edit' formation.pk %}" style="margin-left:6px;font-size:12px;font-weight:600;color:#F59E0B;text-decoration:none;">
+                <i class="bi bi-pencil-fill"></i> Modifier la durée
+              </a>
+            </div>
+          </div>
+        </div>
+        {% elif used_days and formation.duration_days %}
+        <div style="padding:10px 20px 0;">
+          <div style="font-size:12px;color:var(--text-muted);padding:6px 10px;background:#f8fafc;border-radius:6px;border:1px solid var(--card-border);">
+            <i class="bi bi-clock-history" style="color:var(--accent);"></i>
+            <strong>{{ used_days }}j</strong> utilisé(s) sur <strong>{{ formation.duration_days }}j</strong> —
+            il reste <strong>{{ remaining_days }}j</strong> disponibles.
+          </div>
+        </div>
+        {% endif %}
 
         {% if sessions %}
         <div style="overflow-x:auto;">

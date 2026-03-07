@@ -24,6 +24,7 @@ from formations.models import (
     FormationCategory,
     Participant,
     Session,
+    Trainer,
 )
 from formations.utils import (
     bulk_enroll_participants,
@@ -73,10 +74,50 @@ def formation_detail(request, pk):
     sessions = formation.sessions.select_related("client", "trainer").order_by(
         "-date_start"
     )[:10]
+
+    # Duration usage
+    all_active = formation.sessions.exclude(status=Session.STATUS_CANCELLED)
+    used_days = sum(
+        (s.date_end - s.date_start).days + 1
+        for s in all_active
+        if s.date_start and s.date_end
+    )
+    duration_reached = bool(
+        formation.duration_days and used_days >= formation.duration_days
+    )
+    remaining_days = max(0, (formation.duration_days or 0) - used_days)
+
+    # Capacity conflicts: active sessions whose capacity > formation.max_participants
+    active_sessions_list = list(
+        formation.sessions.filter(
+            status__in=[Session.STATUS_PLANNED, Session.STATUS_IN_PROGRESS]
+        )
+        .values("pk", "date_start", "capacity")
+        .order_by("date_start")
+    )
+    capacity_conflicts = [
+        {
+            "pk": s["pk"],
+            "date": s["date_start"].strftime("%d/%m/%Y"),
+            "capacity": s["capacity"],
+        }
+        for s in active_sessions_list
+        if s["capacity"] > formation.max_participants
+    ]
+    max_session_capacity = max((s["capacity"] for s in capacity_conflicts), default=0)
+
     return render(
         request,
         "formations/formation_detail.html",
-        {"formation": formation, "sessions": sessions},
+        {
+            "formation": formation,
+            "sessions": sessions,
+            "used_days": used_days,
+            "remaining_days": remaining_days,
+            "duration_reached": duration_reached,
+            "capacity_conflicts": capacity_conflicts,
+            "max_session_capacity": max_session_capacity,
+        },
     )
 
 
@@ -97,7 +138,6 @@ def formation_create(request):
 @admin_required
 def formation_edit(request, pk):
     formation = get_object_or_404(Formation, pk=pk)
-    # Accept ?suggest_base_price=XXXXX from session form's smart notification
     initial = {}
     suggest_price = request.GET.get("suggest_base_price")
     if suggest_price and request.method == "GET":
@@ -105,6 +145,12 @@ def formation_edit(request, pk):
             from decimal import Decimal
 
             initial["base_price"] = Decimal(suggest_price).quantize(Decimal("0.01"))
+        except Exception:
+            pass
+    suggest_max = request.GET.get("suggest_max")
+    if suggest_max and request.method == "GET":
+        try:
+            initial["max_participants"] = int(suggest_max)
         except Exception:
             pass
 
@@ -115,10 +161,32 @@ def formation_edit(request, pk):
         form.save()
         messages.success(request, "Formation mise à jour.")
         return redirect("formations:formation_detail", pk=pk)
+    import json as _json
+
+    active_sessions_list2 = list(
+        formation.sessions.filter(
+            status__in=[Session.STATUS_PLANNED, Session.STATUS_IN_PROGRESS]
+        )
+        .values("pk", "date_start", "capacity")
+        .order_by("date_start")
+    )
+    cap_conflicts = [
+        {
+            "pk": s["pk"],
+            "date": s["date_start"].strftime("%d/%m/%Y"),
+            "capacity": s["capacity"],
+        }
+        for s in active_sessions_list2
+    ]
     return render(
         request,
         "formations/formation_form.html",
-        {"form": form, "action": "Modifier", "formation": formation},
+        {
+            "form": form,
+            "action": "Modifier",
+            "formation": formation,
+            "session_capacity_conflicts_json": _json.dumps(cap_conflicts),
+        },
     )
 
 
@@ -131,6 +199,23 @@ def formation_deactivate(request, pk):
     formation.save(update_fields=["is_active"])
     state = "activée" if formation.is_active else "désactivée"
     messages.success(request, f"Formation « {formation.title} » {state}.")
+    return redirect("formations:formation_detail", pk=pk)
+
+
+@admin_required
+def formation_sync_capacities(request, pk):
+    """POST — reset all planned/in-progress session capacities to formation.max_participants."""
+    if request.method != "POST":
+        return redirect("formations:formation_detail", pk=pk)
+    formation = get_object_or_404(Formation, pk=pk)
+    updated = formation.sessions.filter(
+        status__in=[Session.STATUS_PLANNED, Session.STATUS_IN_PROGRESS],
+        capacity__gt=formation.max_participants,
+    ).update(capacity=formation.max_participants)
+    messages.success(
+        request,
+        f"{updated} session(s) mise(s) à jour — capacité ramenée à {formation.max_participants}.",
+    )
     return redirect("formations:formation_detail", pk=pk)
 
 
@@ -261,6 +346,8 @@ def _session_form_context(exclude_session_pk=None):
     """
     Build JSON-serialisable dicts for the smart-notification JS on the session form.
     Passed to both session_create and session_edit.
+
+    base_price is per participant — all price comparisons are per-person.
     """
     import json
     from django.urls import reverse
@@ -281,24 +368,93 @@ def _session_form_context(exclude_session_pk=None):
             for s in sessions_qs
             if s.date_start and s.date_end
         )
-        # Existing revenue: sum of (effective_price × capacity) for planned/active sessions
-        existing_revenue = sum(
-            float(s.price_per_participant or f.base_price or 0) * s.capacity
-            for s in sessions_qs
+        # Per-person price already consumed by existing sessions
+        existing_price_sum = sum(
+            float(s.price_per_participant or f.base_price or 0) for s in sessions_qs
+        )
+        # hours_per_day: used by JS to auto-derive session_hours from date range
+        hours_per_day = (
+            float(f.duration_hours) / float(f.duration_days)
+            if f.duration_hours and f.duration_days
+            else None
+        )
+
+        # Previous session client (for JS pre-fill when formation is changed via dropdown)
+        prev_session = (
+            f.sessions.exclude(status=Session.STATUS_CANCELLED)
+            .order_by("-date_start", "-pk")
+            .first()
+        )
+        prev_client_id = (
+            str(prev_session.client_id)
+            if prev_session and prev_session.client_id
+            else None
+        )
+        prev_client_name = (
+            prev_session.client.name if prev_session and prev_session.client else None
+        )
+        prev_participant_count = (
+            prev_session.participants.count() if prev_session else 0
+        )
+        prev_session_date = (
+            prev_session.date_start.strftime("%d/%m/%Y") if prev_session else None
         )
 
         formation_data[str(f.pk)] = {
             "duration_days": float(f.duration_days) if f.duration_days else None,
             "duration_hours": float(f.duration_hours) if f.duration_hours else None,
+            "hours_per_day": hours_per_day,
             "base_price": float(f.base_price) if f.base_price else None,
             "used_days": used_days,
-            "existing_revenue": round(existing_revenue, 2),
+            "existing_price_sum": round(existing_price_sum, 2),
             "edit_url": reverse("formations:formation_edit", args=[f.pk]),
+            "prev_client_id": prev_client_id,
+            "prev_client_name": prev_client_name,
+            "prev_participant_count": prev_participant_count,
+            "prev_session_date": prev_session_date,
         }
 
+    trainer_bookings = {}
+    for trainer in Trainer.objects.filter(is_active=True):
+        qs = trainer.sessions.filter(
+            status__in=[Session.STATUS_PLANNED, Session.STATUS_IN_PROGRESS]
+        )
+        if exclude_session_pk:
+            qs = qs.exclude(pk=exclude_session_pk)
+        bookings = [
+            {
+                "date_start": s.date_start.strftime("%Y-%m-%d"),
+                "date_end": s.date_end.strftime("%Y-%m-%d"),
+                "label": str(s),
+            }
+            for s in qs
+            if s.date_start and s.date_end
+        ]
+        if bookings:
+            trainer_bookings[str(trainer.pk)] = bookings
+    room_bookings = {}
+    for room in TrainingRoom.objects.filter(is_active=True):
+        qs = room.sessions.filter(
+            status__in=[Session.STATUS_PLANNED, Session.STATUS_IN_PROGRESS]
+        )
+        if exclude_session_pk:
+            qs = qs.exclude(pk=exclude_session_pk)
+        bookings = [
+            {
+                "date_start": s.date_start.strftime("%Y-%m-%d"),
+                "date_end": s.date_end.strftime("%Y-%m-%d"),
+                "label": str(s),
+            }
+            for s in qs
+            if s.date_start and s.date_end
+        ]
+        if bookings:
+            room_bookings[str(room.pk)] = bookings
     return {
         "room_capacities_json": json.dumps(room_capacities),
         "formation_data_json": json.dumps(formation_data),
+        "trainer_bookings_json": json.dumps(trainer_bookings),
+        "room_bookings_json": json.dumps(room_bookings),
     }
 
 
@@ -353,9 +509,44 @@ def session_create(request):
         except Formation.DoesNotExist:
             pass
 
+    prev_session = None
+    if prefill_formation:
+        prev_session = (
+            prefill_formation.sessions.exclude(status=Session.STATUS_CANCELLED)
+            .order_by("-date_start", "-pk")
+            .first()
+        )
+        if prev_session and "client" not in initial and prev_session.client_id:
+            initial["client"] = prev_session.client_id
+
     form = SessionForm(request.POST or None, initial=initial)
     if request.method == "POST" and form.is_valid():
         session = form.save()
+        if prev_session and prev_session.participants.exists():
+            copied = 0
+            for p in prev_session.participants.all():
+                try:
+                    session.participants.create(
+                        first_name=p.first_name,
+                        last_name=p.last_name,
+                        employer=p.employer,
+                        employer_client=p.employer_client,
+                        phone=p.phone,
+                        email=p.email,
+                        job_title=p.job_title,
+                        attended=True,
+                        notes=p.notes,
+                    )
+                    copied += 1
+                except Exception:
+                    pass
+            if copied:
+                prev_date = prev_session.date_start.strftime("%d/%m/%Y")
+                messages.info(
+                    request,
+                    f"{copied} participant(s) repris de la session précédente "
+                    f"({prev_date}). Vérifiez et ajustez la liste si nécessaire.",
+                )
         messages.success(request, "Session créée.")
         return redirect("formations:session_detail", pk=session.pk)
 
@@ -365,6 +556,7 @@ def session_create(request):
             "form": form,
             "action": "Nouvelle session",
             "prefill_formation": prefill_formation,
+            "prev_session": prev_session,
         }
     )
     return render(request, "formations/session_form.html", ctx)

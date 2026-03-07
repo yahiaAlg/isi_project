@@ -18,6 +18,11 @@ urlpatterns = [
         views.formation_deactivate,
         name="formation_deactivate",
     ),
+    path(
+        "catalog/<int:pk>/sync-capacities/",
+        views.formation_sync_capacities,
+        name="formation_sync_capacities",
+    ),
     # Categories
     path("categories/", views.category_list, name="category_list"),
     path("categories/create/", views.category_create, name="category_create"),

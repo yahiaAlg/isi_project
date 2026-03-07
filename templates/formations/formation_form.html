@@ -143,6 +143,24 @@
                 <div class="invalid-feedback d-block">{{ form.max_participants.errors|join:", " }}</div>
                 {% endif %}
               </div>
+
+              {% if formation %}
+              <div class="col-12" id="notif-capacity-wrap" style="display:none;">
+                <div style="display:flex;align-items:flex-start;gap:10px;border-radius:8px;padding:10px 14px;font-size:12.5px;line-height:1.5;background:#fffbeb;border:1px solid #fcd34d;">
+                  <i class="bi bi-exclamation-triangle-fill" style="flex-shrink:0;margin-top:2px;color:#F59E0B;"></i>
+                  <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+                    <div style="font-weight:600;color:#92400e;" id="notif-capacity-text"></div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                      <button type="button" id="btn-capacity-autofix"
+                              style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:#F59E0B;background:none;border:1px solid #F59E0B;border-radius:5px;padding:3px 10px;cursor:pointer;">
+                        <i class="bi bi-magic"></i> Ajuster automatiquement
+                      </button>
+                      <span style="font-size:12px;color:var(--text-muted);">ou modifiez manuellement.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -245,3 +263,37 @@
 
 </div>
 {% endblock %}
+
+{% if formation %}
+<script>
+(function () {
+  const SESSION_CAPS = {{ session_capacity_conflicts_json|default:"[]"|safe }};
+  const inpMax = document.getElementById('{{ form.max_participants.id_for_label }}');
+  const notif  = document.getElementById('notif-capacity-wrap');
+  const txt    = document.getElementById('notif-capacity-text');
+  const btnFix = document.getElementById('btn-capacity-autofix');
+  if (!inpMax || !notif) return;
+
+  function check() {
+    const newMax = parseInt(inpMax.value, 10);
+    if (isNaN(newMax)) { notif.style.display = 'none'; return; }
+    const conflicts = SESSION_CAPS.filter(s => s.capacity > newMax);
+    if (!conflicts.length) { notif.style.display = 'none'; return; }
+    const maxCap = Math.max(...conflicts.map(s => s.capacity));
+    const dates  = conflicts.map(s => s.date).join(', ');
+    txt.textContent =
+      `${conflicts.length} session(s) active(s) ont une capacité de ${maxCap} participants, ` +
+      `supérieure au maximum saisi (${newMax}). Sessions concernées : ${dates}.`;
+    btnFix.dataset.max = maxCap;
+    notif.style.display = 'block';
+  }
+
+  inpMax.addEventListener('input', check);
+  btnFix.addEventListener('click', () => {
+    const v = parseInt(btnFix.dataset.max, 10);
+    if (!isNaN(v)) { inpMax.value = v; check(); }
+  });
+  check();
+})();
+</script>
+{% endif %}
