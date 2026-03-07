@@ -1,20 +1,20 @@
 """
-Financial models — v3.0
+Financial models — v3.1
 Invoices (3-stage lifecycle: proforma → BC → finale), line items with flexible
 pricing modes, payments, credit notes, expenses.
 
-Key changes from v2.x
-─────────────────────
-* Invoice now has a `phase` (PROFORMA / FINALE) that drives all business logic.
-* `proforma_reference`  — sequential PF-F/E-YYYY-NNN, assigned at creation.
-* `reference`           — sequential F/E-YYYY-NNN, assigned only at finalization.
-* Bon de Commande fields added; BC number required to unlock finalization.
-* `amount_in_words` stored for mandatory printed mention.
-* InvoiceItem replaces quantity/unit with `pricing_mode` + `nb_persons` + `nb_days`;
-  total_ht formula varies per mode (see PricingMode docstring).
-* TVA default corrected to 9% for formations (Algerian fiscal code).
-* Payment.clean() guards phase=FINALE.
-* All TextChoices used throughout.
+Changes in v3.1 over v3.0
+──────────────────────────
+* Invoice.PaymentMode TextChoices added (ESPECE, VIREMENT, CHEQUE, TRAITE, AUTRE).
+* Invoice.mode_reglement field — set at finalization, drives timbre fiscal.
+* Invoice.timbre_fiscal property — cash stamp tax per Algerian fiscal slabs.
+* Invoice.amount_net_a_payer property — TTC + timbre (espèce only).
+* Invoice.timbre_rate_display property — human-readable slab label for templates.
+* Proforma reference format changed:
+    OLD  {prefix}-{YEAR}-{NNN}   →   PF-F-2026-001
+    NEW  {prefix}-{NNN}-{YEAR}   →   FP-F-001-2026
+  Finale reference format UNCHANGED: {prefix}-{YEAR}-{NNN}.
+* due_date remains nullable/optional.
 """
 
 from decimal import Decimal
@@ -49,7 +49,7 @@ class Invoice(TimeStampedModel):
                paid     → [issue CreditNote; cannot void directly]
 
     Sequential numbers
-        proforma_reference  PF-F-{YEAR}-{NNN} / PF-E-{YEAR}-{NNN}  — set on create
+        proforma_reference  FP-F-{NNN}-{YEAR} / FP-E-{NNN}-{YEAR}  — set on create
         reference           F-{YEAR}-{NNN}    / E-{YEAR}-{NNN}      — set on finalize
 
     Business rules enforced here
@@ -57,6 +57,9 @@ class Invoice(TimeStampedModel):
         * TVA rate is snapshotted; auto-set to 0 when client.is_tva_exempt is True.
         * amount_paid / amount_remaining are denormalized columns kept in sync by
           Payment.save() / delete() so Client aggregate queries need no joins.
+        * timbre_fiscal is a computed property — never persisted.
+        * mode_reglement must be set before or during finalize(); espèce triggers
+          timbre fiscal display on the printed invoice.
     """
 
     class InvoiceType(models.TextChoices):
@@ -68,22 +71,24 @@ class Invoice(TimeStampedModel):
         FINALE = "finale", "Facture Finale"
 
     class Status(models.TextChoices):
-        # Proforma statuses
         DRAFT = "draft", "Brouillon"
         SENT = "sent", "Envoyée au client"
-        # Finale statuses
         UNPAID = "unpaid", "Non payée"
         PARTIALLY_PAID = "partially_paid", "Partiellement payée"
         PAID = "paid", "Payée"
         VOIDED = "voided", "Annulée"
         CREDIT_NOTE = "credit_note", "Avoir émis"
 
+    class PaymentMode(models.TextChoices):
+        ESPECE = "espece", "Espèces (+ timbre fiscal)"
+        VIREMENT = "virement", "Virement bancaire"
+        CHEQUE = "cheque", "Chèque"
+        TRAITE = "traite", "Traite"
+        AUTRE = "autre", "Autre"
+
     # ---- Identity ---------------------------------------------------- #
     invoice_type = models.CharField(
-        max_length=20,
-        choices=InvoiceType.choices,
-        verbose_name="Type",
-        db_index=True,
+        max_length=20, choices=InvoiceType.choices, verbose_name="Type", db_index=True
     )
     phase = models.CharField(
         max_length=10,
@@ -101,14 +106,12 @@ class Invoice(TimeStampedModel):
     )
 
     # ---- References -------------------------------------------------- #
-    # proforma_reference: PF-F-2026-001 — generated at creation
     proforma_reference = models.CharField(
         max_length=50,
         unique=True,
         verbose_name="N° Proforma",
-        help_text="Généré automatiquement à la création.",
+        help_text="Généré automatiquement à la création. Format : {prefix}-{NNN}-{YEAR}.",
     )
-    # reference: F-2026-001 — generated at finalization, null until then
     reference = models.CharField(
         max_length=50,
         unique=True,
@@ -117,7 +120,6 @@ class Invoice(TimeStampedModel):
         verbose_name="N° Facture finale",
         help_text="Généré automatiquement à la finalisation — séquence indépendante.",
     )
-    # Optional internal ref visible on printed doc header
     page_ref = models.CharField(
         max_length=100,
         blank=True,
@@ -127,10 +129,7 @@ class Invoice(TimeStampedModel):
 
     # ---- Parties ----------------------------------------------------- #
     client = models.ForeignKey(
-        Client,
-        on_delete=models.PROTECT,
-        related_name="invoices",
-        verbose_name="Client",
+        Client, on_delete=models.PROTECT, related_name="invoices", verbose_name="Client"
     )
     session = models.ForeignKey(
         "formations.Session",
@@ -150,7 +149,6 @@ class Invoice(TimeStampedModel):
     )
 
     # ---- Client snapshot — frozen at finalization -------------------- #
-    # Stored so that editing the client record cannot alter printed invoices.
     client_name_snapshot = models.CharField(
         max_length=255, blank=True, verbose_name="Nom client (snapshot)"
     )
@@ -194,11 +192,10 @@ class Invoice(TimeStampedModel):
         null=True,
         blank=True,
         verbose_name="Date d'échéance (finale)",
+        help_text="Optionnel — si non renseignée, n'apparaît pas sur la facture imprimée.",
     )
     finalized_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="Date de finalisation",
+        null=True, blank=True, verbose_name="Date de finalisation"
     )
 
     # ---- Bon de Commande --------------------------------------------- #
@@ -209,9 +206,7 @@ class Invoice(TimeStampedModel):
         help_text="Requis pour finaliser la facture.",
     )
     bon_commande_date = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name="Date du BC",
+        null=True, blank=True, verbose_name="Date du BC"
     )
     bon_commande_amount = models.DecimalField(
         max_digits=14,
@@ -222,9 +217,7 @@ class Invoice(TimeStampedModel):
         help_text="Optionnel — pour cross-check avec le montant de la facture.",
     )
     bon_commande_scan = models.FileField(
-        upload_to="bons_commande/%Y/%m/",
-        blank=True,
-        verbose_name="Scan BC (optionnel)",
+        upload_to="bons_commande/%Y/%m/", blank=True, verbose_name="Scan BC (optionnel)"
     )
 
     # ---- Amounts (DA) ------------------------------------------------ #
@@ -253,7 +246,6 @@ class Invoice(TimeStampedModel):
         default=Decimal("0.00"),
         verbose_name="Montant TTC (DA)",
     )
-    # Denormalized — maintained by Payment.save() / delete()
     amount_paid = models.DecimalField(
         max_digits=14,
         decimal_places=2,
@@ -266,12 +258,21 @@ class Invoice(TimeStampedModel):
         default=Decimal("0.00"),
         verbose_name="Reste à payer (DA)",
     )
-    # Auto-generated: "Cent Neuf Mille Dinars Algériens" — mandatory on printed invoice
     amount_in_words = models.CharField(
         max_length=500,
         blank=True,
         verbose_name="Montant en lettres",
         help_text="Généré automatiquement lors de la finalisation.",
+    )
+
+    # ---- Mode de règlement (v3.1) ------------------------------------ #
+    mode_reglement = models.CharField(
+        max_length=20,
+        choices=PaymentMode.choices,
+        blank=True,
+        default="",
+        verbose_name="Mode de règlement",
+        help_text="Choisi à la finalisation. Espèces déclenche le calcul du timbre fiscal.",
     )
 
     # ---- Notes & footer ---------------------------------------------- #
@@ -302,13 +303,16 @@ class Invoice(TimeStampedModel):
 
     @classmethod
     def _next_proforma_reference(cls, invoice_type: str, year: int) -> str:
-        """PF-F-YYYY-NNN / PF-E-YYYY-NNN — independent sequence."""
+        """
+        v3.1 format: {prefix}-{NNN}-{YEAR}   e.g.  FP-F-001-2026
+        Sequence resets each year per invoice_type.
+        """
         from core.models import BureauEtudeInfo, FormationInfo
 
         if invoice_type == cls.InvoiceType.FORMATION:
-            prefix = FormationInfo.get_instance().proforma_prefix or "PF-F"
+            prefix = FormationInfo.get_instance().proforma_prefix or "FP-F"
         else:
-            prefix = BureauEtudeInfo.get_instance().proforma_prefix or "PF-E"
+            prefix = BureauEtudeInfo.get_instance().proforma_prefix or "FP-E"
 
         with transaction.atomic():
             count = (
@@ -316,11 +320,12 @@ class Invoice(TimeStampedModel):
                 .filter(invoice_type=invoice_type, invoice_date__year=year)
                 .count()
             ) + 1
-        return f"{prefix}-{year}-{count:03d}"
+
+        return f"{prefix}-{count:03d}-{year}"
 
     @classmethod
     def _next_final_reference(cls, invoice_type: str, year: int) -> str:
-        """F-YYYY-NNN / E-YYYY-NNN — independent sequence, gapless."""
+        """F-YYYY-NNN / E-YYYY-NNN — gapless sequence, assigned at finalization."""
         from core.models import BureauEtudeInfo, FormationInfo
 
         if invoice_type == cls.InvoiceType.FORMATION:
@@ -338,7 +343,56 @@ class Invoice(TimeStampedModel):
                 )
                 .count()
             ) + 1
+
         return f"{prefix}-{year}-{count:03d}"
+
+    # ------------------------------------------------------------------ #
+    # Timbre fiscal — v3.1 (espèce only, never persisted)
+    # ------------------------------------------------------------------ #
+
+    @property
+    def timbre_fiscal(self) -> Decimal:
+        """
+        Stamp duty applicable ONLY when mode_reglement == 'espece'.
+        Base = amount_ttc (HT + TVA).
+
+        Algerian fiscal slabs (Article 254 du Code des Timbres):
+            TTC <      300 DA  →  0      (exempt)
+            300 ≤ TTC ≤  30 000 DA  →  1.0 %
+         30 001 ≤ TTC ≤ 100 000 DA  →  1.5 %
+                 TTC >  100 000 DA  →  2.0 %
+        """
+        if self.mode_reglement != self.PaymentMode.ESPECE:
+            return Decimal("0")
+        base = self.amount_ttc
+        if base < Decimal("300"):
+            return Decimal("0")
+        elif base <= Decimal("30000"):
+            rate = Decimal("0.010")
+        elif base <= Decimal("100000"):
+            rate = Decimal("0.015")
+        else:
+            rate = Decimal("0.020")
+        return (base * rate).quantize(Decimal("0.01"))
+
+    @property
+    def amount_net_a_payer(self) -> Decimal:
+        """Total due including timbre fiscal (equals amount_ttc when mode ≠ espèce)."""
+        return self.amount_ttc + self.timbre_fiscal
+
+    @property
+    def timbre_rate_display(self) -> str:
+        """Human-readable slab label for template / admin use."""
+        if self.mode_reglement != self.PaymentMode.ESPECE:
+            return ""
+        base = self.amount_ttc
+        if base < Decimal("300"):
+            return ""
+        elif base <= Decimal("30000"):
+            return "1 %"
+        elif base <= Decimal("100000"):
+            return "1,5 %"
+        return "2 %"
 
     # ------------------------------------------------------------------ #
     # Finalization
@@ -348,13 +402,12 @@ class Invoice(TimeStampedModel):
         """
         Promote a proforma to a finalized invoice.
 
-        Validates:
-          * BC number is present.
-          * Client profile is complete for their type.
-          * TVA rate is zeroed for exempt clients.
+        Validates BC number presence and client profile completeness.
+        Snapshots client fields; auto-zeroes TVA for exempt clients.
+        Assigns the final sequential reference; sets status → UNPAID.
 
-        Assigns the final sequential reference, snapshots the client record,
-        sets status → UNPAID, records finalized_at.
+        The caller should set mode_reglement before calling finalize() when
+        the payment mode is known at that point.
         """
         if self.phase == self.Phase.FINALE:
             raise ValidationError("Cette facture est déjà finalisée.")
@@ -370,7 +423,6 @@ class Invoice(TimeStampedModel):
                 f"Profil client incomplet. Champs manquants : {', '.join(missing)}."
             )
 
-        # Snapshot client fields
         c = self.client
         self.client_name_snapshot = c.name
         self.client_address_snapshot = c.address
@@ -382,17 +434,13 @@ class Invoice(TimeStampedModel):
         self.client_nin_snapshot = c.nin
         self.client_rib_snapshot = c.rib
 
-        # Apply TVA exemption
         if c.is_tva_exempt:
             self.tva_rate = Decimal("0.00")
             self.amount_tva = Decimal("0.00")
             self.amount_ttc = self.amount_ht
 
-        # Assign final reference
         year = timezone.now().year
         self.reference = self._next_final_reference(self.invoice_type, year)
-
-        # Promote phase
         self.phase = self.Phase.FINALE
         self.status = self.Status.UNPAID
         self.finalized_at = timezone.now()
@@ -413,7 +461,7 @@ class Invoice(TimeStampedModel):
         No-op on finalized invoices (line items are locked).
         """
         if self.phase == self.Phase.FINALE:
-            return  # Lock: do not mutate finalized amounts
+            return
 
         total_ht = self.items.aggregate(total=Sum("total_ht"))["total"] or Decimal("0")
         self.amount_ht = total_ht
@@ -425,17 +473,13 @@ class Invoice(TimeStampedModel):
         )
 
     def refresh_payment_totals(self) -> None:
-        """
-        Recompute amount_paid / amount_remaining from confirmed payments.
-        Called by Payment.save() and Payment.delete().
-        """
+        """Recompute amount_paid / amount_remaining from confirmed payments."""
         paid = self.payments.filter(status=Payment.Status.CONFIRMED).aggregate(
             total=Sum("amount")
         )["total"] or Decimal("0")
         self.amount_paid = paid
         self.amount_remaining = max(self.amount_ttc - paid, Decimal("0"))
 
-        # Update status (only for finale invoices)
         if self.phase == self.Phase.FINALE and self.status not in [
             self.Status.VOIDED,
             self.Status.CREDIT_NOTE,
@@ -455,18 +499,15 @@ class Invoice(TimeStampedModel):
 
     def save(self, *args, **kwargs):
         if not self.pk:
-            # Auto-generate proforma reference on first save
             if not self.proforma_reference:
                 year = (self.invoice_date or timezone.now().date()).year
                 self.proforma_reference = self._next_proforma_reference(
                     self.invoice_type, year
                 )
-            # Default validity: +30 days
             if not self.validity_date and self.invoice_date:
                 from datetime import timedelta
 
                 self.validity_date = self.invoice_date + timedelta(days=30)
-
         super().save(*args, **kwargs)
 
     # ------------------------------------------------------------------ #
@@ -475,7 +516,6 @@ class Invoice(TimeStampedModel):
 
     @property
     def is_locked(self) -> bool:
-        """True when the invoice is finalized — line items cannot be changed."""
         return self.phase == self.Phase.FINALE
 
     @property
@@ -500,7 +540,7 @@ class Invoice(TimeStampedModel):
     @property
     def is_overdue(self) -> bool:
         return (
-            self.due_date
+            self.due_date is not None
             and self.due_date < timezone.now().date()
             and self.status in [self.Status.UNPAID, self.Status.PARTIALLY_PAID]
         )
@@ -518,11 +558,6 @@ class Invoice(TimeStampedModel):
         return round(float(self.amount_paid / self.amount_ttc) * 100, 1)
 
     def void(self, reason: str = "") -> None:
-        """
-        Mark a finalized invoice as voided.
-        The invoice retains its sequential number (gapless requirement).
-        Cannot void a fully-paid invoice — issue a credit note instead.
-        """
         if self.phase != self.Phase.FINALE:
             raise ValidationError("Seule une facture finale peut être annulée.")
         if self.status == self.Status.PAID:
@@ -545,14 +580,10 @@ class InvoiceItem(TimeStampedModel):
     A single line on an invoice.
 
     PricingMode determines how total_ht is computed:
-
         per_person           → unit_price_ht × nb_persons
         per_day              → unit_price_ht × nb_days
         per_person_per_day   → unit_price_ht × nb_persons × nb_days
-        forfait              → unit_price_ht (fixed, nb_persons=nb_days=1)
-
-    An optional line-level discount_percent is applied after the base
-    calculation before rounding.
+        forfait              → unit_price_ht (fixed)
 
     Editing is blocked when the parent invoice is finalized (phase=FINALE).
     """
@@ -564,10 +595,7 @@ class InvoiceItem(TimeStampedModel):
         FORFAIT = "forfait", "Forfait"
 
     invoice = models.ForeignKey(
-        Invoice,
-        on_delete=models.CASCADE,
-        related_name="items",
-        verbose_name="Facture",
+        Invoice, on_delete=models.CASCADE, related_name="items", verbose_name="Facture"
     )
     order = models.PositiveIntegerField(default=1, verbose_name="Ordre")
     description = models.CharField(
@@ -575,8 +603,6 @@ class InvoiceItem(TimeStampedModel):
         verbose_name="Désignation",
         help_text="Titre de la formation ou du livrable d'étude.",
     )
-
-    # ---- Pricing mode ------------------------------------------------ #
     pricing_mode = models.CharField(
         max_length=20,
         choices=PricingMode.choices,
@@ -629,7 +655,7 @@ class InvoiceItem(TimeStampedModel):
             base = self.unit_price_ht * self.nb_days
         elif mode == self.PricingMode.PER_PERSON_PER_DAY:
             base = self.unit_price_ht * self.nb_persons * self.nb_days
-        else:  # forfait
+        else:
             base = self.unit_price_ht
         discount = base * (self.discount_percent / Decimal("100"))
         return (base - discount).quantize(Decimal("0.01"))
@@ -664,8 +690,9 @@ class Payment(TimeStampedModel):
     A single payment instalment against a finalized invoice.
     Multiple Payment records per Invoice are allowed (partial payments).
 
-    Payments are only accepted on invoices with phase=FINALE and status in
-    [unpaid, partially_paid].
+    Note: Payment.method records how money was physically received.
+    Invoice.mode_reglement is the agreed settlement method and determines
+    whether timbre fiscal is applicable.
     """
 
     class Method(models.TextChoices):
@@ -720,22 +747,17 @@ class Payment(TimeStampedModel):
     def clean(self):
         if not self.invoice_id:
             return
-
-        # Phase guard — payments only on finalized invoices
         if self.invoice.phase != Invoice.Phase.FINALE:
             raise ValidationError(
                 "Les paiements ne sont acceptés que sur les factures finalisées."
             )
-
         if self.pk is None and not self.invoice.is_payable:
             raise ValidationError(
                 f"La facture {self.invoice.reference} n'est pas en attente de paiement."
             )
-
         if self.amount and self.amount <= 0:
             raise ValidationError("Le montant doit être positif.")
 
-        # Overpayment guard
         already_paid = self.invoice.amount_paid
         if self.pk:
             existing_amount = (
@@ -774,10 +796,7 @@ class Payment(TimeStampedModel):
 class CreditNote(TimeStampedModel):
     """
     A credit note (avoir) that partially or fully reverses a finalized invoice.
-
-    CreditNote is a separate document referencing the original invoice.
-    When is_full_reversal is True, the original invoice's status is set to
-    STATUS_CREDIT_NOTE.
+    When is_full_reversal is True, the original invoice's status → CREDIT_NOTE.
     """
 
     original_invoice = models.ForeignKey(
@@ -852,11 +871,6 @@ class CreditNote(TimeStampedModel):
 
 
 class ExpenseCategory(TimeStampedModel):
-    """
-    Configurable expense category. Pre-seeded with spec-defined presets;
-    the owner can add more.
-    """
-
     name = models.CharField(max_length=100, unique=True, verbose_name="Catégorie")
     description = models.TextField(blank=True, verbose_name="Description")
     is_direct_cost = models.BooleanField(
@@ -894,7 +908,6 @@ class Expense(TimeStampedModel):
         APPROVED = "approved", "Approuvée"
         REJECTED = "rejected", "Refusée"
 
-    # ---- Core -------------------------------------------------------- #
     date = models.DateField(verbose_name="Date")
     category = models.ForeignKey(
         ExpenseCategory,
@@ -913,7 +926,6 @@ class Expense(TimeStampedModel):
         max_length=100, blank=True, verbose_name="Référence de paiement"
     )
 
-    # ---- Cost centre ------------------------------------------------- #
     allocated_to_session = models.ForeignKey(
         "formations.Session",
         on_delete=models.SET_NULL,
@@ -936,7 +948,6 @@ class Expense(TimeStampedModel):
         help_text="Cocher si non imputable à un service ou projet.",
     )
 
-    # ---- Receipt & approval ------------------------------------------ #
     receipt = models.FileField(
         upload_to="receipts/%Y/%m/", blank=True, verbose_name="Justificatif"
     )
@@ -1009,8 +1020,7 @@ class Expense(TimeStampedModel):
 class FinancialPeriod(TimeStampedModel):
     """
     A named financial period used to group finalized invoices and expenses
-    for reporting.  Optional — the reporting app can filter on invoice_date
-    ranges directly, but explicit periods simplify period-close workflows.
+    for reporting.
     """
 
     class PeriodType(models.TextChoices):
@@ -1047,8 +1057,6 @@ class FinancialPeriod(TimeStampedModel):
 
     def __str__(self):
         return self.name
-
-    # ---- Aggregates — all scoped to FINALE invoices only ------------- #
 
     def _invoice_qs(self):
         return Invoice.objects.filter(

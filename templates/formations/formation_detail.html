@@ -14,7 +14,7 @@
 <a href="{% url 'formations:formation_edit' formation.pk %}" class="topbar-btn">
   <i class="bi bi-pencil-fill"></i> Modifier
 </a>
-<a href="{% url 'formations:session_create' %}" class="topbar-btn primary">
+<a href="{% url 'formations:session_create' %}?formation={{ formation.pk }}" class="topbar-btn primary">
   <i class="bi bi-plus-lg"></i> Nouvelle session
 </a>
 {% endblock %}
@@ -160,7 +160,7 @@
         <div class="isi-card-header">
           <div class="card-icon green"><i class="bi bi-calendar3-fill"></i></div>
           <h3>Sessions récentes</h3>
-          <a href="{% url 'formations:session_create' %}" class="btn btn-amber btn-sm ms-auto">
+          <a href="{% url 'formations:session_create' %}?formation={{ formation.pk }}" class="btn btn-amber btn-sm ms-auto">
             <i class="bi bi-plus-lg"></i> Planifier
           </a>
         </div>
@@ -228,7 +228,7 @@
         <div class="isi-card-body text-center" style="padding:40px 24px;">
           <div style="font-size:40px;color:#e2e8f0;margin-bottom:12px;"><i class="bi bi-calendar3"></i></div>
           <p style="color:var(--text-muted);font-size:14px;margin:0 0 16px;">Aucune session planifiée pour cette formation.</p>
-          <a href="{% url 'formations:session_create' %}" class="btn btn-amber btn-sm">
+          <a href="{% url 'formations:session_create' %}?formation={{ formation.pk }}" class="btn btn-amber btn-sm">
             <i class="bi bi-plus-lg"></i> Planifier une session
           </a>
         </div>

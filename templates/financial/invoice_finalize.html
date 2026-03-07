@@ -129,6 +129,8 @@
 
           <form method="post" novalidate>
             {% csrf_token %}
+
+            <!-- Amount in words -->
             <div class="mb-3">
               <label class="form-label" for="{{ form.amount_in_words.id_for_label }}">Montant en lettres</label>
               {{ form.amount_in_words }}
@@ -140,8 +142,31 @@
               </div>
             </div>
 
+            <!-- Mode de règlement -->
             <div class="mb-3">
-              <label class="form-label" for="{{ form.due_date.id_for_label }}">Date d'échéance</label>
+              <label class="form-label" for="{{ form.mode_reglement.id_for_label }}">
+                Mode de règlement <span style="color:var(--danger);">*</span>
+              </label>
+              <div class="input-icon-wrap">
+                <i class="bi bi-credit-card-fill"></i>
+                {{ form.mode_reglement }}
+              </div>
+              {% if form.mode_reglement.errors %}
+              <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.mode_reglement.errors|join:", " }}</div>
+              {% endif %}
+              <!-- Timbre fiscal notice (shown live via JS) -->
+              <div id="timbre-notice" style="display:none;margin-top:6px;padding:8px 12px;
+                   background:rgba(245,158,11,.08);border-radius:6px;font-size:12px;color:#92400e;">
+                <i class="bi bi-info-circle-fill"></i>
+                <strong>Timbre fiscal applicable</strong> — sera calculé et affiché sur la facture imprimée.
+              </div>
+            </div>
+
+            <!-- Due date (optional) -->
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.due_date.id_for_label }}">
+                Date d'échéance <span style="font-size:11px;color:var(--text-muted);">(optionnel)</span>
+              </label>
               <div class="input-icon-wrap">
                 <i class="bi bi-calendar-check-fill"></i>
                 {{ form.due_date }}
@@ -149,6 +174,9 @@
               {% if form.due_date.errors %}
               <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.due_date.errors|join:", " }}</div>
               {% endif %}
+              <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
+                Si non renseignée, l'échéance n'apparaîtra pas sur la facture.
+              </div>
             </div>
 
             {% if form.non_field_errors %}
@@ -216,6 +244,11 @@
               {% if invoice.client.is_tva_exempt %}0.00{% else %}{{ invoice.amount_tva|floatformat:2 }}{% endif %} DA
             </span>
           </div>
+          <!-- Timbre preview (espèce selected) -->
+          <div id="timbre-summary-row" style="display:none;justify-content:space-between;font-size:13px;margin-bottom:6px;color:#92400e;">
+            <span>Timbre fiscal <span id="timbre-rate-label"></span></span>
+            <span id="timbre-amount-preview" style="font-weight:600;"></span>
+          </div>
           <div style="display:flex;justify-content:space-between;font-size:15px;margin-top:8px;
                       padding:10px 0;border-top:2px solid var(--accent);">
             <span style="font-family:var(--font-head);font-weight:700;">Total TTC</span>
@@ -231,4 +264,43 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Show timbre notice when mode_reglement = espece
+  const modeSelect = document.getElementById('{{ form.mode_reglement.id_for_label }}');
+  const timbNotice = document.getElementById('timbre-notice');
+  const timbRow    = document.getElementById('timbre-summary-row');
+  const timbRate   = document.getElementById('timbre-rate-label');
+  const timbAmt    = document.getElementById('timbre-amount-preview');
+  const ttcAmount  = {{ invoice.amount_ttc|default:0 }};
+
+  function computeTimbre(ttc) {
+    if (ttc < 300)       return { rate: 0,     label: '' };
+    if (ttc <= 30000)    return { rate: 0.010,  label: '(1%)' };
+    if (ttc <= 100000)   return { rate: 0.015,  label: '(1,5%)' };
+    return                      { rate: 0.020,  label: '(2%)' };
+  }
+
+  function updateTimbre() {
+    if (!modeSelect) return;
+    const isEspece = modeSelect.value === 'espece';
+    timbNotice.style.display = isEspece ? 'block' : 'none';
+    if (isEspece) {
+      const { rate, label } = computeTimbre(ttcAmount);
+      const amt = (ttcAmount * rate).toFixed(2);
+      timbRow.style.display = 'flex';
+      timbRate.textContent = label;
+      timbAmt.textContent  = amt + ' DA';
+    } else {
+      timbRow.style.display = 'none';
+    }
+  }
+
+  if (modeSelect) {
+    modeSelect.addEventListener('change', updateTimbre);
+    updateTimbre();
+  }
+</script>
 {% endblock %}

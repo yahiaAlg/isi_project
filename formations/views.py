@@ -97,7 +97,20 @@ def formation_create(request):
 @admin_required
 def formation_edit(request, pk):
     formation = get_object_or_404(Formation, pk=pk)
-    form = FormationForm(request.POST or None, instance=formation)
+    # Accept ?suggest_base_price=XXXXX from session form's smart notification
+    initial = {}
+    suggest_price = request.GET.get("suggest_base_price")
+    if suggest_price and request.method == "GET":
+        try:
+            from decimal import Decimal
+
+            initial["base_price"] = Decimal(suggest_price).quantize(Decimal("0.01"))
+        except Exception:
+            pass
+
+    form = FormationForm(
+        request.POST or None, instance=formation, initial=initial or None
+    )
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "Formation mise à jour.")
@@ -244,18 +257,117 @@ def session_detail(request, pk):
     )
 
 
-@admin_required
+def _session_form_context(exclude_session_pk=None):
+    """
+    Build JSON-serialisable dicts for the smart-notification JS on the session form.
+    Passed to both session_create and session_edit.
+    """
+    import json
+    from django.urls import reverse
+    from formations.models import TrainingRoom
+
+    room_capacities = {
+        str(r.pk): r.capacity for r in TrainingRoom.objects.filter(is_active=True)
+    }
+
+    formation_data = {}
+    for f in Formation.objects.filter(is_active=True):
+        sessions_qs = f.sessions.exclude(status=Session.STATUS_CANCELLED)
+        if exclude_session_pk:
+            sessions_qs = sessions_qs.exclude(pk=exclude_session_pk)
+
+        used_days = sum(
+            (s.date_end - s.date_start).days + 1
+            for s in sessions_qs
+            if s.date_start and s.date_end
+        )
+        # Existing revenue: sum of (effective_price × capacity) for planned/active sessions
+        existing_revenue = sum(
+            float(s.price_per_participant or f.base_price or 0) * s.capacity
+            for s in sessions_qs
+        )
+
+        formation_data[str(f.pk)] = {
+            "duration_days": float(f.duration_days) if f.duration_days else None,
+            "duration_hours": float(f.duration_hours) if f.duration_hours else None,
+            "base_price": float(f.base_price) if f.base_price else None,
+            "used_days": used_days,
+            "existing_revenue": round(existing_revenue, 2),
+            "edit_url": reverse("formations:formation_edit", args=[f.pk]),
+        }
+
+    return {
+        "room_capacities_json": json.dumps(room_capacities),
+        "formation_data_json": json.dumps(formation_data),
+    }
+
+
 def session_create(request):
-    form = SessionForm(request.POST or None)
+    import math
+    from datetime import date, timedelta
+    from decimal import Decimal, ROUND_HALF_UP
+
+    prefill_formation = None
+    initial = {}
+    formation_pk = request.GET.get("formation")
+    if formation_pk:
+        try:
+            prefill_formation = Formation.objects.get(pk=formation_pk, is_active=True)
+            initial["formation"] = prefill_formation.pk
+            initial["capacity"] = int(prefill_formation.max_participants)
+
+            if prefill_formation.duration_days:
+                today = date.today()
+                duration = max(1, math.ceil(float(prefill_formation.duration_days)))
+                initial["date_start"] = today.strftime("%Y-%m-%d")
+                initial["date_end"] = (today + timedelta(days=duration - 1)).strftime(
+                    "%Y-%m-%d"
+                )
+
+            # Default session_hours = formation total duration_hours
+            if prefill_formation.duration_hours:
+                initial["session_hours"] = (
+                    format(prefill_formation.duration_hours, "f")
+                    .rstrip("0")
+                    .rstrip(".")
+                )
+
+            # Price = base_price / duration_hours × session_hours
+            # When pre-filling a single session that covers the whole formation,
+            # session_hours == duration_hours → price = base_price
+            if prefill_formation.base_price and prefill_formation.duration_hours:
+                sh = float(prefill_formation.duration_hours)
+                dh = float(prefill_formation.duration_hours)
+                price = (
+                    Decimal(str(prefill_formation.base_price))
+                    * Decimal(str(sh))
+                    / Decimal(str(dh))
+                )
+                price = price.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                initial["price_per_participant"] = str(price)
+            elif prefill_formation.base_price:
+                initial["price_per_participant"] = (
+                    format(prefill_formation.base_price, "f").rstrip("0").rstrip(".")
+                )
+
+        except Formation.DoesNotExist:
+            pass
+
+    form = SessionForm(request.POST or None, initial=initial)
     if request.method == "POST" and form.is_valid():
         session = form.save()
-        messages.success(request, f"Session créée.")
+        messages.success(request, "Session créée.")
         return redirect("formations:session_detail", pk=session.pk)
-    return render(
-        request,
-        "formations/session_form.html",
-        {"form": form, "action": "Nouvelle session"},
+
+    ctx = _session_form_context()
+    ctx.update(
+        {
+            "form": form,
+            "action": "Nouvelle session",
+            "prefill_formation": prefill_formation,
+        }
     )
+    return render(request, "formations/session_form.html", ctx)
 
 
 @admin_required
@@ -266,11 +378,10 @@ def session_edit(request, pk):
         form.save()
         messages.success(request, "Session mise à jour.")
         return redirect("formations:session_detail", pk=pk)
-    return render(
-        request,
-        "formations/session_form.html",
-        {"form": form, "action": "Modifier", "session": session},
-    )
+
+    ctx = _session_form_context(exclude_session_pk=pk)
+    ctx.update({"form": form, "action": "Modifier", "session": session})
+    return render(request, "formations/session_form.html", ctx)
 
 
 @admin_required

@@ -1,32 +1,30 @@
-# clients/forms.py  —  v3.0
+# clients/forms.py  —  v3.1
+# Changes: forme_juridique is now a ModelChoiceField (FK to FormeJuridique).
+#          Auto-defaults to "Autre" for entreprise/startup if left blank.
 
 from django import forms
 from django.core.exceptions import ValidationError
 
-from clients.models import Client, ClientContact
+from clients.models import Client, ClientContact, FormeJuridique
 
 
 class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
         fields = [
-            # Identity
             "name",
             "client_type",
             "forme_juridique",
             "activity_sector",
-            # Contact
             "address",
             "postal_code",
             "city",
             "phone",
             "email",
             "website",
-            # Legacy primary contact
             "contact_name",
             "contact_phone",
             "contact_email",
-            # Fiscal IDs — shown/hidden via JS based on client_type
             "nin",
             "nif",
             "nis",
@@ -34,11 +32,9 @@ class ClientForm(forms.ModelForm):
             "article_imposition",
             "rib",
             "carte_auto_entrepreneur",
-            # Startup extras
             "label_startup_number",
             "label_startup_date",
             "programme_accompagnement",
-            # Flags
             "is_tva_exempt",
             "is_active",
             "notes",
@@ -79,10 +75,21 @@ class ClientForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # All fiscal/type-specific fields are optional at the form level;
-        # completeness is enforced at invoice finalization, not here.
-        optional_fields = [
-            "forme_juridique",
+
+        # ── forme_juridique — FK select, active entries only ─────────── #
+        fj_field = self.fields["forme_juridique"]
+        fj_field.queryset = FormeJuridique.objects.filter(is_active=True).order_by(
+            "name"
+        )
+        fj_field.required = False
+        fj_field.empty_label = "— Sélectionner —"
+        fj_field.help_text = (
+            "Applicable aux entreprises et startups. "
+            "Si non listée, choisir « Autre »."
+        )
+
+        # ── Optional / type-specific fields ──────────────────────────── #
+        for f in (
             "nin",
             "nif",
             "nis",
@@ -98,20 +105,16 @@ class ClientForm(forms.ModelForm):
             "contact_email",
             "website",
             "notes",
-        ]
-        for f in optional_fields:
+        ):
             if f in self.fields:
                 self.fields[f].required = False
 
-        # is_tva_exempt is auto-derived on save for standard types;
-        # expose it as read-only hint for non-standard overrides.
+        # ── TVA exempt — disable for auto-exempt types (edit mode) ───── #
         if self.instance and self.instance.pk:
-            ct = self.instance.client_type
-            auto_types = {
+            if self.instance.client_type in {
                 Client.ClientType.PARTICULIER,
                 Client.ClientType.AUTO_ENTREPRENEUR,
-            }
-            if ct in auto_types:
+            }:
                 self.fields["is_tva_exempt"].disabled = True
                 self.fields["is_tva_exempt"].help_text = (
                     "Automatiquement exonéré pour ce type de client."
@@ -135,7 +138,7 @@ class ClientForm(forms.ModelForm):
         nin = self.cleaned_data.get("nin", "").strip()
         if nin and not nin.isdigit():
             raise ValidationError("Le NIN ne doit contenir que des chiffres.")
-        if nin and len(nin) not in (18,):
+        if nin and len(nin) != 18:
             raise ValidationError("Le NIN doit comporter 18 chiffres.")
         return nin
 
@@ -143,37 +146,42 @@ class ClientForm(forms.ModelForm):
         cleaned = super().clean()
         client_type = cleaned.get("client_type")
 
-        # For types that are auto-exempt, force is_tva_exempt to True
-        # regardless of what was submitted (mirrors model.save() logic).
+        # Force TVA exempt for auto-exempt types
         if client_type in (
             Client.ClientType.PARTICULIER,
             Client.ClientType.AUTO_ENTREPRENEUR,
         ):
             cleaned["is_tva_exempt"] = True
 
-        # Soft cross-field warnings — hard validation happens at finalization
+        # Soft cross-field warnings (hard check happens at finalization)
         if client_type == Client.ClientType.PARTICULIER:
             for field in ("nif", "nis", "rc", "article_imposition"):
                 if cleaned.get(field):
                     self.add_error(
-                        field,
-                        f"Ce champ n'est pas applicable aux particuliers.",
+                        field, "Ce champ n'est pas applicable aux particuliers."
                     )
 
         if client_type == Client.ClientType.AUTO_ENTREPRENEUR:
             for field in ("nis", "rc"):
                 if cleaned.get(field):
                     self.add_error(
-                        field,
-                        "Ce champ n'est pas applicable aux auto-entrepreneurs.",
+                        field, "Ce champ n'est pas applicable aux auto-entrepreneurs."
                     )
+
+        # Auto-default forme_juridique to "Autre" for entreprise / startup
+        if client_type in (Client.ClientType.ENTREPRISE, Client.ClientType.STARTUP):
+            if not cleaned.get("forme_juridique"):
+                cleaned["forme_juridique"] = FormeJuridique.get_default()
 
         return cleaned
 
 
-class ClientFilterForm(forms.Form):
-    """Drives the client list search/filter bar."""
+# ---------------------------------------------------------------------------
+# Supporting forms
+# ---------------------------------------------------------------------------
 
+
+class ClientFilterForm(forms.Form):
     q = forms.CharField(
         label="Recherche",
         required=False,
@@ -187,29 +195,17 @@ class ClientFilterForm(forms.Form):
     has_balance = forms.ChoiceField(
         label="Solde",
         required=False,
-        choices=[
-            ("", "Tous"),
-            ("yes", "Solde impayé"),
-            ("no", "Aucun impayé"),
-        ],
+        choices=[("", "Tous"), ("yes", "Solde impayé"), ("no", "Aucun impayé")],
     )
     is_active = forms.ChoiceField(
         label="Statut",
         required=False,
-        choices=[
-            ("", "Tous"),
-            ("1", "Actif"),
-            ("0", "Inactif"),
-        ],
+        choices=[("", "Tous"), ("1", "Actif"), ("0", "Inactif")],
     )
     is_tva_exempt = forms.ChoiceField(
         label="TVA",
         required=False,
-        choices=[
-            ("", "Tous"),
-            ("1", "Exonéré TVA"),
-            ("0", "Assujetti TVA"),
-        ],
+        choices=[("", "Tous"), ("1", "Exonéré TVA"), ("0", "Assujetti TVA")],
     )
 
 
@@ -234,9 +230,7 @@ class ClientContactForm(forms.ModelForm):
             "is_primary": "Contact principal",
             "notes": "Notes",
         }
-        widgets = {
-            "notes": forms.Textarea(attrs={"rows": 2}),
-        }
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -248,3 +242,36 @@ class ClientContactForm(forms.ModelForm):
         if not cleaned.get("first_name") and not cleaned.get("last_name"):
             raise ValidationError("Au moins le prénom ou le nom est requis.")
         return cleaned
+
+
+class FormeJuridiqueForm(forms.ModelForm):
+    """Admin-only form to add / edit forme juridique entries dynamically."""
+
+    class Meta:
+        model = FormeJuridique
+        fields = ["name", "description", "is_active"]
+        labels = {
+            "name": "Sigle",
+            "description": "Description complète",
+            "is_active": "Active",
+        }
+        widgets = {
+            "description": forms.TextInput(
+                attrs={"placeholder": "Ex. Société par Actions"}
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["description"].required = False
+
+    def clean_name(self):
+        name = self.cleaned_data.get("name", "").strip().upper()
+        if not name:
+            raise ValidationError("Le sigle est obligatoire.")
+        qs = FormeJuridique.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise ValidationError(f"« {name} » existe déjà.")
+        return name

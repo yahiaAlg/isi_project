@@ -90,11 +90,26 @@ USERS = [
 ]
 
 # v3: 4 client types — entreprise, particulier, auto_entrepreneur, startup
+FORMES_JURIDIQUES = [
+    {"name": "AUTRE", "description": "Forme juridique non listée ou non applicable"},
+    {
+        "name": "EURL",
+        "description": "Entreprise Unipersonnelle à Responsabilité Limitée",
+    },
+    {"name": "GIE", "description": "Groupement d'Intérêt Économique"},
+    {"name": "SA", "description": "Société Anonyme"},
+    {"name": "SARL", "description": "Société à Responsabilité Limitée"},
+    {"name": "SNCI", "description": "Société en Nom Collectif et en Industrie"},
+    {"name": "SNC", "description": "Société en Nom Collectif"},
+    {"name": "SPA", "description": "Société par Actions"},
+    {"name": "SCS", "description": "Société en Commandite Simple"},
+]
+
 CLIENTS = [
     {
         "name": "Sonatrach SPA",
         "client_type": "entreprise",  # v3
-        "forme_juridique": "SPA",
+        "_forme_juridique_name": "SPA",
         "city": "Alger",
         "address": "Djenane El Malik, Hydra",
         "postal_code": "16035",
@@ -113,7 +128,7 @@ CLIENTS = [
     {
         "name": "Cevital Industries",
         "client_type": "entreprise",
-        "forme_juridique": "SPA",
+        "_forme_juridique_name": "SPA",
         "city": "Béjaïa",
         "address": "Zone Industrielle, Port de Béjaïa",
         "postal_code": "06000",
@@ -132,7 +147,7 @@ CLIENTS = [
     {
         "name": "Groupe Hasnaoui",
         "client_type": "entreprise",
-        "forme_juridique": "SARL",
+        "_forme_juridique_name": "SARL",
         "city": "Sidi Bel Abbès",
         "address": "Route Nationale 7, Zone d'Activité",
         "postal_code": "22000",
@@ -151,7 +166,7 @@ CLIENTS = [
     {
         "name": "Lafarge Algérie",
         "client_type": "entreprise",
-        "forme_juridique": "SPA",
+        "_forme_juridique_name": "SPA",
         "city": "M'Sila",
         "address": "Usine de Meftah — Zone Industrielle",
         "postal_code": "28000",
@@ -170,7 +185,7 @@ CLIENTS = [
     {
         "name": "Entreprise Nationale des Travaux aux Puits — ENTP",
         "client_type": "entreprise",
-        "forme_juridique": "SPA",
+        "_forme_juridique_name": "SPA",
         "city": "Hassi Messaoud",
         "address": "BP 199, Hassi Messaoud",
         "postal_code": "30500",
@@ -218,7 +233,7 @@ CLIENTS = [
         # v3: startup type — all entreprise fields + label_startup
         "name": "SafetyTech DZ",
         "client_type": "startup",  # v3
-        "forme_juridique": "SARL",
+        "_forme_juridique_name": "SARL",
         "city": "Alger",
         "address": "Cyber Parc Sidi Abdallah, Bâtiment B",
         "postal_code": "16303",
@@ -753,11 +768,19 @@ class Command(BaseCommand):
             defaults={
                 "name": "Bureau d'Étude ISI",
                 "invoice_prefix": "E",
-                "proforma_prefix": "PF-E",  # v3
+                "proforma_prefix": "FP-E",  # v3.1: new format FP-E-NNN-YEAR
                 "tva_applicable": True,
                 "tva_rate": Decimal("0.19"),  # 19% for consulting
                 "chief_engineer_name": "Karim Messaoud",
                 "chief_engineer_title": "Ingénieur d'État en Hygiène et Sécurité Industrielle",
+                # v3.1: displayed in emitter block on printed invoices
+                "legal_infos": (
+                    "RC : 16/00-1234567B19\n"
+                    "NIF : 001623456789012\n"
+                    "NIS : 162345678901234\n"
+                    "A.I. : 16123456789"
+                ),
+                "bank_rib": "002 00100 00200123456789 56",
             },
         )
 
@@ -766,13 +789,22 @@ class Command(BaseCommand):
             defaults={
                 "name": "Centre de Formation ISI",
                 "invoice_prefix": "F",
-                "proforma_prefix": "PF-F",  # v3
+                "proforma_prefix": "FP-F",  # v3.1: new format FP-F-NNN-YEAR
                 "tva_applicable": True,
                 "tva_rate": Decimal("0.09"),  # v3: 9% for professional training
                 "attestation_validity_years": 5,
                 "min_attendance_percent": 80,
                 "director_name": "Karim Messaoud",
                 "director_title": "Directeur — Institut de Sécurité Industrielle",
+                # v3.1: displayed in emitter block on printed invoices
+                "legal_infos": (
+                    "RC : 16/00-1234567B19\n"
+                    "NIF : 001623456789012\n"
+                    "NIS : 162345678901234\n"
+                    "A.I. : 16123456789\n"
+                    "Agrément : AGR/FORM/2019/0042"
+                ),
+                "bank_rib": "002 00100 00200123456789 56",
             },
         )
 
@@ -804,10 +836,34 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------ #
 
     def _seed_clients(self):
-        from clients.models import Client
+        from clients.models import Client, FormeJuridique
 
+        # ── Seed forme juridique lookup table first ───────────────────── #
+        self._log("Seeding formes juridiques…")
+        for fj_data in FORMES_JURIDIQUES:
+            fj, created = FormeJuridique.objects.get_or_create(
+                name=fj_data["name"],
+                defaults={"description": fj_data["description"]},
+            )
+            self._ok(f"  {'Created' if created else 'OK'} forme juridique: {fj.name}")
+
+        # Ensure the "Autre" default always exists
+        FormeJuridique.get_default()
+
+        # ── Seed clients, resolving forme_juridique FK by name ────────── #
         self._log("Seeding clients…")
         for data in CLIENTS:
+            data = dict(data)  # don't mutate the module-level constant
+            fj_name = data.pop("_forme_juridique_name", None)
+            if fj_name:
+                data["forme_juridique"] = (
+                    FormeJuridique.objects.filter(name__iexact=fj_name).first()
+                    or FormeJuridique.get_default()
+                )
+            # Entreprise / startup with no forme_juridique → default "Autre"
+            elif data.get("client_type") in ("entreprise", "startup"):
+                data["forme_juridique"] = FormeJuridique.get_default()
+
             client, created = Client.objects.update_or_create(
                 name=data["name"],
                 defaults=data,
@@ -997,6 +1053,21 @@ class Command(BaseCommand):
             trainer = trainers[i % len(trainers)] if trainers else None
             room = rooms[i % len(rooms)] if rooms else None
 
+            # session_hours defaults to the formation total duration_hours.
+            # price = base_price / duration_hours x session_hours
+            # (equals base_price when session covers the full programme)
+            session_hours = formation.duration_hours or None
+            if session_hours and formation.duration_hours:
+                from decimal import Decimal as _D, ROUND_HALF_UP
+
+                price_per_participant = (
+                    formation.base_price
+                    * _D(str(session_hours))
+                    / _D(str(formation.duration_hours))
+                ).quantize(_D("1"), rounding=ROUND_HALF_UP)
+            else:
+                price_per_participant = formation.base_price
+
             session, created = Session.objects.get_or_create(
                 formation=formation,
                 date_start=spec["date_start"],
@@ -1007,7 +1078,8 @@ class Command(BaseCommand):
                     "room": room,
                     "status": spec["status"],
                     "capacity": spec["capacity"],
-                    "price_per_participant": formation.base_price,
+                    "session_hours": session_hours,
+                    "price_per_participant": price_per_participant,
                 },
             )
 
@@ -1217,6 +1289,8 @@ class Command(BaseCommand):
             invoice.save(update_fields=["bon_commande_number", "bon_commande_date"])
 
             # ── Stage 3: finalize → assigns F-YYYY-NNN reference ──
+            # v3.1: set mode_reglement before finalize (virement for seeded data)
+            invoice.mode_reglement = Invoice.PaymentMode.VIREMENT
             words = amount_to_words_fr(invoice.amount_ttc)
             invoice.finalize(amount_in_words=words)
 
@@ -1315,6 +1389,8 @@ class Command(BaseCommand):
             invoice.save(update_fields=["bon_commande_number", "bon_commande_date"])
 
             # ── Stage 3: finalize ──
+            # v3.1: set mode_reglement before finalize (virement for seeded data)
+            invoice.mode_reglement = Invoice.PaymentMode.VIREMENT
             words = amount_to_words_fr(invoice.amount_ttc)
             invoice.finalize(amount_in_words=words)
 

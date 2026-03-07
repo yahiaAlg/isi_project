@@ -1,6 +1,7 @@
 """
 Core models — institute configuration and singleton business-line settings.
-v3.0: Added agrement_number + article_imposition to InstituteInfo;
+v3.1: Added legal_infos + bank_rib to FormationInfo and BureauEtudeInfo;
+      agrement_number + article_imposition already on InstituteInfo.
       FormationInfo TVA default corrected to 9% per Algerian fiscal code.
 """
 
@@ -127,9 +128,9 @@ class BureauEtudeInfo(SingletonModel):
     )
     proforma_prefix = models.CharField(
         max_length=10,
-        default="PF-E",
+        default="FP-E",
         verbose_name="Préfixe proforma",
-        help_text="Utilisé dans les références proforma — ex. PF-E → PF-E-2026-001.",
+        help_text="Utilisé dans les références proforma — ex. FP-E → FP-E-001-2026.",
     )
 
     # ---- TVA ---------------------------------------------------------- #
@@ -140,6 +141,22 @@ class BureauEtudeInfo(SingletonModel):
         default=Decimal("0.19"),
         verbose_name="Taux de TVA",
         help_text="Taux standard 19% pour les études et le conseil.",
+    )
+
+    # ---- Legal info (printed on invoice emetteur block) -------------- #
+    legal_infos = models.TextField(
+        blank=True,
+        verbose_name="Informations légales spécifiques",
+        help_text=(
+            "RC, NIF, NIS, A.I. propres au bureau d'étude (si différents de l'institut). "
+            "Affiché dans la section Émetteur des factures."
+        ),
+    )
+    bank_rib = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="RIB du bureau d'étude",
+        help_text="Relevé d'Identité Bancaire spécifique au bureau d'étude.",
     )
 
     # ---- Signatory ---------------------------------------------------- #
@@ -187,9 +204,9 @@ class FormationInfo(SingletonModel):
     )
     proforma_prefix = models.CharField(
         max_length=10,
-        default="PF-F",
+        default="FP-F",
         verbose_name="Préfixe proforma",
-        help_text="Utilisé dans les références proforma — ex. PF-F → PF-F-2026-001.",
+        help_text="Utilisé dans les références proforma — ex. FP-F → FP-F-001-2026.",
     )
 
     # ---- TVA ---------------------------------------------------------- #
@@ -200,6 +217,22 @@ class FormationInfo(SingletonModel):
         default=Decimal("0.09"),
         verbose_name="Taux de TVA",
         help_text="Taux réduit 9% pour les prestations de formation professionnelle.",
+    )
+
+    # ---- Legal info (printed on invoice emetteur block) -------------- #
+    legal_infos = models.TextField(
+        blank=True,
+        verbose_name="Informations légales spécifiques",
+        help_text=(
+            "RC, NIF, NIS, A.I., N° Agrément propres au centre de formation. "
+            "Affiché dans la section Émetteur des factures."
+        ),
+    )
+    bank_rib = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="RIB du centre de formation",
+        help_text="Relevé d'Identité Bancaire spécifique au centre de formation.",
     )
 
     # ---- Training director ------------------------------------------- #

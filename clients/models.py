@@ -1,12 +1,74 @@
 """
-Clients models — v3.0
-Four distinct legal client profiles aligned with Algerian fiscal requirements.
+Clients models — v3.1
+
+Changes from v3.0
+─────────────────
+* FormeJuridique extracted into its own lookup-table model (was CharField).
+  Client.forme_juridique is now a nullable FK with on_delete=SET_NULL.
+  A seeded "Autre" entry acts as the catch-all default.
 """
 
 from django.db import models
 from django.db.models import Sum
 
 from core.base_models import TimeStampedModel
+
+
+# ======================================================================= #
+# FormeJuridique — lookup table
+# ======================================================================= #
+
+
+class FormeJuridique(TimeStampedModel):
+    """
+    Legal entity form lookup table (SARL, SPA, EURL, SNCI, GIE, …).
+    Managed by admins; the client form exposes it as a <select> dropdown.
+    An "Autre" entry is always seeded as the system-wide catch-all default.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name="Forme juridique",
+        help_text="Ex. SARL, SPA, EURL, SNCI, GIE — sigle court.",
+    )
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Description complète",
+        help_text="Ex. Société par Actions.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Active",
+        help_text="Décochez pour masquer sans supprimer.",
+    )
+
+    class Meta:
+        verbose_name = "Forme juridique"
+        verbose_name_plural = "Formes juridiques"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get_default(cls):
+        """Return (or create on-the-fly) the 'Autre' fallback entry."""
+        obj, _ = cls.objects.get_or_create(
+            name="Autre",
+            defaults={"description": "Forme juridique non listée ou non applicable"},
+        )
+        return obj
+
+    @classmethod
+    def get_default_pk(cls):
+        return cls.get_default().pk
+
+
+# ======================================================================= #
+# Client
+# ======================================================================= #
 
 
 class Client(TimeStampedModel):
@@ -17,8 +79,8 @@ class Client(TimeStampedModel):
       ENTREPRISE        — legal entity (RC, NIF, NIS, AI, TVA)
       STARTUP           — label startup (inherits ENTREPRISE + label fields)
 
-    The `is_tva_exempt` flag is auto-derived from client_type on save but can
-    be overridden for edge cases (e.g. a company with a TVA exemption certificate).
+    `is_tva_exempt` is auto-derived from client_type on save but can be
+    overridden for edge cases (e.g. a company with a TVA exemption certificate).
     """
 
     class ClientType(models.TextChoices):
@@ -27,9 +89,7 @@ class Client(TimeStampedModel):
         ENTREPRISE = "entreprise", "Entreprise"
         STARTUP = "startup", "Startup"
 
-    # ------------------------------------------------------------------ #
-    # Identity
-    # ------------------------------------------------------------------ #
+    # ---- Identity ---------------------------------------------------- #
 
     client_type = models.CharField(
         max_length=20,
@@ -43,16 +103,22 @@ class Client(TimeStampedModel):
         verbose_name="Nom / Raison sociale",
         help_text="Raison sociale pour une entreprise, Nom Prénom pour un particulier.",
     )
-    forme_juridique = models.CharField(
-        max_length=50,
+
+    # v3.1: FK replaces the old free-text CharField
+    forme_juridique = models.ForeignKey(
+        FormeJuridique,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
+        related_name="clients",
         verbose_name="Forme juridique",
-        help_text="SARL / EURL / SPA / SNCI / … — entreprise et startup seulement.",
+        help_text=(
+            "SARL / SPA / EURL / … — entreprise et startup. "
+            "Laisser vide pour particulier / auto-entrepreneur."
+        ),
     )
 
-    # ------------------------------------------------------------------ #
-    # Contact
-    # ------------------------------------------------------------------ #
+    # ---- Contact ----------------------------------------------------- #
 
     address = models.TextField(blank=True, verbose_name="Adresse")
     postal_code = models.CharField(
@@ -66,7 +132,7 @@ class Client(TimeStampedModel):
         max_length=255, blank=True, verbose_name="Secteur d'activité"
     )
 
-    # ---- Legacy primary contact (multi-contact via ClientContact) ----- #
+    # Legacy primary contact (additional contacts via ClientContact model)
     contact_name = models.CharField(
         max_length=255, blank=True, verbose_name="Nom du contact principal"
     )
@@ -75,12 +141,9 @@ class Client(TimeStampedModel):
     )
     contact_email = models.EmailField(blank=True, verbose_name="Email du contact")
 
-    # ------------------------------------------------------------------ #
-    # Legal / fiscal identifiers
-    # Filled according to client_type — validation is enforced at invoice
-    # finalization rather than at the model level so partial records are
-    # allowed during data entry.
-    # ------------------------------------------------------------------ #
+    # ---- Legal / fiscal identifiers ---------------------------------- #
+    # Filled according to client_type. Validation is enforced at invoice
+    # finalization — partial records are allowed during data entry.
 
     # Particulier only
     nin = models.CharField(
@@ -126,14 +189,10 @@ class Client(TimeStampedModel):
 
     # Startup only
     label_startup_number = models.CharField(
-        max_length=100,
-        blank=True,
-        verbose_name="N° Label Startup",
+        max_length=100, blank=True, verbose_name="N° Label Startup"
     )
     label_startup_date = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name="Date d'obtention du label",
+        null=True, blank=True, verbose_name="Date d'obtention du label"
     )
     programme_accompagnement = models.CharField(
         max_length=255,
@@ -142,9 +201,7 @@ class Client(TimeStampedModel):
         help_text="ANIE / NEXUS / … — optionnel.",
     )
 
-    # ------------------------------------------------------------------ #
-    # TVA flag
-    # ------------------------------------------------------------------ #
+    # ---- TVA flag ---------------------------------------------------- #
 
     is_tva_exempt = models.BooleanField(
         default=False,
@@ -155,9 +212,7 @@ class Client(TimeStampedModel):
         ),
     )
 
-    # ------------------------------------------------------------------ #
-    # Status & notes
-    # ------------------------------------------------------------------ #
+    # ---- Status & notes ---------------------------------------------- #
 
     is_active = models.BooleanField(default=True, verbose_name="Actif")
     notes = models.TextField(blank=True, verbose_name="Notes")
@@ -174,34 +229,25 @@ class Client(TimeStampedModel):
     def __str__(self):
         return self.name
 
-    # ------------------------------------------------------------------ #
-    # Save — auto-derive TVA exemption from client type
-    # ------------------------------------------------------------------ #
+    # ---- Save — auto-derive TVA exemption from client type ----------- #
 
     def save(self, *args, **kwargs):
-        tva_exempt_types = {
+        if self.client_type in {
             self.ClientType.PARTICULIER,
             self.ClientType.AUTO_ENTREPRENEUR,
-        }
-        # Only auto-set if the caller hasn't explicitly overridden the field.
-        # We always sync for the standard types to avoid stale data.
-        if self.client_type in tva_exempt_types:
+        }:
             self.is_tva_exempt = True
         elif self.client_type in {self.ClientType.ENTREPRISE, self.ClientType.STARTUP}:
-            # Keep manually-set override; default False for new records.
             if not self.pk:
                 self.is_tva_exempt = False
         super().save(*args, **kwargs)
 
-    # ------------------------------------------------------------------ #
-    # Completeness check — used by invoice finalization view
-    # ------------------------------------------------------------------ #
+    # ---- Completeness check — used by invoice finalization ----------- #
 
     def missing_fields_for_invoice(self) -> list[str]:
         """
-        Return a list of human-readable field names that are required for
-        invoice finalization but not yet filled.  Empty list means the
-        client profile is complete.
+        Return human-readable names of required-for-finalization fields
+        that are not yet filled. Empty list → profile is complete.
         """
         missing: list[str] = []
         t = self.client_type
@@ -223,7 +269,7 @@ class Client(TimeStampedModel):
 
         elif t in {self.ClientType.ENTREPRISE, self.ClientType.STARTUP}:
             required += [
-                ("forme_juridique", "Forme juridique"),
+                ("forme_juridique_id", "Forme juridique"),
                 ("rc", "Numéro RC"),
                 ("nif", "NIF"),
                 ("nis", "NIS"),
@@ -240,16 +286,12 @@ class Client(TimeStampedModel):
 
     @property
     def is_invoice_ready(self) -> bool:
-        """True when all mandatory fields for invoice finalization are present."""
         return len(self.missing_fields_for_invoice()) == 0
 
-    # ------------------------------------------------------------------ #
-    # Financial aggregates — single DB queries
-    # ------------------------------------------------------------------ #
+    # ---- Financial aggregates ---------------------------------------- #
 
     @property
     def outstanding_balance(self):
-        """Total remaining on unpaid / partially-paid *finalized* invoices."""
         from financial.models import Invoice
 
         result = Invoice.objects.filter(
@@ -261,7 +303,6 @@ class Client(TimeStampedModel):
 
     @property
     def total_revenue(self):
-        """Total TTC collected (fully paid finalized invoices)."""
         from financial.models import Invoice
 
         result = Invoice.objects.filter(
@@ -282,18 +323,19 @@ class Client(TimeStampedModel):
         return self.outstanding_balance > 0
 
 
+# ======================================================================= #
+# ClientContact
+# ======================================================================= #
+
+
 class ClientContact(TimeStampedModel):
     """
     Additional contact persons attached to a client record.
-    Allows multiple named contacts (purchasing director, accountant, etc.)
-    with at-most-one primary contact enforced by save().
+    At-most-one primary contact enforced by save().
     """
 
     client = models.ForeignKey(
-        Client,
-        on_delete=models.CASCADE,
-        related_name="contacts",
-        verbose_name="Client",
+        Client, on_delete=models.CASCADE, related_name="contacts", verbose_name="Client"
     )
     first_name = models.CharField(max_length=100, verbose_name="Prénom")
     last_name = models.CharField(max_length=100, verbose_name="Nom")
@@ -320,7 +362,6 @@ class ClientContact(TimeStampedModel):
         return f"{self.first_name} {self.last_name}"
 
     def save(self, *args, **kwargs):
-        """Enforce at-most-one primary contact per client."""
         if self.is_primary:
             ClientContact.objects.filter(client=self.client, is_primary=True).exclude(
                 pk=self.pk

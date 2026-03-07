@@ -12,11 +12,6 @@ from core.base_models import TimeStampedModel
 
 
 class FormationCategory(TimeStampedModel):
-    """
-    Thematic category for organizing the training catalog.
-    Examples: Sécurité incendie, Travaux en hauteur, Risques chimiques, SST.
-    """
-
     name = models.CharField(max_length=255, unique=True, verbose_name="Catégorie")
     description = models.TextField(blank=True, verbose_name="Description")
     color = models.CharField(
@@ -36,10 +31,6 @@ class FormationCategory(TimeStampedModel):
 
 
 class Formation(TimeStampedModel):
-    """
-    Training program in the catalog — defines a reusable type of training.
-    """
-
     category = models.ForeignKey(
         FormationCategory,
         on_delete=models.SET_NULL,
@@ -73,8 +64,6 @@ class Formation(TimeStampedModel):
         default=5, verbose_name="Minimum de participants"
     )
     is_active = models.BooleanField(default=True, verbose_name="Active")
-
-    # Optional accreditation / certification reference
     accreditation_body = models.CharField(
         max_length=255, blank=True, verbose_name="Organisme d'accréditation"
     )
@@ -103,17 +92,12 @@ class Formation(TimeStampedModel):
 
     @property
     def total_participants_trained(self):
-        """Total participants across all completed sessions."""
         return Participant.objects.filter(
             session__formation=self, session__status=Session.STATUS_COMPLETED
         ).count()
 
 
 class Trainer(TimeStampedModel):
-    """
-    An external trainer engaged on a per-session basis.
-    """
-
     first_name = models.CharField(max_length=100, verbose_name="Prénom")
     last_name = models.CharField(max_length=100, verbose_name="Nom")
     specialty = models.CharField(max_length=255, blank=True, verbose_name="Spécialité")
@@ -122,13 +106,10 @@ class Trainer(TimeStampedModel):
     )
     phone = models.CharField(max_length=50, blank=True, verbose_name="Téléphone")
     email = models.EmailField(blank=True, verbose_name="Email")
-
-    # ---- Qualifications ---------------------------------------------- #
     certifications = models.TextField(
         blank=True, verbose_name="Certifications et habilitations"
     )
     cv = models.FileField(upload_to="trainers/cvs/", blank=True, verbose_name="CV")
-
     notes = models.TextField(blank=True, verbose_name="Notes")
     is_active = models.BooleanField(default=True, verbose_name="Actif")
 
@@ -150,13 +131,6 @@ class Trainer(TimeStampedModel):
 
     @property
     def total_earnings(self):
-        """
-        Total fee owed/paid based on actual session duration in days.
-
-        Previously this was `session_count × daily_rate` which is wrong:
-        it assumes every session lasts exactly 1 day.  We now sum the
-        duration (date_end − date_start + 1) for each session.
-        """
         sessions = self.sessions.all()
         total_days = sum((s.date_end - s.date_start).days + 1 for s in sessions)
         return total_days * self.daily_rate
@@ -169,15 +143,10 @@ class Trainer(TimeStampedModel):
 
 
 class TrainingRoom(TimeStampedModel):
-    """
-    An internal training room with capacity management.
-    """
-
     name = models.CharField(max_length=255, verbose_name="Nom")
     capacity = models.PositiveIntegerField(default=20, verbose_name="Capacité")
     location = models.CharField(max_length=255, blank=True, verbose_name="Emplacement")
     description = models.TextField(blank=True, verbose_name="Description")
-    # Equipment permanently installed in this room
     has_projector = models.BooleanField(default=False, verbose_name="Projecteur")
     has_whiteboard = models.BooleanField(default=False, verbose_name="Tableau blanc")
     has_ac = models.BooleanField(default=False, verbose_name="Climatisation")
@@ -196,7 +165,6 @@ class TrainingRoom(TimeStampedModel):
         return self.sessions.count()
 
     def is_available(self, date_start, date_end, exclude_session=None):
-        """Return True if the room is free for the given date range."""
         qs = self.sessions.filter(
             status__in=["planned", "in_progress"],
             date_start__lte=date_end,
@@ -208,10 +176,6 @@ class TrainingRoom(TimeStampedModel):
 
 
 class Session(TimeStampedModel):
-    """
-    A scheduled instance of a training program.
-    """
-
     STATUS_PLANNED = "planned"
     STATUS_IN_PROGRESS = "in_progress"
     STATUS_COMPLETED = "completed"
@@ -230,7 +194,6 @@ class Session(TimeStampedModel):
         related_name="sessions",
         verbose_name="Formation",
     )
-    # Client who commissioned the session (blank = open/inter-company enrollment)
     client = models.ForeignKey(
         Client,
         on_delete=models.SET_NULL,
@@ -261,9 +224,23 @@ class Session(TimeStampedModel):
     external_location = models.CharField(
         max_length=255, blank=True, verbose_name="Lieu externe (si hors-site)"
     )
-
     capacity = models.PositiveIntegerField(default=20, verbose_name="Capacité")
-    # Allows overriding the formation's base price for this specific session
+
+    # ── NEW: duration of this specific session in hours ────────────────
+    session_hours = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Durée de la session (heures)",
+        help_text=(
+            "Nombre d'heures de cette session. "
+            "Utilisé pour le calcul proportionnel du prix : "
+            "prix_formation / durée_totale_h × durée_session_h."
+        ),
+    )
+    # ──────────────────────────────────────────────────────────────────
+
     price_per_participant = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -271,17 +248,13 @@ class Session(TimeStampedModel):
         blank=True,
         verbose_name="Prix par participant (DA)",
     )
-
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
         default=STATUS_PLANNED,
         verbose_name="Statut",
     )
-
-    # Internal notes
     notes = models.TextField(blank=True, verbose_name="Notes")
-    # Cancellation reason (filled when status → cancelled)
     cancellation_reason = models.TextField(
         blank=True, verbose_name="Motif d'annulation"
     )
@@ -302,14 +275,28 @@ class Session(TimeStampedModel):
                 "La date de fin doit être postérieure à la date de début."
             )
 
-    # ------------------------------------------------------------------ #
-    # Computed properties
-    # ------------------------------------------------------------------ #
+    # ── Computed properties ────────────────────────────────────────────
 
     @property
     def effective_price(self):
-        """Price to use: session override or formation default."""
-        return self.price_per_participant or self.formation.base_price
+        """
+        Price to use per participant.
+        If price_per_participant is set explicitly, use it.
+        Otherwise compute proportionally from formation base_price and session_hours.
+        Falls back to formation base_price if no hours data is available.
+        """
+        if self.price_per_participant:
+            return self.price_per_participant
+        f = self.formation
+        if self.session_hours and f.duration_hours:
+            from decimal import Decimal, ROUND_HALF_UP
+
+            return (
+                f.base_price
+                * Decimal(str(self.session_hours))
+                / Decimal(str(f.duration_hours))
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return f.base_price
 
     @property
     def participant_count(self):
@@ -317,7 +304,6 @@ class Session(TimeStampedModel):
 
     @property
     def attended_count(self):
-        """Participants who were actually present."""
         return self.participants.filter(attended=True).count()
 
     @property
@@ -330,14 +316,12 @@ class Session(TimeStampedModel):
 
     @property
     def fill_rate(self):
-        """Fill rate as a percentage (0–100)."""
         if self.capacity == 0:
             return 0
         return round((self.participant_count / self.capacity) * 100, 1)
 
     @property
     def attendance_rate(self):
-        """Actual attendance rate among enrolled participants."""
         if self.participant_count == 0:
             return 0
         return round((self.attended_count / self.participant_count) * 100, 1)
@@ -353,12 +337,10 @@ class Session(TimeStampedModel):
 
     @property
     def duration_days(self):
-        """Actual number of calendar days."""
         return (self.date_end - self.date_start).days + 1
 
     @property
     def is_overdue(self):
-        """Planned session whose start date has passed without being started."""
         return (
             self.status == self.STATUS_PLANNED
             and self.date_start < timezone.now().date()
@@ -366,10 +348,6 @@ class Session(TimeStampedModel):
 
 
 class Participant(TimeStampedModel):
-    """
-    A person enrolled in a training session.
-    """
-
     session = models.ForeignKey(
         Session,
         on_delete=models.CASCADE,
@@ -412,18 +390,10 @@ class Participant(TimeStampedModel):
 
     @property
     def eligible_for_attestation(self):
-        """
-        Participant is eligible if they attended and the session is completed.
-        Attendance threshold is read from FormationInfo config.
-        """
         return self.attended and self.session.status == Session.STATUS_COMPLETED
 
 
 class Attestation(TimeStampedModel):
-    """
-    Certification issued to a participant upon successful completion.
-    """
-
     participant = models.OneToOneField(
         Participant,
         on_delete=models.CASCADE,
@@ -459,8 +429,7 @@ class Attestation(TimeStampedModel):
 
     @property
     def days_until_expiry(self):
-        delta = (self.valid_until - timezone.now().date()).days
-        return max(delta, 0)
+        return max((self.valid_until - timezone.now().date()).days, 0)
 
     def save(self, *args, **kwargs):
         if not self.reference:
@@ -474,10 +443,6 @@ class Attestation(TimeStampedModel):
 
     @staticmethod
     def _generate_reference():
-        """
-        Generate a sequential unique reference using select_for_update
-        inside a transaction to prevent race conditions under concurrent saves.
-        """
         from django.utils import timezone as tz
 
         year = tz.now().year

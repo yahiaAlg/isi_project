@@ -1,7 +1,8 @@
-# financial/forms.py  —  v3.0
 # =============================================================================
-# All forms for the financial module.
-# ISIFormMixin auto-applies Bootstrap 5 CSS classes.
+# financial/forms.py  —  v3.1
+# =============================================================================
+# Changes in v3.1:
+# * FinalizeInvoiceForm — added mode_reglement (required) + due_date (optional).
 # =============================================================================
 
 from decimal import Decimal
@@ -90,7 +91,6 @@ class ProformaCreateForm(ISIFormMixin, forms.ModelForm):
         session = cleaned.get("session")
         project = cleaned.get("study_project")
 
-        # Auto-zero TVA when client is exempt
         if client and client.is_tva_exempt:
             cleaned["tva_rate"] = Decimal("0.00")
 
@@ -107,7 +107,7 @@ class ProformaCreateForm(ISIFormMixin, forms.ModelForm):
         return cleaned
 
 
-# Keep a backward-compatible alias used by generic edit views
+# Backward-compatible alias used by generic edit views
 InvoiceForm = ProformaCreateForm
 
 
@@ -117,10 +117,7 @@ InvoiceForm = ProformaCreateForm
 
 
 class BonCommandeForm(ISIFormMixin, forms.ModelForm):
-    """
-    Records the client's purchase order against an existing proforma.
-    Only the BC fields are editable; everything else stays read-only.
-    """
+    """Records the client's purchase order against an existing proforma."""
 
     class Meta:
         model = Invoice
@@ -153,29 +150,52 @@ class BonCommandeForm(ISIFormMixin, forms.ModelForm):
 
 
 # ---------------------------------------------------------------------------
-# Invoice finalization confirmation form
+# Invoice finalization confirmation form  (v3.1)
 # ---------------------------------------------------------------------------
 
 
 class FinalizeInvoiceForm(ISIFormMixin, forms.Form):
     """
     Shown on the finalization confirmation page (GET).
-    Lets the user verify and edit the auto-generated amount-in-words
-    and set the payment due date before submitting (POST).
+
+    v3.1 additions:
+      * mode_reglement — required; espèce selection triggers timbre fiscal
+        preview in the JS sidebar.
+      * due_date        — optional; helper text clarifies it is not required.
+      * amount_in_words — pre-filled textarea, editable before submit.
     """
 
+    mode_reglement = forms.ChoiceField(
+        label="Mode de règlement",
+        choices=[("", "— Sélectionner —")] + Invoice.PaymentMode.choices,
+        required=True,
+        widget=forms.Select(),
+    )
     amount_in_words = forms.CharField(
         label="Montant en lettres",
         required=False,
-        widget=forms.TextInput(
-            attrs={"placeholder": "Généré automatiquement — vérifiez si nécessaire"}
+        widget=forms.Textarea(
+            attrs={
+                "rows": 2,
+                "placeholder": "Généré automatiquement — vérifiez si nécessaire",
+            }
         ),
     )
     due_date = forms.DateField(
         label="Date d'échéance",
         required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
+        help_text="Optionnel — si vide, n'apparaît pas sur la facture imprimée.",
     )
+
+    def clean_mode_reglement(self):
+        value = self.cleaned_data.get("mode_reglement", "").strip()
+        if not value:
+            raise ValidationError("Veuillez sélectionner un mode de règlement.")
+        valid = [choice[0] for choice in Invoice.PaymentMode.choices]
+        if value not in valid:
+            raise ValidationError("Mode de règlement invalide.")
+        return value
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +298,7 @@ class InvoiceItemForm(ISIFormMixin, forms.ModelForm):
 
 
 # ---------------------------------------------------------------------------
-# Payment forms
+# Payment form
 # ---------------------------------------------------------------------------
 
 
@@ -338,7 +358,6 @@ class CreditNoteForm(ISIFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["notes"].required = False
-        # Default matches the formation rate; view should override for études
         self.fields["tva_rate"].initial = Decimal("0.09")
 
     def clean_amount_ht(self):
@@ -349,7 +368,6 @@ class CreditNoteForm(ISIFormMixin, forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        amount_ht = cleaned.get("amount_ht") or Decimal("0")
         tva_rate = cleaned.get("tva_rate") or Decimal("0")
         if tva_rate < 0 or tva_rate > 1:
             self.add_error(
@@ -481,7 +499,7 @@ class ExpenseCategoryForm(ISIFormMixin, forms.ModelForm):
 
 
 # ---------------------------------------------------------------------------
-# Financial period forms
+# Financial period form
 # ---------------------------------------------------------------------------
 
 
@@ -568,8 +586,7 @@ class ReportFilterForm(ISIFormMixin, forms.Form):
                 )
             if not date_to:
                 self.add_error(
-                    "date_to",
-                    "Sélectionnez une période ou saisissez une date de fin.",
+                    "date_to", "Sélectionnez une période ou saisissez une date de fin."
                 )
             if date_from and date_to and date_to < date_from:
                 raise ValidationError(

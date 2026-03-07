@@ -1,9 +1,16 @@
 # =============================================================================
-# financial/admin.py  —  v3.0
+# financial/admin.py  —  v3.1
+# =============================================================================
+# Changes in v3.1:
+# * Invoice: mode_reglement field added to Règlement fieldset.
+# * Invoice: timbre_fiscal, timbre_rate_display, amount_net_a_payer added
+#   as readonly computed display fields.
+# * Invoice: mode_reglement added to list_display.
 # =============================================================================
 
 from django.contrib import admin
 from django.utils.html import format_html
+
 from financial.models import (
     CreditNote,
     Expense,
@@ -36,7 +43,6 @@ class InvoiceItemInline(admin.TabularInline):
     readonly_fields = ["total_ht"]
 
     def get_readonly_fields(self, request, obj=None):
-        # Lock all item fields once the invoice is finalized
         if obj and obj.is_locked:
             return [f.name for f in InvoiceItem._meta.fields]
         return self.readonly_fields
@@ -48,7 +54,6 @@ class PaymentInline(admin.TabularInline):
     fields = ["date", "amount", "method", "status", "reference"]
 
     def has_add_permission(self, request, obj=None):
-        # Payments only allowed on finalized invoices
         if obj and not obj.is_payable:
             return False
         return super().has_add_permission(request, obj)
@@ -68,14 +73,18 @@ class InvoiceAdmin(admin.ModelAdmin):
         "invoice_type",
         "invoice_date",
         "amount_ttc",
+        "mode_reglement",
         "amount_paid",
         "amount_remaining",
         "status",
-        "has_bon_commande",
+        "has_bc_display",
         "is_overdue_display",
     ]
-    list_filter = ["phase", "invoice_type", "status", "invoice_date"]
+    list_filter = ["phase", "invoice_type", "status", "mode_reglement", "invoice_date"]
     search_fields = ["proforma_reference", "reference", "client__name"]
+    raw_id_fields = ["client", "session", "study_project"]
+    inlines = [InvoiceItemInline, PaymentInline]
+
     readonly_fields = [
         "proforma_reference",
         "reference",
@@ -87,12 +96,17 @@ class InvoiceAdmin(admin.ModelAdmin):
         "amount_paid",
         "amount_remaining",
         "amount_in_words",
+        # v3.1 computed
+        "timbre_fiscal",
+        "timbre_rate_display",
+        "amount_net_a_payer",
+        # helpers
         "is_overdue_display",
         "days_overdue",
         "payment_completion_percent",
-        "has_bon_commande",
+        "has_bc_display",
         "can_be_finalized",
-        # Client snapshots
+        # client snapshots
         "client_name_snapshot",
         "client_address_snapshot",
         "client_type_snapshot",
@@ -103,8 +117,7 @@ class InvoiceAdmin(admin.ModelAdmin):
         "client_nin_snapshot",
         "client_rib_snapshot",
     ]
-    raw_id_fields = ["client", "session", "study_project"]
-    inlines = [InvoiceItemInline, PaymentInline]
+
     fieldsets = [
         (
             "Identification",
@@ -139,7 +152,7 @@ class InvoiceAdmin(admin.ModelAdmin):
                     "bon_commande_date",
                     "bon_commande_amount",
                     "bon_commande_scan",
-                    "has_bon_commande",
+                    "has_bc_display",
                     "can_be_finalized",
                 ]
             },
@@ -157,6 +170,17 @@ class InvoiceAdmin(admin.ModelAdmin):
                     "amount_remaining",
                     "amount_in_words",
                     "payment_completion_percent",
+                ]
+            },
+        ),
+        (
+            "Règlement & timbre fiscal (v3.1)",
+            {
+                "fields": [
+                    "mode_reglement",
+                    "timbre_rate_display",
+                    "timbre_fiscal",
+                    "amount_net_a_payer",
                 ]
             },
         ),
@@ -180,17 +204,48 @@ class InvoiceAdmin(admin.ModelAdmin):
         ("Textes", {"fields": ["notes", "footer_text"]}),
     ]
 
+    # ---- Custom list display columns --------------------------------- #
+
     @admin.display(description="Référence")
     def display_reference(self, obj):
         return obj.reference or obj.proforma_reference
 
     @admin.display(description="BC reçu", boolean=True)
-    def has_bon_commande(self, obj):
+    def has_bc_display(self, obj):
         return obj.has_bon_commande
 
     @admin.display(description="En retard", boolean=True)
     def is_overdue_display(self, obj):
         return obj.is_overdue
+
+    # ---- Computed readonly fields (v3.1) ----------------------------- #
+
+    @admin.display(description="Timbre fiscal (DA)")
+    def timbre_fiscal(self, obj):
+        value = obj.timbre_fiscal
+        if value:
+            return format_html("<strong>{} DA</strong>", value)
+        return "—"
+
+    @admin.display(description="Taux timbre")
+    def timbre_rate_display(self, obj):
+        return obj.timbre_rate_display or "—"
+
+    @admin.display(description="Net à payer TTC (DA)")
+    def amount_net_a_payer(self, obj):
+        return obj.amount_net_a_payer
+
+    @admin.display(description="Avancement paiement (%)")
+    def payment_completion_percent(self, obj):
+        return f"{obj.payment_completion_percent} %"
+
+    @admin.display(description="Peut être finalisée", boolean=True)
+    def can_be_finalized(self, obj):
+        return obj.can_be_finalized
+
+    @admin.display(description="Jours de retard")
+    def days_overdue(self, obj):
+        return obj.days_overdue or "—"
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +278,10 @@ class CreditNoteAdmin(admin.ModelAdmin):
     search_fields = ["reference", "original_invoice__reference"]
     readonly_fields = ["reference", "amount_tva", "amount_ttc", "coverage_percent"]
     raw_id_fields = ["original_invoice"]
+
+    @admin.display(description="Couverture (%)")
+    def coverage_percent(self, obj):
+        return f"{obj.coverage_percent} %"
 
 
 # ---------------------------------------------------------------------------

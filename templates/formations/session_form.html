@@ -18,7 +18,7 @@
       <h1>{{ action }}</h1>
       <p>{% if session %}Modifier les paramètres de la session{% else %}Planifier une nouvelle session de formation{% endif %}</p>
     </div>
-    <a href="{% if session %}{% url 'formations:session_detail' session.pk %}{% else %}{% url 'formations:session_list' %}{% endif %}" class="btn btn-ghost">
+    <a href="{% if prefill_formation %}{% url 'formations:formation_detail' prefill_formation.pk %}{% elif session %}{% url 'formations:session_detail' session.pk %}{% else %}{% url 'formations:session_list' %}{% endif %}" class="btn btn-ghost">
       <i class="bi bi-arrow-left"></i> Retour
     </a>
   </div>
@@ -27,7 +27,7 @@
     {% csrf_token %}
     <div class="row g-4">
 
-      <!-- Main -->
+      <!-- ── Main column ──────────────────────────────────────────── -->
       <div class="col-lg-8">
         <div class="isi-card mb-4">
           <div class="isi-card-header">
@@ -36,6 +36,7 @@
           </div>
           <div class="isi-card-body">
 
+            <!-- Formation & Client -->
             <div class="form-section-title">Formation</div>
             <div class="row g-3 mb-4">
               <div class="col-md-8">
@@ -51,9 +52,7 @@
                   </option>
                   {% endfor %}
                 </select>
-                {% if form.formation.errors %}
-                <div class="invalid-feedback d-block">{{ form.formation.errors|join:", " }}</div>
-                {% endif %}
+                {% if form.formation.errors %}<div class="invalid-feedback d-block">{{ form.formation.errors|join:", " }}</div>{% endif %}
               </div>
               <div class="col-md-4">
                 <label class="form-label" for="{{ form.client.id_for_label }}">Client</label>
@@ -61,53 +60,58 @@
                         class="form-select {% if form.client.errors %}is-invalid{% endif %}">
                   <option value="">— Optionnel —</option>
                   {% for c in form.client.field.queryset %}
-                  <option value="{{ c.pk }}" {% if form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>
-                    {{ c.name }}
-                  </option>
+                  <option value="{{ c.pk }}" {% if form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
                   {% endfor %}
                 </select>
-                {% if form.client.errors %}
-                <div class="invalid-feedback d-block">{{ form.client.errors|join:", " }}</div>
-                {% endif %}
               </div>
             </div>
 
+            <!-- Dates -->
             <div class="section-divider"></div>
             <div class="form-section-title">Dates</div>
             <div class="row g-3 mb-4">
               <div class="col-sm-6">
-                <label class="form-label" for="{{ form.date_start.id_for_label }}">
-                  Date de début <span style="color:var(--danger);">*</span>
-                </label>
+                <label class="form-label" for="{{ form.date_start.id_for_label }}">Date de début <span style="color:var(--danger);">*</span></label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-calendar-event-fill"></i>
                   <input type="date" name="{{ form.date_start.html_name }}" id="{{ form.date_start.id_for_label }}"
                          class="form-control {% if form.date_start.errors %}is-invalid{% endif %}"
                          value="{{ form.date_start.value|default:'' }}">
                 </div>
-                {% if form.date_start.errors %}
-                <div class="invalid-feedback d-block">{{ form.date_start.errors|join:", " }}</div>
-                {% endif %}
+                {% if form.date_start.errors %}<div class="invalid-feedback d-block">{{ form.date_start.errors|join:", " }}</div>{% endif %}
               </div>
               <div class="col-sm-6">
-                <label class="form-label" for="{{ form.date_end.id_for_label }}">
-                  Date de fin <span style="color:var(--danger);">*</span>
-                </label>
+                <label class="form-label" for="{{ form.date_end.id_for_label }}">Date de fin <span style="color:var(--danger);">*</span></label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-calendar-event-fill"></i>
                   <input type="date" name="{{ form.date_end.html_name }}" id="{{ form.date_end.id_for_label }}"
                          class="form-control {% if form.date_end.errors %}is-invalid{% endif %}"
                          value="{{ form.date_end.value|default:'' }}">
                 </div>
-                {% if form.date_end.errors %}
-                <div class="invalid-feedback d-block">{{ form.date_end.errors|join:", " }}</div>
-                {% endif %}
+                {% if form.date_end.errors %}<div class="invalid-feedback d-block">{{ form.date_end.errors|join:", " }}</div>{% endif %}
               </div>
+
+              <!-- ── Duration overflow notification ─────────────── -->
+              <div class="col-12" id="notif-duration-wrap" style="display:none;">
+                <div class="sn-box sn-warning">
+                  <i class="bi bi-exclamation-triangle-fill sn-icon"></i>
+                  <div class="sn-body">
+                    <div class="sn-text" id="notif-duration-text"></div>
+                    <a id="notif-duration-link" href="#" class="sn-action" target="_blank">
+                      <i class="bi bi-pencil-fill"></i> Modifier la durée de la formation
+                    </a>
+                  </div>
+                </div>
+              </div>
+              <!-- ─────────────────────────────────────────────────── -->
             </div>
 
+            <!-- Lieu et intervenant -->
             <div class="section-divider"></div>
             <div class="form-section-title">Lieu et intervenant</div>
             <div class="row g-3 mb-4">
+
+              <!-- Trainer -->
               <div class="col-md-6">
                 <label class="form-label" for="{{ form.trainer.id_for_label }}">Formateur</label>
                 <select name="{{ form.trainer.html_name }}" id="{{ form.trainer.id_for_label }}"
@@ -119,10 +123,20 @@
                   </option>
                   {% endfor %}
                 </select>
-                {% if form.trainer.errors %}
-                <div class="invalid-feedback d-block">{{ form.trainer.errors|join:", " }}</div>
-                {% endif %}
+                {% if form.trainer.errors %}<div class="invalid-feedback d-block">{{ form.trainer.errors|join:", " }}</div>{% endif %}
+                <!-- Trainer quick-action (always visible) -->
+                <div class="sn-box sn-info" style="margin-top:8px;">
+                  <i class="bi bi-person-plus-fill sn-icon" style="color:var(--accent);"></i>
+                  <div class="sn-body" style="flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span style="color:var(--text-muted);">Formateur introuvable ?</span>
+                    <a href="{% url 'resources:trainer_create' %}" class="sn-action" target="_blank">
+                      <i class="bi bi-plus-lg"></i> Créer un formateur
+                    </a>
+                  </div>
+                </div>
               </div>
+
+              <!-- Room -->
               <div class="col-md-6">
                 <label class="form-label" for="{{ form.room.id_for_label }}">Salle</label>
                 <select name="{{ form.room.html_name }}" id="{{ form.room.id_for_label }}"
@@ -134,22 +148,33 @@
                   </option>
                   {% endfor %}
                 </select>
-                {% if form.room.errors %}
-                <div class="invalid-feedback d-block">{{ form.room.errors|join:", " }}</div>
-                {% endif %}
+                {% if form.room.errors %}<div class="invalid-feedback d-block">{{ form.room.errors|join:", " }}</div>{% endif %}
+                <!-- Room capacity warning -->
+                <div id="notif-room-wrap" style="display:none;margin-top:8px;">
+                  <div class="sn-box sn-warning">
+                    <i class="bi bi-door-closed-fill sn-icon"></i>
+                    <div class="sn-body">
+                      <div class="sn-text" id="notif-room-text"></div>
+                      <a href="{% url 'resources:room_create' %}" class="sn-action" target="_blank">
+                        <i class="bi bi-plus-lg"></i> Créer une nouvelle salle
+                      </a>
+                    </div>
+                  </div>
+                </div>
               </div>
+
               <div class="col-12">
                 <label class="form-label" for="{{ form.external_location.id_for_label }}">Lieu externe</label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-geo-alt-fill"></i>
                   <input type="text" name="{{ form.external_location.html_name }}" id="{{ form.external_location.id_for_label }}"
-                         class="form-control"
-                         value="{{ form.external_location.value|default:'' }}"
+                         class="form-control" value="{{ form.external_location.value|default:'' }}"
                          placeholder="Adresse ou nom du site externe (si hors salle interne)">
                 </div>
               </div>
             </div>
 
+            <!-- Notes -->
             <div class="section-divider"></div>
             <div class="form-section-title">Notes</div>
             <div class="mb-4">
@@ -173,17 +198,19 @@
             <i class="bi bi-check-lg"></i>
             {% if session %}Enregistrer les modifications{% else %}Planifier la session{% endif %}
           </button>
-          <a href="{% if session %}{% url 'formations:session_detail' session.pk %}{% else %}{% url 'formations:session_list' %}{% endif %}"
+          <a href="{% if prefill_formation %}{% url 'formations:formation_detail' prefill_formation.pk %}{% elif session %}{% url 'formations:session_detail' session.pk %}{% else %}{% url 'formations:session_list' %}{% endif %}"
              class="btn btn-ghost">Annuler</a>
         </div>
       </div>
 
-      <!-- Sidebar -->
+      <!-- ── Sidebar ───────────────────────────────────────────────── -->
       <div class="col-lg-4">
+
+        <!-- Capacité & durée session -->
         <div class="isi-card mb-4">
           <div class="isi-card-header">
             <div class="card-icon green"><i class="bi bi-people-fill"></i></div>
-            <h3>Capacité et tarif</h3>
+            <h3>Capacité et durée</h3>
           </div>
           <div class="isi-card-body">
             <div class="mb-3">
@@ -193,28 +220,260 @@
               <input type="number" name="{{ form.capacity.html_name }}" id="{{ form.capacity.id_for_label }}"
                      class="form-control {% if form.capacity.errors %}is-invalid{% endif %}"
                      value="{{ form.capacity.value|default:'' }}" min="1">
-              {% if form.capacity.errors %}
-              <div class="invalid-feedback d-block">{{ form.capacity.errors|join:", " }}</div>
-              {% endif %}
+              {% if form.capacity.errors %}<div class="invalid-feedback d-block">{{ form.capacity.errors|join:", " }}</div>{% endif %}
             </div>
             <div>
-              <label class="form-label" for="{{ form.price_per_participant.id_for_label }}">Prix / participant (DA)</label>
-              <input type="number" name="{{ form.price_per_participant.html_name }}" id="{{ form.price_per_participant.id_for_label }}"
-                     class="form-control {% if form.price_per_participant.errors %}is-invalid{% endif %}"
-                     value="{{ form.price_per_participant.value|default:'' }}" min="0" step="100"
-                     placeholder="Laisser vide = prix formation">
-              {% if form.price_per_participant.errors %}
-              <div class="invalid-feedback d-block">{{ form.price_per_participant.errors|join:", " }}</div>
-              {% endif %}
+              <label class="form-label" for="{{ form.session_hours.id_for_label }}">
+                Durée de la session (heures)
+              </label>
+              <input type="number" name="{{ form.session_hours.html_name }}" id="{{ form.session_hours.id_for_label }}"
+                     class="form-control {% if form.session_hours.errors %}is-invalid{% endif %}"
+                     value="{{ form.session_hours.value|default:'' }}" min="0.5" step="0.5"
+                     placeholder="Ex. 8">
+              {% if form.session_hours.errors %}<div class="invalid-feedback d-block">{{ form.session_hours.errors|join:", " }}</div>{% endif %}
               <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
-                Si vide, le prix de base de la formation est utilisé.
+                Sert au calcul automatique du prix : prix_formation / h_totales × h_session.
               </div>
             </div>
           </div>
         </div>
-      </div>
+
+        <!-- Tarif -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-currency-exchange"></i></div>
+            <h3>Tarification</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="mb-1">
+              <label class="form-label" for="{{ form.price_per_participant.id_for_label }}">
+                Prix / participant (DA)
+              </label>
+              <input type="number" name="{{ form.price_per_participant.html_name }}" id="{{ form.price_per_participant.id_for_label }}"
+                     class="form-control {% if form.price_per_participant.errors %}is-invalid{% endif %}"
+                     value="{{ form.price_per_participant.value|default:'' }}" min="0" step="100"
+                     placeholder="Auto-calculé">
+              {% if form.price_per_participant.errors %}<div class="invalid-feedback d-block">{{ form.price_per_participant.errors|join:", " }}</div>{% endif %}
+              <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
+                Auto-calculé depuis la formation. Modifiable manuellement.
+              </div>
+            </div>
+
+            <!-- ── Auto-price hint ──────────────────────────────── -->
+            <div id="price-hint" style="display:none;margin-top:10px;" class="sn-box sn-info">
+              <i class="bi bi-calculator sn-icon" style="color:var(--accent);"></i>
+              <div class="sn-body">
+                <div class="sn-text" id="price-hint-text"></div>
+              </div>
+            </div>
+
+            <!-- ── Revenue overflow notification ──────────────── -->
+            <div id="notif-revenue-wrap" style="display:none;margin-top:10px;">
+              <div class="sn-box sn-warning">
+                <i class="bi bi-graph-up-arrow sn-icon"></i>
+                <div class="sn-body">
+                  <div class="sn-text" id="notif-revenue-text"></div>
+                  <a id="notif-revenue-link" href="#" class="sn-action" target="_blank">
+                    <i class="bi bi-pencil-fill"></i> Mettre à jour le prix de base
+                  </a>
+                </div>
+              </div>
+            </div>
+            <!-- ─────────────────────────────────────────────────── -->
+          </div>
+        </div>
+
+      </div><!-- /sidebar -->
 
     </div>
   </form>
 </div>
+
+<!-- ── Notification styles ────────────────────────────────────────── -->
+<style>
+.sn-box { display:flex; align-items:flex-start; gap:10px; border-radius:8px; padding:10px 14px; font-size:12.5px; line-height:1.5; }
+.sn-warning { background:#fffbeb; border:1px solid #fcd34d; }
+.sn-info    { background:#f8fafc; border:1px solid var(--card-border,#e2e8f0); }
+.sn-icon    { flex-shrink:0; margin-top:2px; color:#F59E0B; }
+.sn-body    { flex:1; display:flex; flex-direction:column; gap:6px; }
+.sn-text    { font-weight:600; color:var(--text-primary); }
+.sn-action  {
+  display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600;
+  color:var(--accent,#F59E0B); text-decoration:none; padding:3px 8px;
+  border:1px solid currentColor; border-radius:5px; width:fit-content; transition:background .15s;
+}
+.sn-action:hover { background:#fef3c7; color:var(--accent,#F59E0B); }
+</style>
+
+<!-- ── Smart-notification JS ──────────────────────────────────────── -->
+<script>
+(function () {
+  /* ── Server-side data ─────────────────────────────────────────── */
+  const ROOM_CAPS   = {{ room_capacities_json|safe }};
+  const FORM_DATA   = {{ formation_data_json|safe }};
+
+  /* ── DOM refs ──────────────────────────────────────────────────── */
+  const selFormation = document.getElementById('{{ form.formation.id_for_label }}');
+  const selRoom      = document.getElementById('{{ form.room.id_for_label }}');
+  const inpCapacity  = document.getElementById('{{ form.capacity.id_for_label }}');
+  const inpStart     = document.getElementById('{{ form.date_start.id_for_label }}');
+  const inpEnd       = document.getElementById('{{ form.date_end.id_for_label }}');
+  const inpHours     = document.getElementById('{{ form.session_hours.id_for_label }}');
+  const inpPrice     = document.getElementById('{{ form.price_per_participant.id_for_label }}');
+
+  const roomWrap    = document.getElementById('notif-room-wrap');
+  const roomText    = document.getElementById('notif-room-text');
+  const durWrap     = document.getElementById('notif-duration-wrap');
+  const durText     = document.getElementById('notif-duration-text');
+  const durLink     = document.getElementById('notif-duration-link');
+  const revWrap     = document.getElementById('notif-revenue-wrap');
+  const revText     = document.getElementById('notif-revenue-text');
+  const revLink     = document.getElementById('notif-revenue-link');
+  const priceHint   = document.getElementById('price-hint');
+  const priceHintTx = document.getElementById('price-hint-text');
+
+  /* ── Helpers ───────────────────────────────────────────────────── */
+  const show = el => { if (el) el.style.display = 'block'; };
+  const hide = el => { if (el) el.style.display = 'none';  };
+
+  function daysBetween(s, e) {
+    if (!s || !e) return null;
+    const sd = new Date(s), ed = new Date(e);
+    if (isNaN(sd) || isNaN(ed) || ed < sd) return null;
+    return Math.round((ed - sd) / 86400000) + 1;
+  }
+
+  function fmt(n) {
+    /* Format a number with spaces as thousand separators, no decimals */
+    return Math.round(n).toLocaleString('fr-DZ');
+  }
+
+  /* Track whether the price was set by auto-calc so manual edits are respected */
+  let _autoCalcActive = false;
+
+  /* ── 1. Auto-calculate price from session_hours + formation ───── */
+  function calcPrice() {
+    const pk = selFormation ? selFormation.value : '';
+    const fd = pk ? FORM_DATA[pk] : null;
+    const sh = parseFloat(inpHours ? inpHours.value : '');
+
+    if (!fd || !fd.base_price || !fd.duration_hours || isNaN(sh) || sh <= 0) {
+      hide(priceHint);
+      return;
+    }
+
+    const suggested = Math.round(fd.base_price / fd.duration_hours * sh);
+
+    /* Show hint always */
+    priceHintTx.textContent =
+      `Prix suggéré : ${fmt(suggested)} DA ` +
+      `(${fmt(fd.base_price)} DA ÷ ${fd.duration_hours}h × ${sh}h)`;
+    show(priceHint);
+
+    /* Only auto-fill if field is empty or was previously auto-filled */
+    const current = parseFloat(inpPrice ? inpPrice.value : '');
+    if (inpPrice && (isNaN(current) || _autoCalcActive)) {
+      inpPrice.value = suggested;
+      _autoCalcActive = true;
+    }
+  }
+
+  /* ── 2. Room capacity check ────────────────────────────────────── */
+  function checkRoom() {
+    const pk  = selRoom ? selRoom.value : '';
+    const cap = parseInt(inpCapacity ? inpCapacity.value : '', 10);
+    if (pk && !isNaN(cap)) {
+      const rc = ROOM_CAPS[pk];
+      if (rc !== undefined && cap > rc) {
+        roomText.textContent =
+          `Capacité saisie (${cap} pers.) > capacité de la salle (${rc} places). ` +
+          `Choisissez une salle plus grande ou créez-en une nouvelle.`;
+        show(roomWrap); return;
+      }
+    }
+    hide(roomWrap);
+  }
+
+  /* ── 3. Formation day-duration overflow ────────────────────────── */
+  function checkDuration() {
+    const pk   = selFormation ? selFormation.value : '';
+    const days = daysBetween(inpStart ? inpStart.value : '', inpEnd ? inpEnd.value : '');
+    const fd   = pk ? FORM_DATA[pk] : null;
+    if (!fd || fd.duration_days === null || days === null) { hide(durWrap); return; }
+
+    const totalAfter = fd.used_days + days;
+    if (totalAfter > fd.duration_days) {
+      const over = totalAfter - fd.duration_days;
+      durText.textContent =
+        `Cette session porterait le total planifié à ${totalAfter}j ` +
+        `(+${over}j par rapport aux ${fd.duration_days}j définis). ` +
+        `Étendez la durée de la formation pour autoriser cette session.`;
+      durLink.href = fd.edit_url;
+      show(durWrap);
+    } else {
+      hide(durWrap);
+    }
+  }
+
+  /* ── 4. Total revenue overflow ─────────────────────────────────── */
+  function checkRevenue() {
+    const pk  = selFormation ? selFormation.value : '';
+    const fd  = pk ? FORM_DATA[pk] : null;
+    if (!fd || !fd.base_price) { hide(revWrap); return; }
+
+    const price = parseFloat(inpPrice ? inpPrice.value : '');
+    const cap   = parseInt(inpCapacity ? inpCapacity.value : '', 10);
+    if (isNaN(price) || isNaN(cap) || cap <= 0) { hide(revWrap); return; }
+
+    const thisRevenue  = price * cap;
+    const totalRevenue = fd.existing_revenue + thisRevenue;
+
+    if (totalRevenue > fd.base_price) {
+      const excess   = totalRevenue - fd.base_price;
+      const newPrice = Math.ceil(totalRevenue);   // suggested new base_price
+
+      revText.textContent =
+        `Le chiffre d'affaires total de cette formation après cette session serait de ` +
+        `${fmt(totalRevenue)} DA — soit ${fmt(excess)} DA de plus que le prix de base ` +
+        `(${fmt(fd.base_price)} DA). Mettez à jour le prix de base pour refléter cela.`;
+
+      /* Build edit URL with pre-filled suggest_base_price param */
+      const editUrl = new URL(fd.edit_url, window.location.origin);
+      editUrl.searchParams.set('suggest_base_price', newPrice);
+      revLink.href = editUrl.toString();
+      show(revWrap);
+    } else {
+      hide(revWrap);
+    }
+  }
+
+  /* ── Wire events ───────────────────────────────────────────────── */
+  /* Price becomes "manual" if the user edits the field directly */
+  inpPrice && inpPrice.addEventListener('input', () => { _autoCalcActive = false; checkRevenue(); });
+
+  [selFormation, inpHours].forEach(el => {
+    if (!el) return;
+    el.addEventListener('change', () => { calcPrice(); checkRevenue(); checkDuration(); });
+    el.addEventListener('input',  () => { calcPrice(); checkRevenue(); });
+  });
+
+  [selRoom, inpCapacity].forEach(el => {
+    if (!el) return;
+    el.addEventListener('change', () => { checkRoom(); checkRevenue(); });
+    el.addEventListener('input',  () => { checkRoom(); checkRevenue(); });
+  });
+
+  [inpStart, inpEnd].forEach(el => {
+    if (!el) return;
+    el.addEventListener('change', checkDuration);
+    el.addEventListener('input',  checkDuration);
+  });
+
+  /* Run once on load for pre-filled forms */
+  calcPrice();
+  checkRoom();
+  checkDuration();
+  checkRevenue();
+})();
+</script>
 {% endblock %}

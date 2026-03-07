@@ -196,13 +196,49 @@
               Ces champs sont requis pour la finalisation des factures.
             </div>
             <div class="row g-3">
+
+              <!-- ── Forme juridique — FK select + add-new link ── -->
               <div class="col-sm-4">
-                <label class="form-label" for="{{ form.forme_juridique.id_for_label }}">Forme juridique</label>
-                <input type="text" name="{{ form.forme_juridique.html_name }}"
-                       id="{{ form.forme_juridique.id_for_label }}"
-                       class="form-control" value="{{ form.forme_juridique.value|default:'' }}"
-                       placeholder="Ex. SPA, SARL, EURL…">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;">
+                  <label class="form-label mb-0" for="{{ form.forme_juridique.id_for_label }}">
+                    Forme juridique
+                  </label>
+                  <a href="{% url 'clients:forme_juridique_create' %}"
+                     target="_blank"
+                     title="Ajouter une nouvelle forme juridique"
+                     style="font-size:11.5px;color:var(--accent);text-decoration:none;
+                            display:flex;align-items:center;gap:3px;white-space:nowrap;">
+                    <i class="bi bi-plus-circle-fill" style="font-size:12px;"></i>
+                    Nouvelle forme
+                  </a>
+                </div>
+                <select name="{{ form.forme_juridique.html_name }}"
+                        id="{{ form.forme_juridique.id_for_label }}"
+                        class="form-select {% if form.forme_juridique.errors %}is-invalid{% endif %}">
+                  <option value="">— Sélectionner —</option>
+                  {% for choice_val, choice_label in form.forme_juridique.field.choices %}
+                    {% if choice_val %}
+                    <option value="{{ choice_val }}"
+                      {% if form.forme_juridique.value|stringformat:"s" == choice_val|stringformat:"s" %}selected{% endif %}>
+                      {{ choice_label }}
+                    </option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                {% if form.forme_juridique.errors %}
+                <div class="invalid-feedback d-block">{{ form.forme_juridique.errors|join:", " }}</div>
+                {% endif %}
+                <div style="font-size:11.5px;color:var(--text-muted);margin-top:5px;line-height:1.4;">
+                  Pas dans la liste ?
+                  <a href="{% url 'clients:forme_juridique_create' %}" target="_blank"
+                     style="color:var(--accent);text-decoration:none;">
+                    Créer « Autre » ou une entrée personnalisée
+                  </a>
+                  puis rafraîchissez la page.
+                </div>
               </div>
+              <!-- ── / Forme juridique ──────────────────────── -->
+
               <div class="col-sm-4">
                 <label class="form-label" for="{{ form.rc.id_for_label }}">N° RC</label>
                 <input type="text" name="{{ form.rc.html_name }}" id="{{ form.rc.id_for_label }}"
@@ -417,6 +453,45 @@
           </div>
         </div>
 
+        <!-- Formes juridiques quick-reference -->
+        <div class="isi-card mb-4" id="forme-juridique-ref" style="display:none;">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-bank2"></i></div>
+            <h3>Formes juridiques</h3>
+          </div>
+          <div class="isi-card-body" style="padding-bottom:4px;">
+            <div style="display:flex;flex-direction:column;gap:0;">
+              <div style="padding:7px 0;border-bottom:1px solid var(--border-light);display:flex;gap:10px;align-items:baseline;">
+                <span style="font-weight:700;font-size:12px;min-width:44px;color:#92400e;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.22);border-radius:5px;padding:1px 6px;text-align:center;">SPA</span>
+                <span style="font-size:12px;color:var(--text-muted);">Société par Actions</span>
+              </div>
+              <div style="padding:7px 0;border-bottom:1px solid var(--border-light);display:flex;gap:10px;align-items:baseline;">
+                <span style="font-weight:700;font-size:12px;min-width:44px;color:#92400e;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.22);border-radius:5px;padding:1px 6px;text-align:center;">SARL</span>
+                <span style="font-size:12px;color:var(--text-muted);">Société à Responsabilité Limitée</span>
+              </div>
+              <div style="padding:7px 0;border-bottom:1px solid var(--border-light);display:flex;gap:10px;align-items:baseline;">
+                <span style="font-weight:700;font-size:12px;min-width:44px;color:#92400e;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.22);border-radius:5px;padding:1px 6px;text-align:center;">EURL</span>
+                <span style="font-size:12px;color:var(--text-muted);">Entreprise Unipersonnelle à Resp. Limitée</span>
+              </div>
+              <div style="padding:7px 0;border-bottom:1px solid var(--border-light);display:flex;gap:10px;align-items:baseline;">
+                <span style="font-weight:700;font-size:12px;min-width:44px;color:#92400e;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.22);border-radius:5px;padding:1px 6px;text-align:center;">GIE</span>
+                <span style="font-size:12px;color:var(--text-muted);">Groupement d'Intérêt Économique</span>
+              </div>
+              <div style="padding:7px 0;border-bottom:1px solid var(--border-light);display:flex;gap:10px;align-items:baseline;">
+                <span style="font-weight:700;font-size:12px;min-width:44px;color:#92400e;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.22);border-radius:5px;padding:1px 6px;text-align:center;">SNC</span>
+                <span style="font-size:12px;color:var(--text-muted);">Société en Nom Collectif</span>
+              </div>
+            </div>
+            <div style="padding-top:10px;">
+              <a href="{% url 'clients:forme_juridique_list' %}" target="_blank"
+                 style="font-size:12px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:5px;">
+                <i class="bi bi-box-arrow-up-right" style="font-size:11px;"></i>
+                Gérer toutes les formes juridiques
+              </a>
+            </div>
+          </div>
+        </div>
+
         <!-- Type helper -->
         <div class="isi-card">
           <div class="isi-card-header">
@@ -473,12 +548,13 @@
 
 {% block extra_scripts %}
 <script>
-  const typeSelect = document.getElementById('{{ form.client_type.id_for_label }}');
+  const typeSelect      = document.getElementById('{{ form.client_type.id_for_label }}');
   const cardEntreprise  = document.getElementById('fiscal-entreprise');
   const cardAE          = document.getElementById('fiscal-ae');
   const cardParticulier = document.getElementById('fiscal-particulier');
   const startupExtra    = document.getElementById('startup-extra');
   const tvaCard         = document.getElementById('tva-card');
+  const fjRefCard       = document.getElementById('forme-juridique-ref');
 
   function setInputsDisabled(card, disabled) {
     card.querySelectorAll('input, select, textarea').forEach(el => {
@@ -487,7 +563,7 @@
   }
 
   function syncFields() {
-    const v = typeSelect ? typeSelect.value : '';
+    const v            = typeSelect ? typeSelect.value : '';
     const isCompany    = v === 'entreprise' || v === 'startup';
     const isAE         = v === 'auto_entrepreneur';
     const isParticular = v === 'particulier';
@@ -496,13 +572,13 @@
     cardAE.style.display          = isAE         ? '' : 'none';
     cardParticulier.style.display = isParticular ? '' : 'none';
     startupExtra.style.display    = v === 'startup' ? '' : 'none';
+    fjRefCard.style.display       = isCompany    ? '' : 'none';
 
     // Disable hidden cards' inputs so they are NOT submitted
-    // (prevents duplicate field names from overwriting real values)
     setInputsDisabled(cardEntreprise,  !isCompany);
     setInputsDisabled(cardAE,          !isAE);
     setInputsDisabled(cardParticulier, !isParticular);
-    // startup-extra lives inside cardEntreprise so re-enable/disable just those
+    // startup-extra lives inside cardEntreprise — re-enable/disable those inputs
     startupExtra.querySelectorAll('input').forEach(el => {
       el.disabled = v !== 'startup';
     });

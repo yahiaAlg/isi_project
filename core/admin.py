@@ -1,8 +1,14 @@
 # =============================================================================
-# core/admin.py  —  v3.0
+# core/admin.py  —  v3.1
+# =============================================================================
+# Changes in v3.1:
+# * FormationInfoAdmin  — added "Mentions légales & banque" fieldset with
+#   legal_infos and bank_rib fields.
+# * BureauEtudeInfoAdmin — same addition.
 # =============================================================================
 
 from django.contrib import admin
+
 from core.models import BureauEtudeInfo, FormationInfo, InstituteInfo
 
 
@@ -50,6 +56,16 @@ class FormationInfoAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Mentions légales & banque (v3.1)",
+            {
+                "fields": ["legal_infos", "bank_rib"],
+                "description": (
+                    "Ces informations apparaissent dans le bloc émetteur des factures finales. "
+                    "Saisir RC, NIF, NIS, A.I., Agrément sur des lignes séparées."
+                ),
+            },
+        ),
+        (
             "Direction",
             {"fields": ["director_name", "director_title", "director_signature"]},
         ),
@@ -80,6 +96,16 @@ class BureauEtudeInfoAdmin(admin.ModelAdmin):
                     "tva_applicable",
                     "tva_rate",
                 ]
+            },
+        ),
+        (
+            "Mentions légales & banque (v3.1)",
+            {
+                "fields": ["legal_infos", "bank_rib"],
+                "description": (
+                    "Ces informations apparaissent dans le bloc émetteur des factures finales. "
+                    "Saisir RC, NIF, NIS, A.I., Agrément sur des lignes séparées."
+                ),
             },
         ),
         (
