@@ -336,6 +336,62 @@
           </div>
         </div>
 
+        <!-- Numéros d'identification -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon blue"><i class="bi bi-file-earmark-text-fill"></i></div>
+            <h3>Numéros d’identification</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="row g-3">
+              <div class="col-sm-4">
+                <label class="form-label">Numéro RC</label>
+                {% with field=form.rc %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label">NIF</label>
+                {% with field=form.nif %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label">NIS</label>
+                {% with field=form.nis %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label">Article d’imposition (A.I.)</label>
+                {% with field=form.article_imposition %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label">N° Agrément</label>
+                {% with field=form.agrement_number %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}" placeholder="Ex. AGR/FORM/2019/0042">{% endwith %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Coordonnées bancaires -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon green"><i class="bi bi-bank2"></i></div>
+            <h3>Coordonnées bancaires</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <label class="form-label">Banque</label>
+                {% with field=form.bank_name %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label">Numéro de compte</label>
+                {% with field=form.bank_account %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-12">
+                <label class="form-label">RIB</label>
+                {% with field=form.bank_rib %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Attestations -->
         <div class="isi-card mb-4">
           <div class="isi-card-header">
@@ -472,7 +528,60 @@
             </div>
           </div>
         </div>
-      </div>
+
+        <!-- Numéros d'identification -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon blue"><i class="bi bi-file-earmark-text-fill"></i></div>
+            <h3>Numéros d’identification</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="row g-3">
+              <div class="col-sm-4">
+                <label class="form-label">Numéro RC</label>
+                {% with field=form.rc %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label">NIF</label>
+                {% with field=form.nif %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label">NIS</label>
+                {% with field=form.nis %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-12">
+                <label class="form-label">Article d’imposition (A.I.)</label>
+                {% with field=form.article_imposition %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Coordonnées bancaires -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon green"><i class="bi bi-bank2"></i></div>
+            <h3>Coordonnées bancaires</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <label class="form-label">Banque</label>
+                {% with field=form.bank_name %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label">Numéro de compte</label>
+                {% with field=form.bank_account %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+              <div class="col-12">
+                <label class="form-label">RIB</label>
+                {% with field=form.bank_rib %}<input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">{% endwith %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /col-lg-8 -->
 
       <!-- Right: Chief Engineer -->
       <div class="col-lg-4">

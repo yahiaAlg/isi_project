@@ -143,21 +143,34 @@ class BureauEtudeInfo(SingletonModel):
         help_text="Taux standard 19% pour les études et le conseil.",
     )
 
-    # ---- Legal info (printed on invoice emetteur block) -------------- #
-    legal_infos = models.TextField(
-        blank=True,
-        verbose_name="Informations légales spécifiques",
-        help_text=(
-            "RC, NIF, NIS, A.I. propres au bureau d'étude (si différents de l'institut). "
-            "Affiché dans la section Émetteur des factures."
-        ),
+    # ---- Legal / fiscal identifiers ---------------------------------- #
+    rc = models.CharField(max_length=100, blank=True, verbose_name="Numéro RC")
+    nif = models.CharField(max_length=100, blank=True, verbose_name="NIF")
+    nis = models.CharField(max_length=100, blank=True, verbose_name="NIS")
+    article_imposition = models.CharField(
+        max_length=100, blank=True, verbose_name="Article d'imposition (A.I.)"
     )
-    bank_rib = models.CharField(
-        max_length=255,
-        blank=True,
-        verbose_name="RIB du bureau d'étude",
-        help_text="Relevé d'Identité Bancaire spécifique au bureau d'étude.",
+
+    # ---- Bank details ------------------------------------------------- #
+    bank_name = models.CharField(max_length=255, blank=True, verbose_name="Banque")
+    bank_account = models.CharField(
+        max_length=255, blank=True, verbose_name="N° de compte"
     )
+    bank_rib = models.CharField(max_length=255, blank=True, verbose_name="RIB")
+
+    @property
+    def legal_infos(self) -> str:
+        """Assembled for invoice template backward-compat."""
+        lines = []
+        if self.rc:
+            lines.append(f"RC : {self.rc}")
+        if self.nif:
+            lines.append(f"NIF : {self.nif}")
+        if self.nis:
+            lines.append(f"NIS : {self.nis}")
+        if self.article_imposition:
+            lines.append(f"A.I. : {self.article_imposition}")
+        return "\n".join(lines)
 
     # ---- Signatory ---------------------------------------------------- #
     chief_engineer_name = models.CharField(
@@ -204,9 +217,9 @@ class FormationInfo(SingletonModel):
     )
     proforma_prefix = models.CharField(
         max_length=10,
-        default="FP-F",
+        default="FP",
         verbose_name="Préfixe proforma",
-        help_text="Utilisé dans les références proforma — ex. FP-F → FP-F-001-2026.",
+        help_text="Utilisé dans les références proforma — ex. FP → FP-001-2026.",
     )
 
     # ---- TVA ---------------------------------------------------------- #
@@ -219,21 +232,42 @@ class FormationInfo(SingletonModel):
         help_text="Taux réduit 9% pour les prestations de formation professionnelle.",
     )
 
-    # ---- Legal info (printed on invoice emetteur block) -------------- #
-    legal_infos = models.TextField(
-        blank=True,
-        verbose_name="Informations légales spécifiques",
-        help_text=(
-            "RC, NIF, NIS, A.I., N° Agrément propres au centre de formation. "
-            "Affiché dans la section Émetteur des factures."
-        ),
+    # ---- Legal / fiscal identifiers ---------------------------------- #
+    rc = models.CharField(max_length=100, blank=True, verbose_name="Numéro RC")
+    nif = models.CharField(max_length=100, blank=True, verbose_name="NIF")
+    nis = models.CharField(max_length=100, blank=True, verbose_name="NIS")
+    article_imposition = models.CharField(
+        max_length=100, blank=True, verbose_name="Article d'imposition (A.I.)"
     )
-    bank_rib = models.CharField(
-        max_length=255,
+    agrement_number = models.CharField(
+        max_length=100,
         blank=True,
-        verbose_name="RIB du centre de formation",
-        help_text="Relevé d'Identité Bancaire spécifique au centre de formation.",
+        verbose_name="N° Agrément formation",
+        help_text="Ex. AGR/FORM/2019/0042",
     )
+
+    # ---- Bank details ------------------------------------------------- #
+    bank_name = models.CharField(max_length=255, blank=True, verbose_name="Banque")
+    bank_account = models.CharField(
+        max_length=255, blank=True, verbose_name="N° de compte"
+    )
+    bank_rib = models.CharField(max_length=255, blank=True, verbose_name="RIB")
+
+    @property
+    def legal_infos(self) -> str:
+        """Assembled for invoice template backward-compat."""
+        lines = []
+        if self.rc:
+            lines.append(f"RC : {self.rc}")
+        if self.nif:
+            lines.append(f"NIF : {self.nif}")
+        if self.nis:
+            lines.append(f"NIS : {self.nis}")
+        if self.article_imposition:
+            lines.append(f"A.I. : {self.article_imposition}")
+        if self.agrement_number:
+            lines.append(f"Agrément N° : {self.agrement_number}")
+        return "\n".join(lines)
 
     # ---- Training director ------------------------------------------- #
     director_name = models.CharField(

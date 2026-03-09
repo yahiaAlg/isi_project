@@ -62,22 +62,18 @@ class FormationInfoForm(forms.ModelForm):
             "director_signature": "Signature",
             "attestation_validity_years": "Validité des attestations (années)",
             "min_attendance_percent": "Présence minimale requise (%)",
-            "legal_infos": "Informations légales (RC, NIF, NIS, A.I., Agrément…)",
+            "rc": "Numéro RC",
+            "nif": "NIF",
+            "nis": "NIS",
+            "article_imposition": "Article d'imposition (A.I.)",
+            "agrement_number": "N° Agrément formation",
+            "bank_name": "Banque",
+            "bank_account": "N° de compte",
             "bank_rib": "RIB du centre de formation",
         }
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "address": forms.Textarea(attrs={"rows": 3}),
-            "legal_infos": forms.Textarea(
-                attrs={
-                    "rows": 4,
-                    "placeholder": (
-                        "Ex :\nRC : 16/00-XXXXXXX-XX\nNIF : XXXXXXXXXXXXXXX\n"
-                        "NIS : XXXXXXXXXXXXXXX\nA.I. : XXXXXXXXXX\n"
-                        "Agrément N° : AGR/FORM/XXXX/XXXX"
-                    ),
-                }
-            ),
         }
 
     def clean_tva_rate(self):
@@ -132,21 +128,17 @@ class BureauEtudeInfoForm(forms.ModelForm):
             "chief_engineer_name": "Ingénieur en chef",
             "chief_engineer_title": "Titre",
             "chief_engineer_signature": "Signature",
-            "legal_infos": "Informations légales (RC, NIF, NIS, A.I.…)",
+            "rc": "Numéro RC",
+            "nif": "NIF",
+            "nis": "NIS",
+            "article_imposition": "Article d'imposition (A.I.)",
+            "bank_name": "Banque",
+            "bank_account": "N° de compte",
             "bank_rib": "RIB du bureau d'étude",
         }
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "address": forms.Textarea(attrs={"rows": 3}),
-            "legal_infos": forms.Textarea(
-                attrs={
-                    "rows": 4,
-                    "placeholder": (
-                        "Ex :\nRC : 16/00-XXXXXXX-XX\nNIF : XXXXXXXXXXXXXXX\n"
-                        "NIS : XXXXXXXXXXXXXXX\nA.I. : XXXXXXXXXX"
-                    ),
-                }
-            ),
         }
 
     def clean_tva_rate(self):

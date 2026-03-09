@@ -86,7 +86,7 @@
     }
 
     /* ── Parties ── */
-    .parties-row { display: flex; gap: 20px; margin-bottom: 12px; }
+    .parties-row { display: flex; gap: 20px; margin-bottom: 16px; }
     .party-block { flex: 1; }
     .party-label {
       font-family: var(--font-head); font-size: 9px; font-weight: 700;
@@ -143,7 +143,7 @@
       background: rgba(16,185,129,.06);
       border: 1px solid rgba(16,185,129,.2);
       border-radius: 6px;
-      margin-bottom: 10px;
+      margin-bottom: 40px;
       font-size: 10.5px;
       display: flex; gap: 20px; align-items: center;
     }
@@ -165,7 +165,7 @@
     }
 
     /* ── Items table ── */
-    .items-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    .items-table { width: 100%; border-collapse: collapse; margin-top: 6px; margin-bottom: 20px; }
     .items-table thead tr { background: var(--text-primary); color: #fff; }
     .items-table thead th {
       font-family: var(--font-head); font-size: 8.5px; font-weight: 700;
@@ -291,7 +291,7 @@
       /* spacing between table section and surrounding info */
       .items-table       { margin-bottom: 14px; }
       .meta-row          { margin-bottom: 10px; }
-      .bc-row            { margin-bottom: 10px; }
+      .bc-row            { margin-bottom: 40px; }
       .parties-row       { margin-bottom: 10px; }
       .ids-row           { margin-bottom: 10px; }
       .doc-header        { margin-bottom: 10px; padding-bottom: 9px; }
@@ -358,7 +358,7 @@
       {% else %}
         <div class="doc-title finale">Facture</div>
         <div class="doc-ref">{{ invoice.reference }}</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:1px;font-family:monospace;">
+        <div style="font-size:10px;color:var(--text-muted);margin-top:1px;letter-spacing:0;">
           Proforma : {{ invoice.proforma_reference }}
         </div>
       {% endif %}
@@ -448,27 +448,8 @@
     </div>
   </div>
 
-  <!-- ══════════ INSTITUTE IDs ══════════ -->
-  {% if institute.rc or institute.nif or institute.nis or institute.article_imposition %}
-  <div class="ids-row">
-    {% if institute.rc %}
-      <span class="id-label">RC</span>
-      <span class="id-chip">{{ institute.rc }}</span>
-    {% endif %}
-    {% if institute.nif %}
-      <span class="id-label">NIF</span>
-      <span class="id-chip">{{ institute.nif }}</span>
-    {% endif %}
-    {% if institute.nis %}
-      <span class="id-label">NIS</span>
-      <span class="id-chip">{{ institute.nis }}</span>
-    {% endif %}
-    {% if institute.article_imposition %}
-      <span class="id-label">A.I.</span>
-      <span class="id-chip">{{ institute.article_imposition }}</span>
-    {% endif %}
-  </div>
-  {% endif %}
+
+
 
   <!-- ══════════ META ROW ══════════ -->
   <div class="meta-row">
@@ -494,10 +475,10 @@
       <div class="meta-cell-value">{{ invoice.due_date|date:"d/m/Y" }}</div>
     </div>
     {% endif %}
-    {% if invoice.phase == 'finale' and invoice.mode_reglement %}
+    {% if invoice.phase == 'finale' %}
     <div class="meta-cell">
       <div class="meta-cell-label">Mode de règlement</div>
-      <div class="meta-cell-value">{{ invoice.get_mode_reglement_display }}</div>
+      <div class="meta-cell-value">{% if invoice.mode_reglement %}{{ invoice.get_mode_reglement_display }}{% else %}<span style="color:var(--text-muted);font-style:italic;">Non spécifié</span>{% endif %}</div>
     </div>
     {% endif %}
   </div>

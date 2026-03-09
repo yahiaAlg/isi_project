@@ -300,6 +300,8 @@
 
   if (modeSelect) {
     modeSelect.addEventListener('change', updateTimbre);
+    // Fire on load so the notice shows if a mode is already selected
+    document.addEventListener('DOMContentLoaded', updateTimbre);
     updateTimbre();
   }
 </script>

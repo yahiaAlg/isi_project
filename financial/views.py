@@ -268,6 +268,7 @@ def invoice_finalize(request, pk):
             initial={
                 "amount_in_words": initial_words,
                 "due_date": invoice.due_date,
+                "mode_reglement": invoice.mode_reglement,
             }
         )
         return render(
@@ -306,10 +307,12 @@ def invoice_finalize(request, pk):
     due_date = form.cleaned_data.get("due_date")
 
     try:
+        mode_reglement = form.cleaned_data.get("mode_reglement", "")
+        invoice.mode_reglement = mode_reglement
         invoice.finalize(amount_in_words=amount_in_words)
         if due_date:
             invoice.due_date = due_date
-            invoice.save(update_fields=["due_date"])
+            invoice.save(update_fields=["due_date", "mode_reglement"])
         messages.success(
             request,
             f"Facture {invoice.reference} finalisée avec succès. "
@@ -429,6 +432,11 @@ def invoice_print(request, pk):
         else "financial/invoice_print_finale.html"
     )
 
+    # ── Print-user context (for signature block) ──────────────────── #
+    profile = getattr(request.user, "profile", None)
+    user_role = getattr(profile, "role", None) if profile else None
+    print_user_is_admin = user_role == "admin"
+
     return render(
         request,
         template,
@@ -436,7 +444,11 @@ def invoice_print(request, pk):
             "invoice": invoice,
             "items": items,
             "institute": institute,
-            "business_line": business_line,
+            "business_info": business_line,
+            "print_user_is_admin": print_user_is_admin,
+            "print_user_full_name": request.user.get_full_name()
+            or request.user.username,
+            "print_user_role": user_role or "",
         },
     )
 

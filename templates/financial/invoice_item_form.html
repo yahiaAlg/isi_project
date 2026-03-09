@@ -262,8 +262,8 @@
             </div>
             <div style="padding:8px 12px;background:#f8fafc;border-radius:8px;">
               <div style="font-weight:600;font-size:12.5px;"><i class="bi bi-person"></i>×<i class="bi bi-calendar-day"></i> Pers. × Jours</div>
-              <div style="font-size:11.5px;color:var(--text-muted);">PU × Nb personnes × Nb jours</div>
-              <div style="font-size:11px;color:#94a3b8;font-style:italic;">Formation 3j × 12 participants à 2 000 DA</div>
+              <div style="font-size:11.5px;color:var(--text-muted);">(PU ÷ Nb personnes) × Nb jours</div>
+              <div style="font-size:11px;color:#94a3b8;font-style:italic;">Ex. tarif groupe 24 000 DA, 12 pers, 3j → (24 000 ÷ 12) × 3</div>
             </div>
             <div style="padding:8px 12px;background:#f8fafc;border-radius:8px;">
               <div style="font-weight:600;font-size:12.5px;"><i class="bi bi-tag"></i> Forfait</div>
@@ -329,7 +329,7 @@
     let base = 0, formula = '';
     if (mode === 'per_person')              { base = price * persons;        formula = `${fmt(price)} × ${persons} pers.`; }
     else if (mode === 'per_day')            { base = price * days;           formula = `${fmt(price)} × ${days} j.`; }
-    else if (mode === 'per_person_per_day') { base = price * persons * days; formula = `${fmt(price)} × ${persons} pers. × ${days} j.`; }
+    else if (mode === 'per_person_per_day') { base = (price / persons) * days; formula = `(${fmt(price)} ÷ ${persons} pers.) × ${days} j.`; }
     else                                    { base = price;                  formula = `Forfait : ${fmt(price)}`; }
     const total = base * (1 - discount / 100);
     if (discount > 0) formula += ` − ${discount}%`;

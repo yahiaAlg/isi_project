@@ -12,7 +12,7 @@ Changes in v3.1 over v3.0
 * Invoice.timbre_rate_display property — human-readable slab label for templates.
 * Proforma reference format changed:
     OLD  {prefix}-{YEAR}-{NNN}   →   PF-F-2026-001
-    NEW  {prefix}-{NNN}-{YEAR}   →   FP-F-001-2026
+    NEW  {prefix}-{NNN}-{YEAR}   →   FP-001-2026
   Finale reference format UNCHANGED: {prefix}-{YEAR}-{NNN}.
 * due_date remains nullable/optional.
 """
@@ -49,7 +49,7 @@ class Invoice(TimeStampedModel):
                paid     → [issue CreditNote; cannot void directly]
 
     Sequential numbers
-        proforma_reference  FP-F-{NNN}-{YEAR} / FP-E-{NNN}-{YEAR}  — set on create
+        proforma_reference  FP-{NNN}-{YEAR} / FP-E-{NNN}-{YEAR}  — set on create
         reference           F-{YEAR}-{NNN}    / E-{YEAR}-{NNN}      — set on finalize
 
     Business rules enforced here
@@ -304,13 +304,13 @@ class Invoice(TimeStampedModel):
     @classmethod
     def _next_proforma_reference(cls, invoice_type: str, year: int) -> str:
         """
-        v3.1 format: {prefix}-{NNN}-{YEAR}   e.g.  FP-F-001-2026
+        v3.1 format: {prefix}-{NNN}-{YEAR}   e.g.  FP-001-2026
         Sequence resets each year per invoice_type.
         """
         from core.models import BureauEtudeInfo, FormationInfo
 
         if invoice_type == cls.InvoiceType.FORMATION:
-            prefix = FormationInfo.get_instance().proforma_prefix or "FP-F"
+            prefix = FormationInfo.get_instance().proforma_prefix or "FP"
         else:
             prefix = BureauEtudeInfo.get_instance().proforma_prefix or "FP-E"
 
@@ -654,8 +654,11 @@ class InvoiceItem(TimeStampedModel):
         elif mode == self.PricingMode.PER_DAY:
             base = self.unit_price_ht * self.nb_days
         elif mode == self.PricingMode.PER_PERSON_PER_DAY:
-            base = self.unit_price_ht * self.nb_persons * self.nb_days
-        else:
+            # unit_price_ht = total group price for the full duration
+            # → prorate: divide by nb_persons to get per-person daily rate,
+            #   then multiply by nb_days actually delivered.
+            base = (self.unit_price_ht / self.nb_persons) * self.nb_days
+        else:  # forfait
             base = self.unit_price_ht
         discount = base * (self.discount_percent / Decimal("100"))
         return (base - discount).quantize(Decimal("0.01"))

@@ -773,13 +773,13 @@ class Command(BaseCommand):
                 "tva_rate": Decimal("0.19"),  # 19% for consulting
                 "chief_engineer_name": "Karim Messaoud",
                 "chief_engineer_title": "Ingénieur d'État en Hygiène et Sécurité Industrielle",
-                # v3.1: displayed in emitter block on printed invoices
-                "legal_infos": (
-                    "RC : 16/00-1234567B19\n"
-                    "NIF : 001623456789012\n"
-                    "NIS : 162345678901234\n"
-                    "A.I. : 16123456789"
-                ),
+                # v3.1: individual fiscal fields (legal_infos is now a @property)
+                "rc": "16/00-1234567B19",
+                "nif": "001623456789012",
+                "nis": "162345678901234",
+                "article_imposition": "16123456789",
+                "bank_name": "BNA — Agence Bir Mourad Raïs",
+                "bank_account": "00200123456789",
                 "bank_rib": "002 00100 00200123456789 56",
             },
         )
@@ -789,21 +789,21 @@ class Command(BaseCommand):
             defaults={
                 "name": "Centre de Formation ISI",
                 "invoice_prefix": "F",
-                "proforma_prefix": "FP-F",  # v3.1: new format FP-F-NNN-YEAR
+                "proforma_prefix": "FP",  # v3.1: new format FP-NNN-YEAR
                 "tva_applicable": True,
                 "tva_rate": Decimal("0.09"),  # v3: 9% for professional training
                 "attestation_validity_years": 5,
                 "min_attendance_percent": 80,
                 "director_name": "Karim Messaoud",
                 "director_title": "Directeur — Institut de Sécurité Industrielle",
-                # v3.1: displayed in emitter block on printed invoices
-                "legal_infos": (
-                    "RC : 16/00-1234567B19\n"
-                    "NIF : 001623456789012\n"
-                    "NIS : 162345678901234\n"
-                    "A.I. : 16123456789\n"
-                    "Agrément : AGR/FORM/2019/0042"
-                ),
+                # v3.1: individual fiscal fields (legal_infos is now a @property)
+                "rc": "16/00-1234567B19",
+                "nif": "001623456789012",
+                "nis": "162345678901234",
+                "article_imposition": "16123456789",
+                "agrement_number": "AGR/FORM/2019/0042",
+                "bank_name": "BNA — Agence Bir Mourad Raïs",
+                "bank_account": "00200123456789",
                 "bank_rib": "002 00100 00200123456789 56",
             },
         )
