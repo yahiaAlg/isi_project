@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
             name="legal_infos",
             field=models.TextField(
                 blank=True,
-                help_text="RC, NIF, NIS, A.I. propres au bureau d'étude (si différents de l'institut). Affiché dans la section Émetteur des factures.",
+                help_text="RC, NIF, NIS, ART.I propres au bureau d'étude (si différents de l'institut). Affiché dans la section Émetteur des factures.",
                 verbose_name="Informations légales spécifiques",
             ),
         ),
@@ -44,7 +44,7 @@ class Migration(migrations.Migration):
             name="legal_infos",
             field=models.TextField(
                 blank=True,
-                help_text="RC, NIF, NIS, A.I., N° Agrément propres au centre de formation. Affiché dans la section Émetteur des factures.",
+                help_text="RC, NIF, NIS, ART.I, N° Agrément propres au centre de formation. Affiché dans la section Émetteur des factures.",
                 verbose_name="Informations légales spécifiques",
             ),
         ),

@@ -60,7 +60,7 @@ class InstituteInfo(SingletonModel):
     article_imposition = models.CharField(
         max_length=100,
         blank=True,
-        verbose_name="Article d'imposition (A.I.)",
+        verbose_name="Article d'imposition (ART.I)",
     )
     agrement_number = models.CharField(
         max_length=100,
@@ -148,7 +148,7 @@ class BureauEtudeInfo(SingletonModel):
     nif = models.CharField(max_length=100, blank=True, verbose_name="NIF")
     nis = models.CharField(max_length=100, blank=True, verbose_name="NIS")
     article_imposition = models.CharField(
-        max_length=100, blank=True, verbose_name="Article d'imposition (A.I.)"
+        max_length=100, blank=True, verbose_name="Article d'imposition (ART.I)"
     )
 
     # ---- Bank details ------------------------------------------------- #
@@ -169,7 +169,7 @@ class BureauEtudeInfo(SingletonModel):
         if self.nis:
             lines.append(f"NIS : {self.nis}")
         if self.article_imposition:
-            lines.append(f"A.I. : {self.article_imposition}")
+            lines.append(f"ART.I : {self.article_imposition}")
         return "\n".join(lines)
 
     # ---- Signatory ---------------------------------------------------- #
@@ -237,7 +237,7 @@ class FormationInfo(SingletonModel):
     nif = models.CharField(max_length=100, blank=True, verbose_name="NIF")
     nis = models.CharField(max_length=100, blank=True, verbose_name="NIS")
     article_imposition = models.CharField(
-        max_length=100, blank=True, verbose_name="Article d'imposition (A.I.)"
+        max_length=100, blank=True, verbose_name="Article d'imposition (ART.I)"
     )
     agrement_number = models.CharField(
         max_length=100,
@@ -264,7 +264,7 @@ class FormationInfo(SingletonModel):
         if self.nis:
             lines.append(f"NIS : {self.nis}")
         if self.article_imposition:
-            lines.append(f"A.I. : {self.article_imposition}")
+            lines.append(f"ART.I : {self.article_imposition}")
         if self.agrement_number:
             lines.append(f"Agrément N° : {self.agrement_number}")
         return "\n".join(lines)

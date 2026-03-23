@@ -61,7 +61,7 @@ class FormationInfoAdmin(admin.ModelAdmin):
                 "fields": ["legal_infos", "bank_rib"],
                 "description": (
                     "Ces informations apparaissent dans le bloc émetteur des factures finales. "
-                    "Saisir RC, NIF, NIS, A.I., Agrément sur des lignes séparées."
+                    "Saisir RC, NIF, NIS, ART.I, Agrément sur des lignes séparées."
                 ),
             },
         ),
@@ -104,7 +104,7 @@ class BureauEtudeInfoAdmin(admin.ModelAdmin):
                 "fields": ["legal_infos", "bank_rib"],
                 "description": (
                     "Ces informations apparaissent dans le bloc émetteur des factures finales. "
-                    "Saisir RC, NIF, NIS, A.I., Agrément sur des lignes séparées."
+                    "Saisir RC, NIF, NIS, ART.I, Agrément sur des lignes séparées."
                 ),
             },
         ),

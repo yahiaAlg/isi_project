@@ -158,7 +158,7 @@ class Client(TimeStampedModel):
     article_imposition = models.CharField(
         max_length=100,
         blank=True,
-        verbose_name="Article d'imposition (A.I.)",
+        verbose_name="Article d'imposition (ART.I)",
         help_text="Numéro d'article d'imposition — AE, entreprise et startup.",
     )
 

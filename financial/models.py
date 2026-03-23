@@ -80,7 +80,7 @@ class Invoice(TimeStampedModel):
         CREDIT_NOTE = "credit_note", "Avoir émis"
 
     class PaymentMode(models.TextChoices):
-        ESPECE = "espece", "Espèces (+ timbre fiscal)"
+        ESPECE = "espece", "Espèces"
         VIREMENT = "virement", "Virement bancaire"
         CHEQUE = "cheque", "Chèque"
         TRAITE = "traite", "Traite"
@@ -168,7 +168,7 @@ class Invoice(TimeStampedModel):
         max_length=100, blank=True, verbose_name="RC client (snapshot)"
     )
     client_ai_snapshot = models.CharField(
-        max_length=100, blank=True, verbose_name="A.I. client (snapshot)"
+        max_length=100, blank=True, verbose_name="ART.I client (snapshot)"
     )
     client_nin_snapshot = models.CharField(
         max_length=20, blank=True, verbose_name="NIN client (snapshot)"

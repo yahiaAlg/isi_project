@@ -57,7 +57,7 @@ class ClientForm(forms.ModelForm):
             "nif": "NIF",
             "nis": "NIS",
             "rc": "Numéro RC",
-            "article_imposition": "Article d'imposition (A.I.)",
+            "article_imposition": "Article d'imposition (ART.I)",
             "rib": "RIB",
             "carte_auto_entrepreneur": "N° Carte Auto-Entrepreneur",
             "label_startup_number": "N° Label Startup",

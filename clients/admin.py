@@ -105,7 +105,7 @@ class ClientAdmin(admin.ModelAdmin):
                 ],
                 "description": (
                     "NIN : particulier uniquement. "
-                    "NIF / A.I. : AE, entreprise, startup. "
+                    "NIF / ART.I : AE, entreprise, startup. "
                     "NIS / RC : entreprise, startup."
                 ),
             },

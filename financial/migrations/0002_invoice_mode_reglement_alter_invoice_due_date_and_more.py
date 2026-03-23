@@ -6,23 +6,46 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('financial', '0001_initial'),
+        ("financial", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='invoice',
-            name='mode_reglement',
-            field=models.CharField(blank=True, choices=[('espece', 'Espèces (+ timbre fiscal)'), ('virement', 'Virement bancaire'), ('cheque', 'Chèque'), ('traite', 'Traite'), ('autre', 'Autre')], default='', help_text='Choisi à la finalisation. Espèces déclenche le calcul du timbre fiscal.', max_length=20, verbose_name='Mode de règlement'),
+            model_name="invoice",
+            name="mode_reglement",
+            field=models.CharField(
+                blank=True,
+                choices=[
+                    ("espece", "Espèces"),
+                    ("virement", "Virement bancaire"),
+                    ("cheque", "Chèque"),
+                    ("traite", "Traite"),
+                    ("autre", "Autre"),
+                ],
+                default="",
+                help_text="Choisi à la finalisation. Espèces déclenche le calcul du timbre fiscal.",
+                max_length=20,
+                verbose_name="Mode de règlement",
+            ),
         ),
         migrations.AlterField(
-            model_name='invoice',
-            name='due_date',
-            field=models.DateField(blank=True, help_text="Optionnel — si non renseignée, n'apparaît pas sur la facture imprimée.", null=True, verbose_name="Date d'échéance (finale)"),
+            model_name="invoice",
+            name="due_date",
+            field=models.DateField(
+                blank=True,
+                help_text="Optionnel — si non renseignée, n'apparaît pas sur la facture imprimée.",
+                null=True,
+                verbose_name="Date d'échéance (finale)",
+            ),
         ),
         migrations.AlterField(
-            model_name='invoice',
-            name='proforma_reference',
-            field=models.CharField(help_text='Généré automatiquement à la création. Format : {prefix}-{NNN}-{YEAR}.', max_length=50, unique=True, verbose_name='N° Proforma'),
+            model_name="invoice",
+            name="proforma_reference",
+            field=models.CharField(
+                help_text="Généré automatiquement à la création. Format : {prefix}-{NNN}-{YEAR}.",
+                max_length=50,
+                unique=True,
+                verbose_name="N° Proforma",
+            ),
         ),
     ]

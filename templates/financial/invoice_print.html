@@ -400,7 +400,7 @@
           {% if invoice.client_nif_snapshot %}NIF : {{ invoice.client_nif_snapshot }}<br>{% endif %}
           {% if invoice.client_nis_snapshot %}NIS : {{ invoice.client_nis_snapshot }}<br>{% endif %}
           {% if invoice.client_rc_snapshot %}RC : {{ invoice.client_rc_snapshot }}<br>{% endif %}
-          {% if invoice.client_ai_snapshot %}A.I. : {{ invoice.client_ai_snapshot }}<br>{% endif %}
+          {% if invoice.client_ai_snapshot %}ART.I : {{ invoice.client_ai_snapshot }}<br>{% endif %}
           {% if invoice.client_nin_snapshot %}NIN : {{ invoice.client_nin_snapshot }}<br>{% endif %}
           {% if invoice.client_rib_snapshot %}RIB : {{ invoice.client_rib_snapshot }}{% endif %}
         </div>
@@ -434,7 +434,7 @@
       <span class="id-chip">{{ institute.nis }}</span>
     {% endif %}
     {% if institute.article_imposition %}
-      <span class="id-label">A.I.</span>
+      <span class="id-label">ART.I</span>
       <span class="id-chip">{{ institute.article_imposition }}</span>
     {% endif %}
   </div>
