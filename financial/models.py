@@ -183,7 +183,10 @@ class Invoice(TimeStampedModel):
     )
     # v3.2: TIN snapshot
     client_tin_snapshot = models.CharField(
-        max_length=50, blank=True, verbose_name="TIN client (snapshot)"
+        max_length=50,
+        blank=True,
+        verbose_name="TIN (snapshot)",
+        help_text="Frozen at finalization.",
     )
 
     # ---- Dates ------------------------------------------------------- #

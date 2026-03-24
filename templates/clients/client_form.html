@@ -266,8 +266,17 @@
               <div class="col-sm-4">
                 <label class="form-label" for="{{ form.article_imposition.id_for_label }}">Article d'imposition</label>
                 <input type="text" name="{{ form.article_imposition.html_name }}"
-                       id="{{ form.article_imposition.id_for_label }}"
-                       class="form-control" value="{{ form.article_imposition.value|default:'' }}">
+                      id="{{ form.article_imposition.id_for_label }}"
+                      class="form-control" value="{{ form.article_imposition.value|default:'' }}">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="{{ form.tin.id_for_label }}">TIN</label>
+                <input type="text" name="{{ form.tin.html_name }}" id="{{ form.tin.id_for_label }}"
+                       class="form-control {% if form.tin.errors %}is-invalid{% endif %}"
+                       value="{{ form.tin.value|default:'' }}" placeholder="Ex. 123456789012345">
+                {% if form.tin.errors %}
+                <div class="invalid-feedback d-block">{{ form.tin.errors|join:", " }}</div>
+                {% endif %}
               </div>
             </div>
 
