@@ -205,9 +205,14 @@ Proprietary - Institut de Sécurité Industrielle
 
 # Run from your project root (Git Bash)
 
-find . -path "./.venv" -prune -o -path "_/migrations/0_.py" -print | xargs rm -f
+```bash
+find . -path "./.venv" -prune -o -path "*/migrations/0*.py" -print | xargs rm -f
 
 python manage.py makemigrations core clients accounts etudes formations resources financial
-rm db.sqlite3
+
+rm -f db.sqlite3
+
 python manage.py migrate
+
 python manage.py seed_db
+```

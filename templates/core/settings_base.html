@@ -136,7 +136,7 @@
             <div class="row g-3">
               <div class="col-sm-4">
                 <label class="form-label">Numéro RC</label>
-                {% with field=form.registration_number %}
+                {% with field=form.rc %}
                 <input type="text" name="{{ field.html_name }}" class="form-control" value="{{ field.value|default:'' }}">
                 {% endwith %}
               </div>
