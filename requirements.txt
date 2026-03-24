@@ -9,14 +9,14 @@
 # =============================================================================
 
 # ── Core ─────────────────────────────────────────────────────────────────── #
-Django
+django
 
 # ── Database ─────────────────────────────────────────────────────────────── #
 # Default: SQLite (dev). Swap to psycopg2-binary for PostgreSQL in production.
 # psycopg2-binary
 
 # ── Image handling (avatar, logo, signature uploads) ─────────────────────── #
-Pillow
+pillow
 
 # ── Import/Export (participant bulk import, data export) ─────────────────── #
 django-import-export
