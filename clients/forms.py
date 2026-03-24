@@ -1,6 +1,5 @@
-# clients/forms.py  —  v3.1
-# Changes: forme_juridique is now a ModelChoiceField (FK to FormeJuridique).
-#          Auto-defaults to "Autre" for entreprise/startup if left blank.
+# clients/forms.py  —  v3.2
+# Changes: tin field added to ClientForm (optional, all client types).
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -31,6 +30,7 @@ class ClientForm(forms.ModelForm):
             "rc",
             "article_imposition",
             "rib",
+            "tin",
             "carte_auto_entrepreneur",
             "label_startup_number",
             "label_startup_date",
@@ -59,6 +59,7 @@ class ClientForm(forms.ModelForm):
             "rc": "Numéro RC",
             "article_imposition": "Article d'imposition (ART.I)",
             "rib": "RIB",
+            "tin": "TIN (Tax Identification Number)",
             "carte_auto_entrepreneur": "N° Carte Auto-Entrepreneur",
             "label_startup_number": "N° Label Startup",
             "label_startup_date": "Date d'obtention du label",
@@ -96,6 +97,7 @@ class ClientForm(forms.ModelForm):
             "rc",
             "article_imposition",
             "rib",
+            "tin",
             "carte_auto_entrepreneur",
             "label_startup_number",
             "label_startup_date",

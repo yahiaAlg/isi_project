@@ -1,11 +1,9 @@
 """
-Clients models — v3.1
+Clients models — v3.2
 
-Changes from v3.0
+Changes from v3.1
 ─────────────────
-* FormeJuridique extracted into its own lookup-table model (was CharField).
-  Client.forme_juridique is now a nullable FK with on_delete=SET_NULL.
-  A seeded "Autre" entry acts as the catch-all default.
+* Client.tin — optional Tax Identification Number field (all client types).
 """
 
 from django.db import models
@@ -177,6 +175,14 @@ class Client(TimeStampedModel):
         blank=True,
         verbose_name="RIB",
         help_text="Relevé d'Identité Bancaire — optionnel, tous types.",
+    )
+
+    # v3.2: TIN — optional for all client types
+    tin = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="TIN",
+        help_text="Tax Identification Number — optionnel, tous types.",
     )
 
     # AE only

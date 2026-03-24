@@ -1,7 +1,12 @@
 """
-Financial models — v3.1
+Financial models — v3.2
 Invoices (3-stage lifecycle: proforma → BC → finale), line items with flexible
 pricing modes, payments, credit notes, expenses.
+
+Changes in v3.2 over v3.1
+──────────────────────────
+* Invoice.client_tin_snapshot — snapshots Client.tin at finalization.
+* Invoice.finalize() — copies client.tin into the snapshot.
 
 Changes in v3.1 over v3.0
 ──────────────────────────
@@ -175,6 +180,10 @@ class Invoice(TimeStampedModel):
     )
     client_rib_snapshot = models.CharField(
         max_length=255, blank=True, verbose_name="RIB client (snapshot)"
+    )
+    # v3.2: TIN snapshot
+    client_tin_snapshot = models.CharField(
+        max_length=50, blank=True, verbose_name="TIN client (snapshot)"
     )
 
     # ---- Dates ------------------------------------------------------- #
@@ -433,6 +442,7 @@ class Invoice(TimeStampedModel):
         self.client_ai_snapshot = c.article_imposition
         self.client_nin_snapshot = c.nin
         self.client_rib_snapshot = c.rib
+        self.client_tin_snapshot = c.tin  # v3.2
 
         if c.is_tva_exempt:
             self.tva_rate = Decimal("0.00")
