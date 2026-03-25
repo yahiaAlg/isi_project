@@ -11,3 +11,5 @@ python manage.py migrate
 python manage.py collectstatic --noinput -v 0
 
 python manage.py seed_db_minimal
+
+python manage.py seed_formations_catalog     # all 505 specialties
