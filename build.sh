@@ -10,4 +10,4 @@ python manage.py migrate
 
 python manage.py collectstatic --noinput -v 0
 
-python manage.py seed_db
+python manage.py seed_db_minimal
