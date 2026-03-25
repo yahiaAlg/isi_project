@@ -55,7 +55,7 @@ class Invoice(TimeStampedModel):
 
     Sequential numbers
         proforma_reference  FP-{NNN}-{YEAR} / FP-E-{NNN}-{YEAR}  — set on create
-        reference           F-{YEAR}-{NNN}    / E-{YEAR}-{NNN}      — set on finalize
+        reference           F-{NNN}-{YEAR}    / E-{NNN}-{YEAR}      — set on finalize
 
     Business rules enforced here
         * Line items cannot be edited after finalization (enforced in item.save()).
@@ -317,7 +317,7 @@ class Invoice(TimeStampedModel):
     def _next_proforma_reference(cls, invoice_type: str, year: int) -> str:
         """
         v3.1 format: {prefix}-{NNN}-{YEAR}   e.g.  FP-001-2026
-        Sequence resets each year per invoice_type.
+        Sequence stored in InvoiceSequence; can be overridden via admin/view.
         """
         from core.models import BureauEtudeInfo, FormationInfo
 
@@ -327,17 +327,21 @@ class Invoice(TimeStampedModel):
             prefix = BureauEtudeInfo.get_instance().proforma_prefix or "FP-E"
 
         with transaction.atomic():
-            count = (
-                cls.objects.select_for_update()
-                .filter(invoice_type=invoice_type, invoice_date__year=year)
-                .count()
-            ) + 1
+            seq, _ = InvoiceSequence.objects.select_for_update().get_or_create(
+                invoice_type=invoice_type,
+                year=year,
+                phase=InvoiceSequence.Phase.PROFORMA,
+                defaults={"last_number": 0},
+            )
+            seq.last_number += 1
+            seq.save(update_fields=["last_number"])
+            count = seq.last_number
 
         return f"{prefix}-{count:03d}-{year}"
 
     @classmethod
     def _next_final_reference(cls, invoice_type: str, year: int) -> str:
-        """F-YYYY-NNN / E-YYYY-NNN — gapless sequence, assigned at finalization."""
+        """F-NNN-YYYY / E-NNN-YYYY — gapless sequence, assigned at finalization."""
         from core.models import BureauEtudeInfo, FormationInfo
 
         if invoice_type == cls.InvoiceType.FORMATION:
@@ -346,17 +350,17 @@ class Invoice(TimeStampedModel):
             prefix = BureauEtudeInfo.get_instance().invoice_prefix or "E"
 
         with transaction.atomic():
-            count = (
-                cls.objects.select_for_update()
-                .filter(
-                    invoice_type=invoice_type,
-                    phase=cls.Phase.FINALE,
-                    finalized_at__year=year,
-                )
-                .count()
-            ) + 1
+            seq, _ = InvoiceSequence.objects.select_for_update().get_or_create(
+                invoice_type=invoice_type,
+                year=year,
+                phase=InvoiceSequence.Phase.FINALE,
+                defaults={"last_number": 0},
+            )
+            seq.last_number += 1
+            seq.save(update_fields=["last_number"])
+            count = seq.last_number
 
-        return f"{prefix}-{year}-{count:03d}"
+        return f"{prefix}-{count:03d}-{year}"
 
     # ------------------------------------------------------------------ #
     # Timbre fiscal — v3.1 (espèce only, never persisted)
@@ -1215,3 +1219,74 @@ class FinancialPeriod(TimeStampedModel):
         return self._invoice_qs().filter(
             invoice_type=Invoice.InvoiceType.ETUDE
         ).aggregate(t=Sum("amount_ht"))["t"] or Decimal("0")
+
+
+# ======================================================================= #
+# InvoiceSequence  — persistent counter per (type × year × phase)
+# ======================================================================= #
+
+
+class InvoiceSequence(models.Model):
+    """
+    Stores the last-used counter for proforma and finale invoice references.
+
+    Setting last_number = N - 1 via the admin or the dedicated view means the
+    *next* invoice created will receive number N.
+
+    Example: set last_number = 4 → next proforma gets FP-005-2026.
+    """
+
+    class Phase(models.TextChoices):
+        PROFORMA = "proforma", "Proforma"
+        FINALE = "finale", "Finale"
+
+    invoice_type = models.CharField(
+        max_length=20,
+        choices=Invoice.InvoiceType.choices,
+        verbose_name="Type de facture",
+    )
+    year = models.PositiveSmallIntegerField(verbose_name="Année")
+    phase = models.CharField(
+        max_length=10,
+        choices=Phase.choices,
+        verbose_name="Phase",
+    )
+    last_number = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Dernier numéro utilisé",
+        help_text=(
+            "Le prochain numéro sera last_number + 1. "
+            "Modifiez ce champ pour reprendre la numérotation à un point précis."
+        ),
+    )
+
+    class Meta:
+        unique_together = [("invoice_type", "year", "phase")]
+        verbose_name = "Séquence de facturation"
+        verbose_name_plural = "Séquences de facturation"
+        ordering = ["-year", "invoice_type", "phase"]
+
+    def __str__(self):
+        return (
+            f"{self.get_invoice_type_display()} / {self.get_phase_display()} "
+            f"{self.year} — dernier n° : {self.last_number:03d}"
+        )
+
+    # ------------------------------------------------------------------ #
+    # Convenience                                                          #
+    # ------------------------------------------------------------------ #
+
+    @property
+    def next_number(self) -> int:
+        """The number that will be assigned to the next invoice."""
+        return self.last_number + 1
+
+    def set_next_number(self, n: int) -> None:
+        """
+        Set the counter so that the *next* invoice gets number `n`.
+        Raises ValueError if n < 1.
+        """
+        if n < 1:
+            raise ValueError("Le numéro de départ doit être ≥ 1.")
+        self.last_number = n - 1
+        self.save(update_fields=["last_number"])

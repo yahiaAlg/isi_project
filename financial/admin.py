@@ -18,6 +18,7 @@ from financial.models import (
     FinancialPeriod,
     Invoice,
     InvoiceItem,
+    InvoiceSequence,
     Payment,
 )
 
@@ -371,3 +372,33 @@ class FinancialPeriodAdmin(admin.ModelAdmin):
         "formation_revenue_ht",
         "etude_revenue_ht",
     ]
+
+
+# ---------------------------------------------------------------------------
+# Invoice sequence (counter override)
+# ---------------------------------------------------------------------------
+
+
+@admin.register(InvoiceSequence)
+class InvoiceSequenceAdmin(admin.ModelAdmin):
+    """
+    Allows operators to inspect and override the proforma / finale counters.
+    Set `last_number` to N-1 so that the next invoice gets number N.
+    Example: last_number = 4  →  next invoice = FP-005-2026.
+    """
+
+    list_display = [
+        "__str__",
+        "invoice_type",
+        "phase",
+        "year",
+        "last_number",
+        "next_number_display",
+    ]
+    list_editable = ["last_number"]
+    list_filter = ["year", "invoice_type", "phase"]
+    ordering = ["-year", "invoice_type", "phase"]
+
+    @admin.display(description="Prochain n°")
+    def next_number_display(self, obj):
+        return format_html("<strong>{:03d}</strong>", obj.next_number)

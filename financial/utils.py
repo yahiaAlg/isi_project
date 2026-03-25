@@ -14,7 +14,7 @@ from django.db.models.functions import TruncMonth
 
 
 def next_proforma_reference(invoice_type, invoice_date=None):
-    """PF-F-YYYY-NNN / PF-E-YYYY-NNN — sequential, independent from finale."""
+    """PF-F-NNN-YYYY / PF-E-NNN-YYYY — sequential, independent from finale."""
     from financial.models import Invoice
 
     year = (invoice_date or date.today()).year
@@ -22,7 +22,7 @@ def next_proforma_reference(invoice_type, invoice_date=None):
 
 
 def next_final_reference(invoice_type, finalized_date=None):
-    """F-YYYY-NNN / E-YYYY-NNN — gapless sequence, assigned at finalization."""
+    """F-NNN-YYYY / E-NNN-YYYY — gapless sequence, assigned at finalization."""
     from financial.models import Invoice
 
     year = (finalized_date or date.today()).year

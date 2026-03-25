@@ -1345,3 +1345,55 @@ def revenue_chart_data(request):
         row["etude_ht"] = float(row["etude_ht"])
         row["total_ht"] = float(row["total_ht"])
     return JsonResponse({"data": data})
+
+
+# ── Invoice sequence counter override ─────────────────────────────────────── #
+
+
+@admin_required
+def invoice_sequence_list(request):
+    """List all known sequences and allow setting the next number for each."""
+    from datetime import date
+
+    from financial.models import InvoiceSequence
+
+    current_year = date.today().year
+    # Show current year + adjacent years so ops can set up coming year in advance
+    years = [current_year - 1, current_year, current_year + 1]
+
+    if request.method == "POST":
+        seq_id = request.POST.get("seq_id")
+        next_number_raw = request.POST.get("next_number", "").strip()
+        try:
+            seq = InvoiceSequence.objects.get(pk=seq_id)
+            next_number = int(next_number_raw)
+            seq.set_next_number(next_number)
+            messages.success(
+                request,
+                f"Compteur {seq} mis à jour — prochain numéro : {next_number:03d}.",
+            )
+        except InvoiceSequence.DoesNotExist:
+            messages.error(request, "Séquence introuvable.")
+        except (ValueError, TypeError):
+            messages.error(request, "Numéro invalide.")
+        return redirect("financial:invoice_sequence_list")
+
+    # Ensure rows exist for the displayed year × type × phase combinations
+    for year in years:
+        for inv_type in Invoice.InvoiceType.values:
+            for phase in InvoiceSequence.Phase.values:
+                InvoiceSequence.objects.get_or_create(
+                    invoice_type=inv_type,
+                    year=year,
+                    phase=phase,
+                    defaults={"last_number": 0},
+                )
+
+    sequences = InvoiceSequence.objects.filter(year__in=years).order_by(
+        "-year", "invoice_type", "phase"
+    )
+    return render(
+        request,
+        "financial/invoice_sequence_list.html",
+        {"sequences": sequences, "years": years},
+    )

@@ -126,4 +126,10 @@ urlpatterns = [
         views.revenue_chart_data,
         name="revenue_chart_data",
     ),
+    # ── Invoice sequence / counter override ───────────────────────────────── #
+    path(
+        "invoices/sequences/",
+        views.invoice_sequence_list,
+        name="invoice_sequence_list",
+    ),
 ]

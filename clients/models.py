@@ -260,8 +260,9 @@ class Client(TimeStampedModel):
         Return human-readable names of required-for-finalization fields
         that are not yet filled. Empty list → profile is complete.
 
-        Note: address is required but phone/contact info is NOT — only
-        legal/fiscal identifiers are mandatory for invoice compliance.
+        Note: address is required but phone/contact info, NIS, and Article
+        d'imposition are NOT — only core legal/fiscal identifiers (RC, NIF)
+        are mandatory for invoice compliance.
         """
         missing: list[str] = []
         t = self.client_type
@@ -277,7 +278,6 @@ class Client(TimeStampedModel):
         elif t == self.ClientType.AUTO_ENTREPRENEUR:
             required += [
                 ("nif", "NIF"),
-                ("article_imposition", "Article d'imposition"),
                 ("carte_auto_entrepreneur", "N° Carte Auto-Entrepreneur"),
             ]
 
@@ -286,8 +286,6 @@ class Client(TimeStampedModel):
                 ("forme_juridique_id", "Forme juridique"),
                 ("rc", "Numéro RC"),
                 ("nif", "NIF"),
-                ("nis", "NIS"),
-                ("article_imposition", "Article d'imposition"),
             ]
             if t == self.ClientType.STARTUP:
                 required += [("label_startup_number", "N° Label Startup")]
