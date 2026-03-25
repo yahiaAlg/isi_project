@@ -40,6 +40,7 @@
       <table class="isi-table">
         <thead>
           <tr>
+            <th>Code</th>
             <th>Catégorie</th>
             <th>Description</th>
             <th>Formations</th>
@@ -49,6 +50,15 @@
         <tbody>
           {% for category in categories %}
           <tr>
+            <td>
+              <span style="font-family:var(--font-mono,monospace);font-size:12px;font-weight:700;
+                           background:{{ category.color|default:'#f59e0b' }}22;
+                           color:{{ category.color|default:'#f59e0b' }};
+                           border:1px solid {{ category.color|default:'#f59e0b' }}55;
+                           border-radius:5px;padding:2px 8px;letter-spacing:.5px;">
+                {{ category.code }}
+              </span>
+            </td>
             <td>
               <div style="display:flex;align-items:center;gap:10px;">
                 <div style="width:28px;height:28px;border-radius:7px;

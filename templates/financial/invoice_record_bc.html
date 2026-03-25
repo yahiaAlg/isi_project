@@ -186,3 +186,19 @@
   </div>
 </div>
 {% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Pre-populate BC number with "B.C N° : HHMM/YYYY" on load if field is empty
+  document.addEventListener('DOMContentLoaded', function () {
+    const bcInput = document.getElementById('{{ form.bon_commande_number.id_for_label }}');
+    if (bcInput && !bcInput.value.trim()) {
+      const now  = new Date();
+      const hh   = String(now.getHours()).padStart(2, '0');
+      const mm   = String(now.getMinutes()).padStart(2, '0');
+      const yyyy = now.getFullYear();
+      bcInput.value = `B.C N° : ${hh}${mm}/${yyyy}`;
+    }
+  });
+</script>
+{% endblock %}

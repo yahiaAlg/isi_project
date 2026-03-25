@@ -12,6 +12,12 @@ from core.base_models import TimeStampedModel
 
 
 class FormationCategory(TimeStampedModel):
+    code = models.CharField(
+        max_length=10,
+        unique=True,
+        verbose_name="Code branche",
+        help_text="Code officiel de la branche professionnelle (ex. ACP, AGR, BTP).",
+    )
     name = models.CharField(max_length=255, unique=True, verbose_name="Catégorie")
     description = models.TextField(blank=True, verbose_name="Description")
     color = models.CharField(
@@ -24,10 +30,10 @@ class FormationCategory(TimeStampedModel):
     class Meta:
         verbose_name = "Catégorie de formation"
         verbose_name_plural = "Catégories de formation"
-        ordering = ["name"]
+        ordering = ["code"]
 
     def __str__(self):
-        return self.name
+        return f"{self.code} — {self.name}"
 
 
 class Formation(TimeStampedModel):

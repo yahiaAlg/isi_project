@@ -1,9 +1,14 @@
-# formations/views.py
+# formations/views.py  — v3.1
+# CHANGE vs v3.0: session_create only:
+#   1. Accepts ?client=<pk> GET param → pre-fills client (from client_create redirect)
+#   2. Post-save redirects to /financial/invoices/create/?session=<pk>
+#      instead of session_detail (guided workflow step 3)
 
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from core.utils import admin_required, login_and_active_required
@@ -35,7 +40,7 @@ from formations.utils import (
 
 
 # ---------------------------------------------------------------------------
-# Formation catalog — admin only per spec
+# Formation catalog
 # ---------------------------------------------------------------------------
 
 
@@ -60,7 +65,6 @@ def formation_list(request):
     categories = FormationCategory.objects.all()
     paginator = Paginator(qs, 20)
     page_obj = paginator.get_page(request.GET.get("page"))
-
     return render(
         request,
         "formations/formation_list.html",
@@ -75,7 +79,6 @@ def formation_detail(request, pk):
         "-date_start"
     )[:10]
 
-    # Duration usage
     all_active = formation.sessions.exclude(status=Session.STATUS_CANCELLED)
     used_days = sum(
         (s.date_end - s.date_start).days + 1
@@ -87,7 +90,6 @@ def formation_detail(request, pk):
     )
     remaining_days = max(0, (formation.duration_days or 0) - used_days)
 
-    # Capacity conflicts: active sessions whose capacity > formation.max_participants
     active_sessions_list = list(
         formation.sessions.filter(
             status__in=[Session.STATUS_PLANNED, Session.STATUS_IN_PROGRESS]
@@ -126,12 +128,22 @@ def formation_create(request):
     form = FormationForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         formation = form.save()
-        messages.success(request, f"Formation « {formation.title} » créée.")
-        return redirect("formations:formation_detail", pk=formation.pk)
+        messages.success(
+            request,
+            f"Formation « {formation.title} » créée. Créez maintenant la facture.",
+        )
+        client_pk = request.POST.get("client", "")
+        url = reverse("financial:invoice_create") + f"?client={client_pk}"
+        return redirect(url)
+    client_pk = request.GET.get("client", "")
     return render(
         request,
         "formations/formation_form.html",
-        {"form": form, "action": "Nouvelle formation"},
+        {
+            "form": form,
+            "action": "Nouvelle formation",
+            "client_pk": client_pk,
+        },
     )
 
 
@@ -161,6 +173,7 @@ def formation_edit(request, pk):
         form.save()
         messages.success(request, "Formation mise à jour.")
         return redirect("formations:formation_detail", pk=pk)
+
     import json as _json
 
     active_sessions_list2 = list(
@@ -204,7 +217,6 @@ def formation_deactivate(request, pk):
 
 @admin_required
 def formation_sync_capacities(request, pk):
-    """POST — reset all planned/in-progress session capacities to formation.max_participants."""
     if request.method != "POST":
         return redirect("formations:formation_detail", pk=pk)
     formation = get_object_or_404(Formation, pk=pk)
@@ -312,7 +324,6 @@ def session_list(request):
 
     paginator = Paginator(qs, 20)
     page_obj = paginator.get_page(request.GET.get("page"))
-
     return render(
         request,
         "formations/session_list.html",
@@ -343,12 +354,6 @@ def session_detail(request, pk):
 
 
 def _session_form_context(exclude_session_pk=None):
-    """
-    Build JSON-serialisable dicts for the smart-notification JS on the session form.
-    Passed to both session_create and session_edit.
-
-    base_price is per participant — all price comparisons are per-person.
-    """
     import json
     from django.urls import reverse
     from formations.models import TrainingRoom
@@ -368,18 +373,14 @@ def _session_form_context(exclude_session_pk=None):
             for s in sessions_qs
             if s.date_start and s.date_end
         )
-        # Per-person price already consumed by existing sessions
         existing_price_sum = sum(
             float(s.price_per_participant or f.base_price or 0) for s in sessions_qs
         )
-        # hours_per_day: used by JS to auto-derive session_hours from date range
         hours_per_day = (
             float(f.duration_hours) / float(f.duration_days)
             if f.duration_hours and f.duration_days
             else None
         )
-
-        # Previous session client (for JS pre-fill when formation is changed via dropdown)
         prev_session = (
             f.sessions.exclude(status=Session.STATUS_CANCELLED)
             .order_by("-date_start", "-pk")
@@ -432,6 +433,7 @@ def _session_form_context(exclude_session_pk=None):
         ]
         if bookings:
             trainer_bookings[str(trainer.pk)] = bookings
+
     room_bookings = {}
     for room in TrainingRoom.objects.filter(is_active=True):
         qs = room.sessions.filter(
@@ -450,6 +452,7 @@ def _session_form_context(exclude_session_pk=None):
         ]
         if bookings:
             room_bookings[str(room.pk)] = bookings
+
     return {
         "room_capacities_json": json.dumps(room_capacities),
         "formation_data_json": json.dumps(formation_data),
@@ -458,6 +461,7 @@ def _session_form_context(exclude_session_pk=None):
     }
 
 
+# ── PATCHED v3.1 ─────────────────────────────────────────────────────────── #
 def session_create(request):
     import math
     from datetime import date, timedelta
@@ -465,6 +469,12 @@ def session_create(request):
 
     prefill_formation = None
     initial = {}
+
+    # Step 2 of guided workflow: ?client=<pk> comes from clients:client_create
+    client_pk = request.GET.get("client")
+    if client_pk:
+        initial["client"] = client_pk
+
     formation_pk = request.GET.get("formation")
     if formation_pk:
         try:
@@ -480,7 +490,6 @@ def session_create(request):
                     "%Y-%m-%d"
                 )
 
-            # Default session_hours = formation total duration_hours
             if prefill_formation.duration_hours:
                 initial["session_hours"] = (
                     format(prefill_formation.duration_hours, "f")
@@ -488,9 +497,6 @@ def session_create(request):
                     .rstrip(".")
                 )
 
-            # Price = base_price / duration_hours × session_hours
-            # When pre-filling a single session that covers the whole formation,
-            # session_hours == duration_hours → price = base_price
             if prefill_formation.base_price and prefill_formation.duration_hours:
                 sh = float(prefill_formation.duration_hours)
                 dh = float(prefill_formation.duration_hours)
@@ -516,12 +522,15 @@ def session_create(request):
             .order_by("-date_start", "-pk")
             .first()
         )
+        # Only fall back to prev_session client if no ?client= was passed
         if prev_session and "client" not in initial and prev_session.client_id:
             initial["client"] = prev_session.client_id
 
     form = SessionForm(request.POST or None, initial=initial)
     if request.method == "POST" and form.is_valid():
         session = form.save()
+
+        # Copy participants from previous session
         if prev_session and prev_session.participants.exists():
             copied = 0
             for p in prev_session.participants.all():
@@ -544,11 +553,15 @@ def session_create(request):
                 prev_date = prev_session.date_start.strftime("%d/%m/%Y")
                 messages.info(
                     request,
-                    f"{copied} participant(s) repris de la session précédente "
-                    f"({prev_date}). Vérifiez et ajustez la liste si nécessaire.",
+                    f"{copied} participant(s) repris de la session précédente ({prev_date}). "
+                    "Vérifiez et ajustez la liste si nécessaire.",
                 )
-        messages.success(request, "Session créée.")
-        return redirect("formations:session_detail", pk=session.pk)
+
+        messages.success(
+            request, "Session créée. Créez maintenant la facture proforma."
+        )
+        # Step 3 of guided workflow: go straight to invoice creation
+        return redirect(f"/financial/invoices/create/?session={session.pk}")
 
     ctx = _session_form_context()
     ctx.update(
@@ -560,6 +573,9 @@ def session_create(request):
         }
     )
     return render(request, "formations/session_form.html", ctx)
+
+
+# ── END PATCH ────────────────────────────────────────────────────────────── #
 
 
 @admin_required
@@ -615,9 +631,7 @@ def session_cancel(request, pk):
         return redirect("formations:session_detail", pk=pk)
 
     return render(
-        request,
-        "formations/session_cancel.html",
-        {"form": form, "session": session},
+        request, "formations/session_cancel.html", {"form": form, "session": session}
     )
 
 
@@ -629,7 +643,6 @@ def session_cancel(request, pk):
 @login_and_active_required
 def participant_add(request, session_pk):
     session = get_object_or_404(Session, pk=session_pk)
-
     if session.is_full:
         messages.error(request, "La session est complète.")
         return redirect("formations:session_detail", pk=session_pk)
@@ -732,7 +745,6 @@ def participant_import(request, session_pk):
 @admin_required
 def attestation_issue_bulk(request, session_pk):
     session = get_object_or_404(Session, pk=session_pk)
-
     if session.status != Session.STATUS_COMPLETED:
         messages.error(
             request,
@@ -741,7 +753,6 @@ def attestation_issue_bulk(request, session_pk):
         return redirect("formations:session_detail", pk=session_pk)
 
     form = AttestationIssueForm(request.POST or None, session=session)
-
     if request.method == "POST" and form.is_valid():
         issue_date = form.cleaned_data["issue_date"]
         participant_ids = form.cleaned_data["participant_ids"].values_list(
@@ -755,9 +766,7 @@ def attestation_issue_bulk(request, session_pk):
         return redirect("formations:session_detail", pk=session_pk)
 
     return render(
-        request,
-        "formations/attestation_issue.html",
-        {"form": form, "session": session},
+        request, "formations/attestation_issue.html", {"form": form, "session": session}
     )
 
 
@@ -770,35 +779,27 @@ def attestation_detail(request, pk):
         pk=pk,
     )
     return render(
-        request,
-        "formations/attestation_detail.html",
-        {"attestation": attestation},
+        request, "formations/attestation_detail.html", {"attestation": attestation}
     )
 
 
 @admin_required
 def attestation_print(request, pk):
-    """Render a print-ready attestation template."""
     from core.models import FormationInfo, InstituteInfo
 
     attestation = get_object_or_404(
         Attestation.objects.select_related(
-            "participant",
-            "session__formation__category",
-            "session__trainer",
+            "participant", "session__formation__category", "session__trainer"
         ),
         pk=pk,
     )
-    institute = InstituteInfo.get_instance()
-    formation_info = FormationInfo.get_instance()
-
     return render(
         request,
         "formations/attestation_print.html",
         {
             "attestation": attestation,
-            "institute": institute,
-            "formation_info": formation_info,
+            "institute": InstituteInfo.get_instance(),
+            "formation_info": FormationInfo.get_instance(),
         },
     )
 
@@ -822,42 +823,28 @@ def attestation_revoke(request, pk):
 
 @admin_required
 def formation_analytics(request):
-    from django.db.models import Avg, Count, Sum
+    from django.db.models import Count
 
     sessions = Session.objects.select_related("formation", "trainer")
-
-    total_sessions = sessions.count()
     completed = sessions.filter(status=Session.STATUS_COMPLETED)
-    total_completed = completed.count()
-
-    total_participants = Participant.objects.filter(
-        session__status=Session.STATUS_COMPLETED
-    ).count()
-    total_attended = Participant.objects.filter(
-        session__status=Session.STATUS_COMPLETED, attended=True
-    ).count()
-
-    total_attestations = Attestation.objects.filter(is_issued=True).count()
-
-    # Revenue from completed sessions (effective_price × attended_count is a
-    # property, so aggregate in Python — analytics page, acceptable cost)
-    revenue = sum(s.total_revenue for s in completed)
-
-    top_formations = Formation.objects.annotate(
-        session_count=Count("sessions")
-    ).order_by("-session_count")[:5]
 
     return render(
         request,
         "formations/analytics.html",
         {
-            "total_sessions": total_sessions,
-            "total_completed": total_completed,
-            "total_participants": total_participants,
-            "total_attended": total_attended,
-            "total_attestations": total_attestations,
-            "revenue": revenue,
-            "top_formations": top_formations,
+            "total_sessions": sessions.count(),
+            "total_completed": completed.count(),
+            "total_participants": Participant.objects.filter(
+                session__status=Session.STATUS_COMPLETED
+            ).count(),
+            "total_attended": Participant.objects.filter(
+                session__status=Session.STATUS_COMPLETED, attended=True
+            ).count(),
+            "total_attestations": Attestation.objects.filter(is_issued=True).count(),
+            "revenue": sum(s.total_revenue for s in completed),
+            "top_formations": Formation.objects.annotate(
+                session_count=Count("sessions")
+            ).order_by("-session_count")[:5],
         },
     )
 
@@ -875,7 +862,6 @@ def session_fill_rates(request):
         )
         .order_by("-date_start")
     )
-    # fill_rate is a property — evaluate in Python
     data = [
         {
             "session": s,
@@ -912,14 +898,9 @@ def trainer_utilization(request):
 
 @login_and_active_required
 def sessions_calendar_feed(request):
-    """
-    Returns sessions as a JSON array for FullCalendar or similar.
-    Accepts optional ?start= and ?end= ISO date params.
-    """
     qs = Session.objects.select_related("formation").exclude(
         status=Session.STATUS_CANCELLED
     )
-
     start = request.GET.get("start")
     end = request.GET.get("end")
     if start:
@@ -953,22 +934,12 @@ def sessions_calendar_feed(request):
     return JsonResponse(events, safe=False)
 
 
-# ─── ADD THESE TO formations/views.py ────────────────────────────────────── #
-# (append at the end, or place near the AJAX section)
-
-from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 
 
 @admin_required
 @require_GET
 def api_formation_list(request):
-    """
-    Return all active formations for the line-item source selector.
-    Optionally filter by ?q= for a live search.
-    """
-    from formations.models import Formation
-
     q = request.GET.get("q", "").strip()
     qs = Formation.objects.filter(is_active=True).order_by("title")
     if q:
@@ -985,7 +956,7 @@ def api_formation_list(request):
                 or getattr(f, "price_per_person", None)
                 or ""
             ),
-            "description": f.title,  # use title as invoice line description default
+            "description": f.title,
         }
         for f in qs
     ]
@@ -995,9 +966,6 @@ def api_formation_list(request):
 @admin_required
 @require_GET
 def api_formation_detail(request, pk):
-    """Return a single formation's prepopulation data."""
-    from formations.models import Formation
-
     f = get_object_or_404(Formation, pk=pk)
     return JsonResponse(
         {

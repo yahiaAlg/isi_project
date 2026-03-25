@@ -436,6 +436,38 @@ class Invoice(TimeStampedModel):
             )
 
         c = self.client
+
+        # ── Freeze proforma state before any mutations ─────────────────
+        ProformaSnapshot.objects.update_or_create(
+            invoice=self,
+            defaults=dict(
+                proforma_reference=self.proforma_reference,
+                invoice_type=self.invoice_type,
+                invoice_date=self.invoice_date,
+                validity_date=self.validity_date,
+                page_ref=self.page_ref,
+                amount_ht=self.amount_ht,
+                tva_rate=self.tva_rate,
+                amount_tva=self.amount_tva,
+                amount_ttc=self.amount_ttc,
+                bon_commande_number=self.bon_commande_number,
+                bon_commande_date=self.bon_commande_date,
+                bon_commande_amount=self.bon_commande_amount,
+                notes=self.notes,
+                footer_text=self.footer_text,
+                client_name=c.name,
+                client_address=c.address,
+                client_type=c.client_type,
+                client_nif=c.nif,
+                client_nis=c.nis,
+                client_rc=c.rc,
+                client_ai=c.article_imposition,
+                client_nin=c.nin,
+                client_rib=c.rib,
+                client_tin=c.tin,
+            ),
+        )
+
         self.client_name_snapshot = c.name
         self.client_address_snapshot = c.address
         self.client_type_snapshot = c.client_type
@@ -1030,6 +1062,71 @@ class Expense(TimeStampedModel):
 
 # ======================================================================= #
 # Financial period (reporting helper)
+# ======================================================================= #
+
+
+# ======================================================================= #
+# ProformaSnapshot — frozen copy of the proforma before finalization
+# ======================================================================= #
+
+
+class ProformaSnapshot(TimeStampedModel):
+    """
+    Immutable snapshot of a proforma invoice created at finalization.
+    Preserves amounts, client data, and validity info as they were
+    before the invoice was promoted to FINALE phase.
+    OneToOne with Invoice — one snapshot per finalized invoice.
+    """
+
+    invoice = models.OneToOneField(
+        Invoice,
+        on_delete=models.CASCADE,
+        related_name="proforma_snapshot",
+        verbose_name="Facture",
+    )
+    proforma_reference = models.CharField(max_length=50, verbose_name="N° Proforma")
+    invoice_type = models.CharField(max_length=20, verbose_name="Type")
+    invoice_date = models.DateField(verbose_name="Date d'émission")
+    validity_date = models.DateField(null=True, blank=True, verbose_name="Validité")
+    page_ref = models.CharField(max_length=100, blank=True, verbose_name="Réf. interne")
+
+    # Amounts as they were BEFORE finalization (TVA may be zeroed for exempt clients)
+    amount_ht = models.DecimalField(max_digits=14, decimal_places=2)
+    tva_rate = models.DecimalField(max_digits=5, decimal_places=4)
+    amount_tva = models.DecimalField(max_digits=14, decimal_places=2)
+    amount_ttc = models.DecimalField(max_digits=14, decimal_places=2)
+
+    # BC info
+    bon_commande_number = models.CharField(max_length=100, blank=True)
+    bon_commande_date = models.DateField(null=True, blank=True)
+    bon_commande_amount = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True
+    )
+
+    # Client data at time of finalization
+    client_name = models.CharField(max_length=255, blank=True)
+    client_address = models.TextField(blank=True)
+    client_type = models.CharField(max_length=20, blank=True)
+    client_nif = models.CharField(max_length=100, blank=True)
+    client_nis = models.CharField(max_length=100, blank=True)
+    client_rc = models.CharField(max_length=100, blank=True)
+    client_ai = models.CharField(max_length=100, blank=True)
+    client_nin = models.CharField(max_length=20, blank=True)
+    client_rib = models.CharField(max_length=255, blank=True)
+    client_tin = models.CharField(max_length=50, blank=True)
+
+    # Notes / footer
+    notes = models.TextField(blank=True)
+    footer_text = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Snapshot proforma"
+        verbose_name_plural = "Snapshots proforma"
+
+    def __str__(self):
+        return f"Snapshot {self.proforma_reference}"
+
+
 # ======================================================================= #
 
 

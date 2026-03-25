@@ -64,7 +64,6 @@
           <i class="bi bi-receipt-cutoff"></i> Facture Finale
         </span>
       {% endif %}
-      {% include "financial/partials/_invoice_status_badge.html" with invoice=invoice %}
       {% if invoice.is_overdue %}
       <span class="isi-badge red" style="font-size:12px;padding:5px 12px;">
         <i class="bi bi-exclamation-triangle-fill"></i> En retard ({{ invoice.days_overdue }}j)
@@ -814,6 +813,10 @@
             {% endif %}
 
             {% if invoice.phase == 'finale' %}
+              <!-- Print original proforma for archive -->
+              <a href="{% url 'financial:invoice_print' invoice.pk %}?proforma=1" target="_blank" class="btn btn-ghost">
+                <i class="bi bi-file-earmark-text"></i> Imprimer la proforma originale
+              </a>
               {% if invoice.status not in 'voided credit_note' %}
               <a href="{% url 'financial:invoice_edit' invoice.pk %}" class="btn btn-ghost">
                 <i class="bi bi-pencil-fill"></i> Modifier (notes / échéance)
@@ -852,6 +855,19 @@
                     onclick="return confirm('Marquer cette proforma comme envoyée au client ?')">
               <i class="bi bi-send-fill" style="color:var(--accent);"></i>
               Marquer comme envoyée
+            </button>
+          </form>
+          {% endif %}
+
+          <!-- Cancel finalization — revert to proforma (admin recovery) -->
+          {% if invoice.phase == 'finale' and invoice.status == 'unpaid' %}
+          <form method="post" action="{% url 'financial:invoice_cancel_finalization' invoice.pk %}" class="mb-3">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-ghost btn-sm w-100"
+                    style="color:#f59e0b;border-color:rgba(245,158,11,.3);justify-content:flex-start;"
+                    onclick="return confirm('Annuler la finalisation et remettre en brouillon proforma ? Le numéro final sera libéré.')">
+              <i class="bi bi-arrow-counterclockwise" style="color:var(--accent);"></i>
+              Annuler la finalisation (remettre en proforma)
             </button>
           </form>
           {% endif %}

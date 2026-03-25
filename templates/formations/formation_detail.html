@@ -26,7 +26,14 @@
     <div class="page-header-left">
       <h1>{{ formation.title }}</h1>
       <p>
-        {% if formation.category %}<span class="isi-badge blue me-2">{{ formation.category.name }}</span>{% endif %}
+        {% if formation.code %}
+          <span style="font-family:var(--font-mono,monospace);font-size:12px;font-weight:700;
+                       background:var(--accent-soft);color:var(--accent);
+                       border-radius:5px;padding:2px 8px;letter-spacing:.4px;margin-right:6px;">
+            {{ formation.code }}
+          </span>
+        {% endif %}
+        {% if formation.category %}<span class="isi-badge blue me-2">{% if formation.category.code %}{{ formation.category.code }} · {% endif %}{{ formation.category.name }}</span>{% endif %}
         {% if formation.is_active %}
           <span class="isi-badge green"><i class="bi bi-circle-fill" style="font-size:7px;"></i> Active</span>
         {% else %}

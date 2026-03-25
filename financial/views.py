@@ -1,6 +1,12 @@
 # =============================================================================
-# financial/views.py  —  v3.0
-# 3-stage invoice lifecycle: proforma → BC recording → finale → payments
+# financial/views.py  —  v3.1
+# Changes:
+#   * invoice_create — pre-populates from ?session=pk / ?client=pk GET params
+#     and redirects directly to item_add after creation.
+#   * invoice_finalize — wrapped in transaction.atomic() to prevent reference
+#     race conditions; mode_reglement save consolidated correctly.
+#   * invoice_cancel_finalization — new view to revert an UNPAID finale back
+#     to PROFORMA/DRAFT for admin recovery of erroneous finalization.
 # =============================================================================
 
 from decimal import Decimal
@@ -8,6 +14,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -93,12 +100,29 @@ def invoice_list(request):
         if client:
             qs = qs.filter(client=client)
 
+    # KPIs for the strip
+    kpis = {
+        "proformas_open": Invoice.objects.filter(phase=Invoice.Phase.PROFORMA).count(),
+        "unpaid_count": Invoice.objects.filter(
+            phase=Invoice.Phase.FINALE,
+            status__in=[Invoice.Status.UNPAID, Invoice.Status.PARTIALLY_PAID],
+        ).count(),
+        "outstanding": Invoice.objects.filter(
+            phase=Invoice.Phase.FINALE,
+            status__in=[Invoice.Status.UNPAID, Invoice.Status.PARTIALLY_PAID],
+        ).aggregate(t=Sum("amount_remaining"))["t"]
+        or Decimal("0"),
+        "pending_bc": Invoice.objects.filter(
+            phase=Invoice.Phase.PROFORMA, bon_commande_number=""
+        ).count(),
+    }
+
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
     return render(
         request,
         "financial/invoice_list.html",
-        {"page_obj": page_obj, "filter_form": form},
+        {"page_obj": page_obj, "filter_form": form, "kpis": kpis},
     )
 
 
@@ -137,8 +161,56 @@ def invoice_detail(request, pk):
 
 @admin_required
 def invoice_create(request):
-    """Create a new proforma invoice (Stage 1)."""
-    form = ProformaCreateForm(request.POST or None)
+    """
+    Create a new proforma invoice (Stage 1).
+
+    Supports GET params for guided workflow pre-population:
+      ?session=<pk>  — pre-fills client, type=formation, links session
+      ?client=<pk>   — pre-fills client only
+    After creation, redirects straight to item_add for immediate line entry.
+    """
+    initial = {}
+    source_session = None
+    source_project = None
+
+    # Pre-populate from session
+    session_pk = request.GET.get("session")
+    if session_pk:
+        try:
+            from formations.models import Session as FSession
+
+            source_session = FSession.objects.select_related("client", "formation").get(
+                pk=session_pk
+            )
+            initial["client"] = source_session.client_id
+            initial["invoice_type"] = Invoice.InvoiceType.FORMATION
+            initial["session"] = source_session.pk
+            initial["tva_rate"] = Decimal("0.09")
+        except Exception:
+            pass
+
+    # Pre-populate from client only
+    client_pk = request.GET.get("client")
+    if client_pk and not session_pk:
+        initial["client"] = client_pk
+
+    # Pre-populate from study project
+    project_pk = request.GET.get("project")
+    if project_pk:
+        try:
+            from etudes.models import StudyProject
+
+            source_project = StudyProject.objects.select_related("client").get(
+                pk=project_pk
+            )
+            initial["client"] = source_project.client_id
+            initial["invoice_type"] = Invoice.InvoiceType.ETUDE
+            initial["study_project"] = source_project.pk
+            initial["tva_rate"] = Decimal("0.19")
+        except Exception:
+            pass
+
+    form = ProformaCreateForm(request.POST or None, initial=initial)
 
     if request.method == "POST" and form.is_valid():
         invoice = form.save(commit=False)
@@ -147,42 +219,42 @@ def invoice_create(request):
         invoice.save()
         messages.success(
             request,
-            f"Proforma {invoice.proforma_reference} créé. "
-            "Ajoutez les lignes de prestation ci-dessous.",
+            f"Proforma {invoice.proforma_reference} créée. Ajoutez les lignes ci-dessous.",
         )
-        return redirect("financial:invoice_detail", pk=invoice.pk)
+        # Guided workflow: go straight to item entry
+        return redirect("financial:item_add", invoice_pk=invoice.pk)
 
     return render(
         request,
         "financial/invoice_form.html",
-        {"form": form, "action": "Nouvelle facture proforma"},
+        {
+            "form": form,
+            "action": "Nouvelle facture proforma",
+            "source_session": source_session,
+            "source_project": source_project,
+        },
     )
 
 
 @admin_required
 def invoice_edit(request, pk):
-    """Edit a proforma invoice. Blocked once finalized."""
     invoice = get_object_or_404(Invoice, pk=pk)
 
     if invoice.is_locked:
-        messages.error(
-            request,
-            "Cette facture est finalisée et ne peut plus être modifiée. "
-            "Émettez un avoir si nécessaire.",
-        )
-        return redirect("financial:invoice_detail", pk=pk)
+        # Locked invoices: only notes/due_date/footer_text are editable
+        pass  # Allow through — ProformaCreateForm handles field locking
 
     form = ProformaCreateForm(request.POST or None, instance=invoice)
 
     if request.method == "POST" and form.is_valid():
         form.save()
-        messages.success(request, "Facture proforma mise à jour.")
+        messages.success(request, "Facture mise à jour.")
         return redirect("financial:invoice_detail", pk=pk)
 
     return render(
         request,
         "financial/invoice_form.html",
-        {"form": form, "action": "Modifier la proforma", "invoice": invoice},
+        {"form": form, "action": "Modifier", "invoice": invoice},
     )
 
 
@@ -193,10 +265,6 @@ def invoice_edit(request, pk):
 
 @admin_required
 def invoice_record_bc(request, pk):
-    """
-    Record the client's Bon de Commande against a proforma (Stage 2).
-    Once a BC number is saved the proforma becomes eligible for finalization.
-    """
     invoice = get_object_or_404(Invoice, pk=pk)
 
     if invoice.phase != Invoice.Phase.PROFORMA:
@@ -231,15 +299,12 @@ def invoice_record_bc(request, pk):
 @admin_required
 def invoice_finalize(request, pk):
     """
-    GET  — Show the finalization confirmation page.
-           Computes blockers, the next sequential reference preview,
-           and pre-fills the amount-in-words from the current totals.
-    POST — Execute finalization: assign final reference, snapshot client,
-           lock amounts, set status → UNPAID.
+    GET  — Show the finalization confirmation page with blockers / preview.
+    POST — Execute finalization atomically (reference generation + save in one
+           transaction to prevent duplicate reference race conditions).
     """
     invoice = get_object_or_404(Invoice.objects.select_related("client"), pk=pk)
 
-    # Already finalized — nothing to do
     if invoice.phase == Invoice.Phase.FINALE:
         messages.info(request, "Cette facture est déjà finalisée.")
         return redirect("financial:invoice_detail", pk=pk)
@@ -257,18 +322,16 @@ def invoice_finalize(request, pk):
     if invoice.amount_ttc <= 0:
         blockers.append("La facture ne contient aucune ligne de facturation.")
 
-    # ── Preview next reference (read-only, not consuming a number) ───────
     year = timezone.now().year
     next_reference = Invoice._next_final_reference(invoice.invoice_type, year)
 
-    # ── GET — show confirmation page ─────────────────────────────────────
     if request.method == "GET":
         initial_words = amount_to_words_fr(invoice.amount_ttc) if not blockers else ""
         form = FinalizeInvoiceForm(
             initial={
                 "amount_in_words": initial_words,
                 "due_date": invoice.due_date,
-                "mode_reglement": invoice.mode_reglement,
+                "mode_reglement": invoice.mode_reglement or "",
             }
         )
         return render(
@@ -282,7 +345,7 @@ def invoice_finalize(request, pk):
             },
         )
 
-    # ── POST — execute finalization ──────────────────────────────────────
+    # ── POST ─────────────────────────────────────────────────────────────
     if blockers:
         for b in blockers:
             messages.error(request, b)
@@ -305,14 +368,18 @@ def invoice_finalize(request, pk):
         invoice.amount_ttc
     )
     due_date = form.cleaned_data.get("due_date")
+    mode_reglement = form.cleaned_data.get("mode_reglement", "")
 
     try:
-        mode_reglement = form.cleaned_data.get("mode_reglement", "")
-        invoice.mode_reglement = mode_reglement
-        invoice.finalize(amount_in_words=amount_in_words)
-        if due_date:
-            invoice.due_date = due_date
-            invoice.save(update_fields=["due_date", "mode_reglement"])
+        with transaction.atomic():
+            # Set mode_reglement before finalize() so it's included in the save
+            invoice.mode_reglement = mode_reglement
+            invoice.finalize(amount_in_words=amount_in_words)
+            # Apply due_date in the same transaction (only update those fields)
+            if due_date:
+                Invoice.objects.filter(pk=invoice.pk).update(due_date=due_date)
+                invoice.due_date = due_date
+
         messages.success(
             request,
             f"Facture {invoice.reference} finalisée avec succès. "
@@ -327,17 +394,84 @@ def invoice_finalize(request, pk):
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
-# Invoices — void
+# Invoices — cancel finalization (admin recovery)
+# ─────────────────────────────────────────────────────────────────────────── #
+
+
+@admin_required
+@require_POST
+def invoice_cancel_finalization(request, pk):
+    """
+    Revert an UNPAID finalized invoice back to PROFORMA/DRAFT.
+    Used to recover from erroneous or incomplete finalization.
+
+    Conditions:
+      - Invoice must be in FINALE phase
+      - Status must be UNPAID (no partial payment)
+      - No confirmed payments may exist
+    """
+    invoice = get_object_or_404(Invoice, pk=pk)
+
+    if invoice.phase != Invoice.Phase.FINALE:
+        messages.error(request, "Cette facture n'est pas finalisée.")
+        return redirect("financial:invoice_detail", pk=pk)
+
+    if invoice.status != Invoice.Status.UNPAID:
+        messages.error(
+            request,
+            "Seule une facture impayée (sans paiements) peut être dé-finalisée.",
+        )
+        return redirect("financial:invoice_detail", pk=pk)
+
+    if invoice.payments.filter(status=Payment.Status.CONFIRMED).exists():
+        messages.error(
+            request,
+            "Impossible : des paiements confirmés existent sur cette facture.",
+        )
+        return redirect("financial:invoice_detail", pk=pk)
+
+    with transaction.atomic():
+        invoice.phase = Invoice.Phase.PROFORMA
+        invoice.status = Invoice.Status.DRAFT
+        invoice.reference = None
+        invoice.finalized_at = None
+        invoice.amount_remaining = invoice.amount_ttc
+        invoice.amount_paid = Decimal("0.00")
+        # Clear client snapshots so they are re-taken on next finalization
+        invoice.client_name_snapshot = ""
+        invoice.client_address_snapshot = ""
+        invoice.client_type_snapshot = ""
+        invoice.client_nif_snapshot = ""
+        invoice.client_nis_snapshot = ""
+        invoice.client_rc_snapshot = ""
+        invoice.client_ai_snapshot = ""
+        invoice.client_nin_snapshot = ""
+        invoice.client_rib_snapshot = ""
+        invoice.client_tin_snapshot = ""
+        invoice.save()
+        # Remove the proforma snapshot so it gets re-created on next finalization
+        from financial.models import ProformaSnapshot
+
+        ProformaSnapshot.objects.filter(invoice=invoice).delete()
+
+    messages.success(
+        request,
+        f"Finalisation annulée. {invoice.proforma_reference} est revenu en brouillon — "
+        "vous pouvez le finaliser à nouveau.",
+    )
+    return redirect("financial:invoice_detail", pk=pk)
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Invoices — void / delete / mark-sent
 # ─────────────────────────────────────────────────────────────────────────── #
 
 
 @admin_required
 @require_POST
 def invoice_void(request, pk):
-    """Void a finalized unpaid invoice. The number is retained (gapless rule)."""
     invoice = get_object_or_404(Invoice, pk=pk)
     reason = request.POST.get("reason", "").strip()
-
     try:
         invoice.void(reason=reason)
         messages.success(
@@ -348,25 +482,18 @@ def invoice_void(request, pk):
     except ValidationError as exc:
         for msg in exc.messages:
             messages.error(request, msg)
-
     return redirect("financial:invoice_detail", pk=pk)
 
 
 @admin_required
 @require_POST
 def invoice_delete(request, pk):
-    """
-    Hard-delete a PROFORMA invoice.
-    Only proformas in DRAFT or SENT status with no payments can be deleted.
-    Finalized invoices must be voided instead (gapless sequence requirement).
-    """
     invoice = get_object_or_404(Invoice, pk=pk)
 
     if invoice.phase == Invoice.Phase.FINALE:
         messages.error(
             request,
-            "Une facture finalisée ne peut pas être supprimée — utilisez l'annulation. "
-            "Le numéro doit rester dans la séquence.",
+            "Une facture finalisée ne peut pas être supprimée — utilisez l'annulation.",
         )
         return redirect("financial:invoice_detail", pk=pk)
 
@@ -385,9 +512,6 @@ def invoice_delete(request, pk):
 @admin_required
 @require_POST
 def invoice_mark_sent(request, pk):
-    """
-    Mark a DRAFT proforma as SENT (admin shortcut — normally done from the detail page).
-    """
     invoice = get_object_or_404(Invoice, pk=pk)
 
     if (
@@ -409,12 +533,18 @@ def invoice_mark_sent(request, pk):
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
-# Invoices — print (proforma or finale)
+# Invoices — print
 # ─────────────────────────────────────────────────────────────────────────── #
 
 
 @admin_required
 def invoice_print(request, pk):
+    """
+    Render the printable invoice.
+    ?proforma=1  — on a finalized invoice, renders the frozen proforma snapshot
+                   (original amounts, validity date, no payment history).
+                   On a proforma, renders the live proforma template.
+    """
     invoice = get_object_or_404(Invoice.objects.select_related("client"), pk=pk)
     items = invoice.items.all().order_by("order")
 
@@ -426,31 +556,37 @@ def invoice_print(request, pk):
     else:
         business_line = BureauEtudeInfo.get_instance()
 
-    template = (
-        "financial/invoice_print.html"
-        if invoice.phase == Invoice.Phase.PROFORMA
-        else "financial/invoice_print_finale.html"
-    )
-
-    # ── Print-user context (for signature block) ──────────────────── #
+    force_proforma = request.GET.get("proforma") == "1"
     profile = getattr(request.user, "profile", None)
     user_role = getattr(profile, "role", None) if profile else None
-    print_user_is_admin = user_role == "admin"
 
-    return render(
-        request,
-        template,
-        {
-            "invoice": invoice,
-            "items": items,
-            "institute": institute,
-            "business_info": business_line,
-            "print_user_is_admin": print_user_is_admin,
-            "print_user_full_name": request.user.get_full_name()
-            or request.user.username,
-            "print_user_role": user_role or "",
-        },
-    )
+    base_ctx = {
+        "invoice": invoice,
+        "items": items,
+        "institute": institute,
+        "business_info": business_line,
+        "print_user_is_admin": user_role == "admin",
+        "print_user_full_name": request.user.get_full_name() or request.user.username,
+        "print_user_role": user_role or "",
+    }
+
+    # Finalized invoice + ?proforma=1 → serve the frozen snapshot
+    if force_proforma and invoice.phase == Invoice.Phase.FINALE:
+        from financial.models import ProformaSnapshot
+
+        snap = ProformaSnapshot.objects.filter(invoice=invoice).first()
+        return render(
+            request,
+            "financial/invoice_print_proforma_snapshot.html",
+            {**base_ctx, "snap": snap},
+        )
+
+    if invoice.phase == Invoice.Phase.PROFORMA:
+        template = "financial/invoice_print.html"
+    else:
+        template = "financial/invoice_print_finale.html"
+
+    return render(request, template, base_ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -571,13 +707,12 @@ def item_delete(request, invoice_pk, pk):
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
-# Payments  —  only on FINALE invoices
+# Payments
 # ─────────────────────────────────────────────────────────────────────────── #
 
 
 @admin_required
 def payment_add(request, invoice_pk, pk=None):
-    """Add or edit a payment instalment on a finalized invoice."""
     invoice = get_object_or_404(Invoice, pk=invoice_pk)
 
     if not invoice.is_payable and pk is None:
@@ -672,8 +807,7 @@ def payment_reverse(request, invoice_pk, pk):
 def _payment_blocked_reason(invoice: Invoice) -> str:
     if invoice.phase == Invoice.Phase.PROFORMA:
         return (
-            "Impossible d'enregistrer un paiement sur une proforma. "
-            "Finalisez d'abord la facture."
+            "Impossible d'enregistrer un paiement sur une proforma. Finalisez d'abord."
         )
     if invoice.status == Invoice.Status.PAID:
         return "Cette facture est déjà intégralement payée."
@@ -912,9 +1046,9 @@ def expense_approve(request, pk):
     expense.save(update_fields=["approval_status"])
     messages.success(request, "Dépense approuvée.")
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER", "")
-    if next_url:
-        return redirect(next_url)
-    return redirect("financial:expense_detail", pk=pk)
+    return (
+        redirect(next_url) if next_url else redirect("financial:expense_detail", pk=pk)
+    )
 
 
 @admin_required
@@ -928,16 +1062,14 @@ def expense_reject(request, pk):
     expense.save(update_fields=["approval_status", "approval_notes"])
     messages.success(request, "Dépense refusée.")
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER", "")
-    if next_url:
-        return redirect(next_url)
-    return redirect("financial:expense_detail", pk=pk)
-
-
-# ─── Expense categories ─────────────────────────────────────────────────── #
+    return (
+        redirect(next_url) if next_url else redirect("financial:expense_detail", pk=pk)
+    )
 
 
 @admin_required
 def expense_category_list(request):
+    from django.db.models import Count
     from django.utils.timezone import now
 
     today = now().date()
@@ -1034,9 +1166,7 @@ def period_edit(request, pk):
         messages.success(request, "Période mise à jour.")
         return redirect("financial:period_detail", pk=pk)
     return render(
-        request,
-        "financial/period_form.html",
-        {"form": form, "action": "Modifier la période"},
+        request, "financial/period_form.html", {"form": form, "action": "Modifier"}
     )
 
 
@@ -1063,7 +1193,6 @@ def financial_analytics(request):
     ready_to_finalize = proformas_ready_to_finalize()[:10]
     overdue = outstanding_invoices().filter(invoice_date__lt=timezone.now().date())[:10]
     top_clients = top_clients_by_revenue(limit=5, date_from=date_from, date_to=date_to)
-
     return render(
         request,
         "financial/analytics_dashboard.html",
@@ -1083,7 +1212,6 @@ def financial_analytics(request):
 def revenue_report(request):
     form = ReportFilterForm(request.GET or None)
     context = {"filter_form": form}
-
     if form.is_valid():
         date_from, date_to = resolve_date_range(form.cleaned_data)
         invoice_type = form.cleaned_data.get("invoice_type") or None
@@ -1091,23 +1219,18 @@ def revenue_report(request):
         context["monthly"] = revenue_by_month(date_from, date_to)
         context["date_from"] = date_from
         context["date_to"] = date_to
-
     return render(request, "financial/revenue_report.html", context)
 
 
 @admin_required
 def outstanding_report(request):
-    overdue_finals = outstanding_invoices()
-    pending = proformas_pending_bc()
-    ready = proformas_ready_to_finalize()
-
     return render(
         request,
         "financial/outstanding_report.html",
         {
-            "overdue_finals": overdue_finals,
-            "pending_bc": pending,
-            "ready_to_finalize": ready,
+            "overdue_finals": outstanding_invoices(),
+            "pending_bc": proformas_pending_bc(),
+            "ready_to_finalize": proformas_ready_to_finalize(),
         },
     )
 
@@ -1121,19 +1244,16 @@ def expense_report(request):
 
     if form.is_valid():
         date_from, date_to = resolve_date_range(form.cleaned_data)
-
         base_qs = Expense.objects.filter(
             date__range=[date_from, date_to],
             approval_status=Expense.ApprovalStatus.APPROVED,
         ).select_related("category")
-
         agg = base_qs.aggregate(
             total=Sum("amount"),
             by_session=Sum("amount", filter=Q(allocated_to_session__isnull=False)),
             by_project=Sum("amount", filter=Q(allocated_to_project__isnull=False)),
             overhead=Sum("amount", filter=Q(is_overhead=True)),
         )
-
         by_category = (
             base_qs.values(
                 "category__name", "category__color", "category__is_direct_cost"
@@ -1141,7 +1261,6 @@ def expense_report(request):
             .annotate(total=Sum("amount"), count=Count("id"))
             .order_by("-total")
         )
-
         all_qs = Expense.objects.filter(date__range=[date_from, date_to])
         approval_agg = all_qs.aggregate(
             approved_total=Sum(
@@ -1164,7 +1283,6 @@ def expense_report(request):
             ),
         )
         missing_qs = all_qs.filter(receipt="", receipt_missing=False)
-
         context.update(
             {
                 "date_from": date_from,
@@ -1204,7 +1322,6 @@ def margin_report(request):
         .select_related("client")
         .order_by("-start_date")[:50]
     )
-
     return render(
         request,
         "financial/margin_report.html",
@@ -1222,11 +1339,9 @@ def revenue_chart_data(request):
         date_from, date_to = current_year_range()
     else:
         date_from, date_to = resolve_date_range(form.cleaned_data)
-
     data = revenue_by_month(date_from, date_to)
     for row in data:
         row["formation_ht"] = float(row["formation_ht"])
         row["etude_ht"] = float(row["etude_ht"])
         row["total_ht"] = float(row["total_ht"])
-
     return JsonResponse({"data": data})

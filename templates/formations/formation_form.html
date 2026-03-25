@@ -25,6 +25,7 @@
 
   <form method="post" novalidate>
     {% csrf_token %}
+    {% if client_pk %}<input type="hidden" name="client" value="{{ client_pk }}">{% endif %}
     <div class="row g-4">
 
       <!-- Main form -->
@@ -49,7 +50,20 @@
                 <div class="invalid-feedback d-block">{{ form.title.errors|join:", " }}</div>
                 {% endif %}
               </div>
-              <div class="col-md-6">
+              <div class="col-md-3">
+                <label class="form-label" for="{{ form.code.id_for_label }}">Code spécialité</label>
+                <input type="text" name="{{ form.code.html_name }}" id="{{ form.code.id_for_label }}"
+                       class="form-control {% if form.code.errors %}is-invalid{% endif %}"
+                       value="{{ form.code.value|default:'' }}"
+                       placeholder="Ex. BTP0701"
+                       style="font-family:var(--font-mono,monospace);letter-spacing:.5px;"
+                       maxlength="20">
+                {% if form.code.errors %}
+                <div class="invalid-feedback d-block">{{ form.code.errors|join:", " }}</div>
+                {% endif %}
+                <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Code officiel 2019</div>
+              </div>
+              <div class="col-md-5">
                 <label class="form-label" for="{{ form.category.id_for_label }}">Catégorie</label>
                 <select name="{{ form.category.html_name }}" id="{{ form.category.id_for_label }}"
                         class="form-select {% if form.category.errors %}is-invalid{% endif %}">

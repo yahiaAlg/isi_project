@@ -95,6 +95,7 @@
         <thead>
           <tr>
             <th>Formation</th>
+            <th>Code</th>
             <th>Catégorie</th>
             <th>Durée</th>
             <th>Prix de base</th>
@@ -127,8 +128,22 @@
               </div>
             </td>
             <td>
+              {% if formation.code %}
+              <span style="font-family:var(--font-mono,monospace);font-size:12px;font-weight:700;
+                           background:var(--accent-soft);color:var(--accent);
+                           border:1px solid var(--accent-soft);
+                           border-radius:5px;padding:2px 7px;letter-spacing:.4px;white-space:nowrap;">
+                {{ formation.code }}
+              </span>
+              {% else %}
+              <span style="color:var(--text-muted);">—</span>
+              {% endif %}
+            </td>
+            <td>
               {% if formation.category %}
-              <span class="isi-badge blue">{{ formation.category.name }}</span>
+              <span class="isi-badge blue">
+                {% if formation.category.code %}<strong>{{ formation.category.code }}</strong> · {% endif %}{{ formation.category.name }}
+              </span>
               {% else %}
               <span style="color:var(--text-muted);">—</span>
               {% endif %}

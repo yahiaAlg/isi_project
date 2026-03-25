@@ -4,6 +4,11 @@ Clients models — v3.2
 Changes from v3.1
 ─────────────────
 * Client.tin — optional Tax Identification Number field (all client types).
+
+Changes from v3.2
+─────────────────
+* missing_fields_for_invoice() — phone removed from required list.
+  Contact info is optional; only legal/fiscal identifiers are required.
 """
 
 from django.db import models
@@ -254,13 +259,16 @@ class Client(TimeStampedModel):
         """
         Return human-readable names of required-for-finalization fields
         that are not yet filled. Empty list → profile is complete.
+
+        Note: address is required but phone/contact info is NOT — only
+        legal/fiscal identifiers are mandatory for invoice compliance.
         """
         missing: list[str] = []
         t = self.client_type
 
+        # Address is the only contact field required for invoice printing
         required: list[tuple[str, str]] = [
             ("address", "Adresse"),
-            ("phone", "Téléphone"),
         ]
 
         if t == self.ClientType.PARTICULIER:

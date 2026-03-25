@@ -1,11 +1,13 @@
-# clients/views.py  —  v3.1
-# Added: forme_juridique_list / create / edit views (admin only)
+# clients/views.py  —  v3.2
+# Changed: client_create redirects to formations:session_create?client={pk}
+#          to support the guided create workflow.
 
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from clients.forms import (
     ClientContactForm,
@@ -86,8 +88,11 @@ def client_create(request):
     form = ClientForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         client = form.save()
-        messages.success(request, f"Client « {client.name} » créé avec succès.")
-        return redirect("clients:client_detail", pk=client.pk)
+        messages.success(
+            request, f"Client « {client.name} » créé. Créez maintenant une formation."
+        )
+        url = reverse("formations:formation_create") + f"?client={client.pk}"
+        return redirect(url)
     return render(
         request, "clients/client_form.html", {"form": form, "action": "Nouveau client"}
     )
@@ -207,7 +212,6 @@ def contact_delete(request, client_pk, pk):
 
 @admin_required
 def forme_juridique_list(request):
-    """Read-only list of all forme juridique entries with client counts."""
     formes = FormeJuridique.objects.all()
     return render(request, "clients/forme_juridique_list.html", {"formes": formes})
 
@@ -241,12 +245,7 @@ def forme_juridique_create(request):
     return render(
         request,
         "clients/forme_juridique_form.html",
-        _fj_context(
-            {
-                "form": form,
-                "action": "Nouvelle forme juridique",
-            }
-        ),
+        _fj_context({"form": form, "action": "Nouvelle forme juridique"}),
     )
 
 
@@ -261,31 +260,18 @@ def forme_juridique_edit(request, pk):
     return render(
         request,
         "clients/forme_juridique_form.html",
-        _fj_context(
-            {
-                "form": form,
-                "action": f"Modifier — {fj.name}",
-                "fj": fj,
-            }
-        ),
+        _fj_context({"form": form, "action": f"Modifier — {fj.name}", "fj": fj}),
     )
 
 
 @admin_required
 def forme_juridique_delete(request, pk):
-    """
-    Superuser-only hard delete of a FormeJuridique entry.
-    Blocked for the system 'Autre' default.
-    GET  → confirmation page (shows linked client count).
-    POST → delete and redirect to list.
-    """
     if not request.user.is_superuser:
         messages.error(request, "Action réservée aux super-administrateurs.")
         return redirect("clients:forme_juridique_list")
 
     fj = get_object_or_404(FormeJuridique, pk=pk)
 
-    # Prevent deleting the system default
     if fj.name == "Autre":
         messages.error(
             request,
@@ -297,7 +283,6 @@ def forme_juridique_delete(request, pk):
 
     if request.method == "POST":
         name = fj.name
-        # SET_NULL on the FK means linked clients just lose their forme_juridique
         fj.delete()
         messages.success(request, f"Forme juridique « {name} » supprimée.")
         return redirect("clients:forme_juridique_list")
@@ -305,10 +290,7 @@ def forme_juridique_delete(request, pk):
     return render(
         request,
         "clients/forme_juridique_delete_confirm.html",
-        {
-            "fj": fj,
-            "client_count": client_count,
-        },
+        {"fj": fj, "client_count": client_count},
     )
 
 
