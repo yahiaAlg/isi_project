@@ -1,0 +1,500 @@
+[
+  {
+    "invoice_number": "001/2026",
+    "date": "08/02/2026",
+    "bc_number": "03/2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "SARL Metal Steel Company .LTD Setif",
+      "address": "Cité Houari Boumediene Rue Ounis Hamlaoui",
+      "legal_info": {
+        "rc": "15 B 0091747 - 00/19",
+        "nif": "001519009174778",
+        "art": "19206116073"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation Superviseur HSE",
+        "quantity": 2,
+        "unit": "Person",
+        "unit_price_ht": 50000.0,
+        "total_ht": 100000.0
+      }
+    ],
+    "total_ttc": 109000.0
+  },
+  {
+    "invoice_number": "0022026",
+    "date": "10/02/2026",
+    "bc_number": "001-2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "EURL G S AUTOMATION",
+      "address": "43 Rue El Joundi Boukhaloua Cheikh, Local N°04 Es Seddikia Oran",
+      "legal_info": {
+        "rc": "16 B 0116457-00/31",
+        "nif": "001631011645745",
+        "nis": "001631030034561",
+        "ai": "316464471038"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation certification international ISM-ATEX 2EM",
+        "quantity": 1,
+        "unit": "Person",
+        "unit_price_ht": 192660.56,
+        "total_ht": 192660.56
+      }
+    ],
+    "total_ttc": 201000.01
+  },
+  {
+    "invoice_number": "0032026",
+    "date": "10/02/2026",
+    "bc_number": "002-2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "SPA ACG SIM",
+      "address": "EL HAMOUL CLASSE 13 GP 69 ET 67 EL KARMA ORAN",
+      "legal_info": {
+        "rc": "16 B 0809244-00/31",
+        "nif": "001609080924405",
+        "nis": "001609010028853"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation certification international ISM-ATEX 2EM",
+        "quantity": 5,
+        "unit": "Person",
+        "unit_price_ht": 180000.0,
+        "total_ht": 900000.0
+      }
+    ],
+    "total_ttc": 981000.0
+  },
+  {
+    "invoice_number": "0042026",
+    "date": "10/02/2026",
+    "bc_number": "01/2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "SARL SMOFE",
+      "address": "CITE TELIDJENE SETIF",
+      "legal_info": {
+        "rc": "03B0085034-19/00",
+        "nif": "000319008503407",
+        "nis": "000319010143268",
+        "art": "19013149011"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation habilitation d'utilisation Produit chimique (12 Personnes)",
+        "quantity": 4,
+        "unit": "Days",
+        "unit_price_ht": 55000.0,
+        "total_ht": 220000.0
+      }
+    ],
+    "total_ttc": 239800.0
+  },
+  {
+    "invoice_number": "005/2026",
+    "date": "12/02/2026",
+    "bc_number": "001/2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "SNC KEBICHE ABDELHALIM ET CIE",
+      "address": "ELKEF LAHMAR - sétif",
+      "legal_info": {
+        "rc": "04 b 0085710-00/19",
+        "nif": "000419008571081",
+        "nis": "000419340810946",
+        "ai": "19343224044"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation sensibilisation risqué à l'activité de carrières",
+        "quantity": 2,
+        "unit": "Days",
+        "total_ht": 90000.0
+      },
+      {
+        "designation": "Formation superviseur HSE",
+        "quantity": 1,
+        "unit": "Person",
+        "total_ht": 48000.0
+      }
+    ],
+    "total_ttc": 150420.0
+  },
+  {
+    "invoice_number": "0062026",
+    "date": "12/02/2026",
+    "bc_number": "02/2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "SARL GROUPE RIADH EL-FETH",
+      "address": "BD Beggag Bouzid Cité Financiere Sétif",
+      "legal_info": {
+        "rc": "97 B 0082016-00/19",
+        "nif": "09971900820164600000",
+        "nis": "099719010778514"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation L'Habilitation Conduit de Chariots Elévateur",
+        "quantity": 20,
+        "unit": "Person",
+        "total_ht": 440000.0
+      },
+      {
+        "designation": "Frais Pédagogique",
+        "quantity": 18,
+        "unit": "Person",
+        "total_ht": 18000.0
+      }
+    ],
+    "total_ttc": 458000.0
+  },
+  {
+    "invoice_number": "0072026",
+    "date": "25/02/2026",
+    "bc_number": "001-2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "EURL TAHWEEL DZ",
+      "address": "Zone Act Art 5 Eme Tranche Ilot 18 Sec 309 Setif",
+      "legal_info": {
+        "rc": "22 B 0095050 -00/19",
+        "nif": "002219009505042",
+        "nis": "002219010072849",
+        "ai": "19018404021"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation communication",
+        "quantity": 3,
+        "unit": "Days",
+        "total_ht": 195000.0
+      }
+    ],
+    "total_ttc": 212550.0
+  },
+  {
+    "invoice_number": "0082026",
+    "date": "25/02/2026",
+    "bc_number": "10-2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "WEG ALGERIA MOTOROS SPA",
+      "address": "Zone industrielle LEHLATMA01/03, commune De guidjel, SETIF",
+      "legal_info": {
+        "rc": "22 B 0095067 00-19",
+        "nif": "002219009506760",
+        "art": "19018690021"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation audit SMQ",
+        "quantity": 3,
+        "unit": "Days",
+        "total_ht": 204000.0
+      }
+    ],
+    "total_ttc": 222360.0
+  },
+  {
+    "invoice_number": "0092026",
+    "date": "04/03/2026",
+    "bc_number": "003/2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "SARL RONIX",
+      "address": "FID SMARA SEC 06 GRP N12 N 01 BAZER SAKRA/SETIF",
+      "legal_info": {
+        "rc": "18 B 0093479-00/19",
+        "nif": "001819200047451",
+        "nis": "001819200047451",
+        "ai": "19018404021"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation IOSH MS",
+        "quantity": 1,
+        "unit": "Person",
+        "total_ht": 65000.0
+      }
+    ],
+    "total_ttc": 70850.0
+  },
+  {
+    "invoice_number": "0102026",
+    "date": "04/03/2026",
+    "bc_number": "04/2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "SARL A2M ELECTRONICS",
+      "address": "Z.I N°23 a lot n°32 bis Sétif",
+      "legal_info": {
+        "rc": "10 B 0088547-00/19",
+        "nif": "001019008854771",
+        "nis": "001019010000771"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation ISO 9001",
+        "quantity": 3,
+        "unit": "Days",
+        "total_ht": 189000.0
+      },
+      {
+        "designation": "Formation Gestion Des Risque",
+        "quantity": 3,
+        "unit": "Days",
+        "total_ht": 189000.0
+      },
+      {
+        "designation": "Frais Pedagogique",
+        "quantity": 20,
+        "unit": "Person",
+        "total_ht": 24000.0
+      }
+    ],
+    "total_ttc": 438180.0
+  },
+  {
+    "invoice_number": "0112026",
+    "date": "12/03/2026",
+    "bc_number": "004/2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "EURL BAIT EL OUTOUR EL ALAMIA",
+      "address": "Cité Kaaboub Coop Belle Vue Section 07 Groupe 911 Rdc Sétif",
+      "legal_info": {
+        "rc": "22 B 0095116 - 00/19",
+        "nif": "002219009511634",
+        "nis": "002219010134018",
+        "ai": "19018604901"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation Habilitation à la manipulation des produits chimiques",
+        "quantity": 4,
+        "unit": "Days",
+        "total_ht": 200000.0
+      }
+    ],
+    "total_ttc": 218000.0
+  },
+  {
+    "invoice_number": "0122026",
+    "date": "26/03/2026",
+    "bc_number": "005/2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "SARL GROUPE RIADH EL-FETH",
+      "address": "BD Beggag Bouzid Cité Financiere Sétif",
+      "legal_info": {
+        "rc": "97 B 0082016-00/19",
+        "nif": "09971900820164600000",
+        "nis": "099719010778514"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation de Maitrise du temps et gestion des priorités",
+        "quantity": 4,
+        "unit": "Days",
+        "total_ht": 320000.0
+      }
+    ],
+    "total_ttc": 348800.0
+  },
+  {
+    "invoice_number": "0132026",
+    "date": "26/03/2026",
+    "bc_number": "006/2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "EURL AFNES -PROJECT",
+      "address": "CITE RYM SIDI ACHOUR COOP IMMOB IHCENE BT°01 ANNABA",
+      "legal_info": {
+        "rc": "06 B 0364337-00/23",
+        "nif": "000623036433719",
+        "nis": "000623010300376",
+        "art": "23019505645"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation ISM-ATEX 2E",
+        "quantity": 3,
+        "unit": "Person",
+        "total_ht": 540000.0
+      }
+    ],
+    "total_ttc": 588600.0
+  },
+  {
+    "invoice_number": "014/2026",
+    "date": "30/03/2026",
+    "bc_number": "007/2026",
+    "vendor": {
+      "name": "SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA",
+      "address": "CITE LOTIS HACHEMI 1ere TRANCHE ETAGE 1 ET 2, SETIF",
+      "rc": "21B 0094443-19/00",
+      "art": "19011780071",
+      "nis": "002119010021763",
+      "nif": "002119009444326",
+      "rib": "001-007110300001829-41",
+      "agree": "EFP 003-14/03/2022"
+    },
+    "client": {
+      "name": "SARL Metal Steel Company .LTD Setif",
+      "address": "Cité Houari Boumediene Rue Ounis Hamlaoui",
+      "legal_info": {
+        "rc": "15 B 0091747 - 00/19",
+        "nif": "001519009174778",
+        "nis": "001519200026459",
+        "art": "19206116073"
+      }
+    },
+    "items": [
+      {
+        "designation": "Formation à la conduite de chariots élévateurs",
+        "quantity": 1,
+        "unit": "Person",
+        "total_ht": 22000.0
+      }
+    ],
+    "total_ttc": 23980.0
+  }
+]
