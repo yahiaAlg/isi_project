@@ -9,6 +9,7 @@ Loads:
   • 12 clients (ENTREPRISE) extracted from the 2026 invoice set
   • 14 finalized FORMATION invoices (phase=FINALE, status=UNPAID)
   • Admin user (admin / admin1234!)
+  • Formation base_price set from per‑person invoice prices (direct mapping)
 
 Usage:
     python manage.py seed_formations
@@ -57,6 +58,7 @@ class Command(BaseCommand):
         self._seed_invoices(clients)
         self._update_sequences()
         self._seed_admin_user()
+        self._update_formation_base_prices()  # direct mapping
 
         self.stdout.write(self.style.SUCCESS("\n✓ Seed terminé avec succès.\n"))
 
@@ -157,6 +159,22 @@ class Command(BaseCommand):
         from django.utils.text import slugify
 
         # (code, name, color, [(title, duration_days, duration_hours), ...])
+        # Base prices derived from 2026 invoice unit prices (max observed per formation).
+        # Formations not yet invoiced keep ZERO and can be updated manually.
+        BASE_PRICES = {
+            "IOSH Managing Safely": Decimal("65000.00"),
+            "Superviseur HSE": Decimal("50000.00"),
+            "Habilitation Conduite des Chariots Élévateurs": Decimal("22000.00"),
+            "Habilitation d'Utilisation Produit Chimique": Decimal("55000.00"),
+            "Atmosphère Explosive Niveau 02 — ISM-ATEX 2EM": Decimal("180000.00"),
+            "Sensibilisation Risque à l'Activité de Carrières": Decimal("45000.00"),
+            "Audit SMQ": Decimal("68000.00"),
+            "Gestion des Risques": Decimal("63000.00"),
+            "Formation ISO 9001 / ISO 14001 / ISO 45001": Decimal("63000.00"),
+            "Maîtrise du Temps et Gestion des Priorités": Decimal("80000.00"),
+            "Agent Commercial": Decimal("65000.00"),
+        }
+
         catalog = [
             (
                 "RH",
@@ -242,6 +260,7 @@ class Command(BaseCommand):
                     ("Délégué Environnement", 2, 16),
                     ("Sensibilisation Risque à l'Activité de Carrières", 2, 16),
                     ("Audit SMQ", 3, 24),
+                    ("Gestion des Risques", 3, 24),
                 ],
             ),
             (
@@ -269,7 +288,7 @@ class Command(BaseCommand):
                         "title": title,
                         "duration_days": days,
                         "duration_hours": hours,
-                        "base_price": ZERO,
+                        "base_price": BASE_PRICES.get(title, ZERO),
                         "is_active": True,
                     },
                 )
@@ -483,28 +502,19 @@ class Command(BaseCommand):
     def _seed_invoices(self, C: dict):
         """
         C = dict of client_key → Client instance.
-
-        Strategy to preserve exact invoice amounts without fighting model
-        validation logic:
-          1. Create Invoice in PROFORMA / DRAFT state.
-          2. Bulk-create InvoiceItems (bypasses is_locked check and
-             recalculate_amounts; total_ht is computed explicitly).
-          3. Bulk-update Invoice to FINALE / UNPAID with all snapshot fields
-             and the exact amounts as they appear on the printed invoices.
         """
         PP = InvoiceItem.PricingMode.PER_PERSON
         PD = InvoiceItem.PricingMode.PER_DAY
         FF = InvoiceItem.PricingMode.FORFAIT
         D = Decimal
 
-        # Invoice specifications (BC numbers updated from JSON)
         specs = [
             # ── 001 / Metal Steel — Superviseur HSE ──────────────────
             dict(
                 reference="001/2026",
                 date=datetime.date(2026, 2, 8),
                 client=C["metal_steel"],
-                bc="03/2026",  # updated
+                bc="03/2026",
                 bc_date=None,
                 mode="",
                 amount_ht=D("100000.00"),
@@ -519,7 +529,7 @@ class Command(BaseCommand):
                 reference="0022026",
                 date=datetime.date(2026, 2, 10),
                 client=C["gs_automation"],
-                bc="001-2026",  # updated
+                bc="001-2026",
                 bc_date=None,
                 mode="",
                 amount_ht=D("192660.56"),
@@ -541,7 +551,7 @@ class Command(BaseCommand):
                 reference="0032026",
                 date=datetime.date(2026, 2, 10),
                 client=C["acg_sim"],
-                bc="002-2026",  # updated
+                bc="002-2026",
                 bc_date=None,
                 mode="",
                 amount_ht=D("900000.00"),
@@ -563,7 +573,7 @@ class Command(BaseCommand):
                 reference="0042026",
                 date=datetime.date(2026, 2, 10),
                 client=C["smofe"],
-                bc="01/2026",  # updated
+                bc="01/2026",
                 bc_date=None,
                 mode="",
                 amount_ht=D("220000.00"),
@@ -585,7 +595,7 @@ class Command(BaseCommand):
                 reference="005/2026",
                 date=datetime.date(2026, 2, 12),
                 client=C["kebiche"],
-                bc="001/2026",  # updated
+                bc="001/2026",
                 bc_date=None,
                 mode=Invoice.PaymentMode.CHEQUE,
                 amount_ht=D("138000.00"),
@@ -608,7 +618,7 @@ class Command(BaseCommand):
                 reference="0062026",
                 date=datetime.date(2026, 2, 12),
                 client=C["riadh_el_feth"],
-                bc="02/2026",  # updated
+                bc="02/2026",
                 bc_date=None,
                 mode="",
                 amount_ht=D("440000.00"),
@@ -631,7 +641,7 @@ class Command(BaseCommand):
                 reference="0072026",
                 date=datetime.date(2026, 2, 25),
                 client=C["tahweel_dz"],
-                bc="001-2026",  # updated
+                bc="001-2026",
                 bc_date=None,
                 mode="",
                 amount_ht=D("195000.00"),
@@ -646,7 +656,7 @@ class Command(BaseCommand):
                 reference="0082026",
                 date=datetime.date(2026, 2, 25),
                 client=C["weg_algeria"],
-                bc="10-2026",  # updated
+                bc="10-2026",
                 bc_date=None,
                 mode="",
                 amount_ht=D("204000.00"),
@@ -661,7 +671,7 @@ class Command(BaseCommand):
                 reference="0092026",
                 date=datetime.date(2026, 3, 4),
                 client=C["ronix"],
-                bc="003/2026",  # updated
+                bc="003/2026",
                 bc_date=None,
                 mode="",
                 amount_ht=D("65000.00"),
@@ -683,7 +693,7 @@ class Command(BaseCommand):
                 reference="0102026",
                 date=datetime.date(2026, 3, 4),
                 client=C["a2m_electronics"],
-                bc="04/2026",  # updated
+                bc="04/2026",
                 bc_date=None,
                 mode="",
                 amount_ht=D("402000.00"),
@@ -707,7 +717,7 @@ class Command(BaseCommand):
                 reference="0112026",
                 date=datetime.date(2026, 3, 12),
                 client=C["bait_el_outour"],
-                bc="004/2026",  # updated (was 0019/2026)
+                bc="004/2026",
                 bc_date=None,
                 mode=Invoice.PaymentMode.CHEQUE,
                 amount_ht=D("200000.00"),
@@ -729,7 +739,7 @@ class Command(BaseCommand):
                 reference="0122026",
                 date=datetime.date(2026, 3, 26),
                 client=C["riadh_el_feth"],
-                bc="005/2026",  # updated
+                bc="005/2026",
                 bc_date=None,
                 mode=Invoice.PaymentMode.CHEQUE,
                 amount_ht=D("320000.00"),
@@ -751,7 +761,7 @@ class Command(BaseCommand):
                 reference="0132026",
                 date=datetime.date(2026, 3, 26),
                 client=C["afnes_project"],
-                bc="006/2026",  # updated
+                bc="006/2026",
                 bc_date=None,
                 mode=Invoice.PaymentMode.CHEQUE,
                 amount_ht=D("540000.00"),
@@ -766,7 +776,7 @@ class Command(BaseCommand):
                 reference="014/2026",
                 date=datetime.date(2026, 3, 30),
                 client=C["metal_steel"],
-                bc="007/2026",  # updated
+                bc="007/2026",
                 bc_date=None,
                 mode=Invoice.PaymentMode.CHEQUE,
                 amount_ht=D("22000.00"),
@@ -789,7 +799,6 @@ class Command(BaseCommand):
         for spec in specs:
             client = spec["client"]
 
-            # Step 1: create invoice in PROFORMA / DRAFT
             inv = Invoice.objects.create(
                 invoice_type=Invoice.InvoiceType.FORMATION,
                 phase=Invoice.Phase.PROFORMA,
@@ -802,7 +811,6 @@ class Command(BaseCommand):
                 mode_reglement=spec["mode"],
             )
 
-            # Step 2: bulk-create items
             item_objs = []
             for order, desc, mode, nb_persons, nb_days, unit_price in spec["items"]:
                 item = InvoiceItem(
@@ -820,7 +828,6 @@ class Command(BaseCommand):
 
             InvoiceItem.objects.bulk_create(item_objs)
 
-            # Step 3: promote to FINALE and set exact amounts
             finalized_at = timezone.make_aware(
                 datetime.datetime.combine(spec["date"], datetime.time(12, 0))
             )
@@ -833,7 +840,6 @@ class Command(BaseCommand):
                 amount_tva=spec["amount_tva"],
                 amount_ttc=spec["amount_ttc"],
                 amount_remaining=spec["amount_ttc"],
-                # client snapshots
                 client_name_snapshot=client.name,
                 client_address_snapshot=client.address,
                 client_type_snapshot=client.client_type,
@@ -854,9 +860,6 @@ class Command(BaseCommand):
     # Sequence counters
     # ------------------------------------------------------------------ #
     def _update_sequences(self):
-        """
-        Align InvoiceSequence counters so the next invoice gets number 15.
-        """
         for phase in (InvoiceSequence.Phase.PROFORMA, InvoiceSequence.Phase.FINALE):
             InvoiceSequence.objects.update_or_create(
                 invoice_type=Invoice.InvoiceType.FORMATION,
@@ -892,13 +895,11 @@ class Command(BaseCommand):
             user.save()
             self.stdout.write(f"  ✓ Admin user '{username}' créé.")
         else:
-            # Update password if it changed
             if not user.check_password(password):
                 user.set_password(password)
                 user.save()
                 self.stdout.write(f"  ✓ Mot de passe admin mis à jour.")
 
-        # Ensure profile exists and is admin
         profile, created = UserProfile.objects.get_or_create(user=user)
         if created or profile.role != UserProfile.ROLE_ADMIN:
             profile.role = UserProfile.ROLE_ADMIN
@@ -907,3 +908,124 @@ class Command(BaseCommand):
                 self.stdout.write(f"  ✓ Profil admin créé.")
             else:
                 self.stdout.write(f"  ✓ Profil admin mis à jour.")
+
+    # ------------------------------------------------------------------ #
+    # Update formation base prices (direct mapping)
+    # ------------------------------------------------------------------ #
+
+    def _update_formation_base_prices(self):
+        """
+        Set base_price for every formation that appears in invoice items,
+        using the maximum unit price observed (regardless of pricing mode).
+        Adds any missing formation to the catalog.
+        """
+        from formations.models import FormationCategory
+
+        # Pre‑defined mapping: invoice description → formation title
+        # (case‑insensitive, extra spaces ignored)
+        mapping = {
+            # ── Superviseur HSE ──────────────────────────────────────────
+            "Formation Superviseur HSE": "Superviseur HSE",
+            "Formation superviseur HSE": "Superviseur HSE",
+            # ── ISM-ATEX 2EM ─────────────────────────────────────────────
+            "Formation certification internationale ISM-ATEX 2EM": "Atmosphère Explosive Niveau 02 — ISM-ATEX 2EM",
+            "Formation certification international ISM-ATEX 2EM": "Atmosphère Explosive Niveau 02 — ISM-ATEX 2EM",
+            "Formation ISM-ATEX 2E": "Atmosphère Explosive Niveau 02 — ISM-ATEX 2EM",
+            # ── Produits chimiques ────────────────────────────────────────
+            "Formation habilitation d'utilisation Produit chimique (12 Personnes)": "Habilitation d'Utilisation Produit Chimique",
+            "Formation Habilitation à la manipulation des produits chimiques": "Habilitation d'Utilisation Produit Chimique",
+            # ── Carrières ────────────────────────────────────────────────
+            "Formation sensibilisation risqué à l'activité de carrières": "Sensibilisation Risque à l'Activité de Carrières",
+            # ── Chariots élévateurs ──────────────────────────────────────
+            "Formation L'Habilitation Conduit de Chariots Élévateur": "Habilitation Conduite des Chariots Élévateurs",
+            "Formation L'Habilitation Conduit de Chariots Elévateur": "Habilitation Conduite des Chariots Élévateurs",
+            "Formation à la conduite de chariots élévateurs": "Habilitation Conduite des Chariots Élévateurs",
+            # ── Communication (3-day → Agent Commercial) ─────────────────
+            "Formation Communication": "Agent Commercial",
+            "Formation communication": "Agent Commercial",
+            # ── Audit SMQ ────────────────────────────────────────────────
+            "Formation Audit SMQ": "Audit SMQ",
+            "Formation audit SMQ": "Audit SMQ",
+            # ── IOSH Managing Safely ─────────────────────────────────────
+            "Formation IOSH Managing Safely": "IOSH Managing Safely",
+            "Formation IOSH MS": "IOSH Managing Safely",
+            # ── ISO 9001 ─────────────────────────────────────────────────
+            "Formation ISO 9001": "Formation ISO 9001 / ISO 14001 / ISO 45001",
+            # ── Gestion des Risques ──────────────────────────────────────
+            "Formation Gestion des Risques": "Gestion des Risques",
+            "Formation Gestion Des Risque": "Gestion des Risques",
+            # ── Maîtrise du temps ────────────────────────────────────────
+            "Formation Maîtrise du Temps et Gestion des Priorités": "Maîtrise du Temps et Gestion des Priorités",
+            "Formation de Maitrise du temps et gestion des priorités": "Maîtrise du Temps et Gestion des Priorités",
+        }
+
+        # Build price map: formation title → list of unit prices
+        price_map = {}
+        for inv_item in InvoiceItem.objects.filter(
+            invoice__invoice_type=Invoice.InvoiceType.FORMATION
+        ):
+            desc = inv_item.description.strip()
+            title = mapping.get(desc)
+            if not title:
+                # Try case‑insensitive partial match
+                for key, mapped_title in mapping.items():
+                    if key.lower() in desc.lower() or desc.lower() in key.lower():
+                        title = mapped_title
+                        break
+            if title:
+                price_map.setdefault(title, []).append(inv_item.unit_price_ht)
+
+        # Ensure all required categories exist
+        hse_cat, _ = FormationCategory.objects.get_or_create(
+            code="HSE", defaults={"name": "Formation HSE", "color": "#EF4444"}
+        )
+        com_cat, _ = FormationCategory.objects.get_or_create(
+            code="COM",
+            defaults={"name": "Communication et Leadership", "color": "#F59E0B"},
+        )
+        rh_cat, _ = FormationCategory.objects.get_or_create(
+            code="RH",
+            defaults={"name": "Management des Ressources Humaines", "color": "#6366F1"},
+        )
+
+        # Add missing formations (not in the main catalog above)
+        missing_formations = {
+            "Agent Commercial": {
+                "category": com_cat,
+                "duration_days": 3,
+                "duration_hours": 24,
+                "is_active": True,
+            },
+        }
+
+        for title, defaults in missing_formations.items():
+            if title not in price_map:
+                continue  # not needed if not in invoice items
+            formation, created = Formation.objects.get_or_create(
+                title=title,
+                defaults=defaults,
+            )
+            if created:
+                # Also create a slug if missing
+                if not formation.slug:
+                    from django.utils.text import slugify
+
+                    formation.slug = slugify(title)[:255]
+                    formation.save(update_fields=["slug"])
+                self.stdout.write(f"      + Formation ajoutée : {title}")
+
+        # Update base prices
+        updated = 0
+        for title, prices in price_map.items():
+            max_price = max(prices)
+            try:
+                formation = Formation.objects.get(title=title)
+                if formation.base_price != max_price:
+                    formation.base_price = max_price
+                    formation.save(update_fields=["base_price"])
+                    updated += 1
+                    self.stdout.write(f"      → {title[:50]} : {max_price} DA")
+            except Formation.DoesNotExist:
+                self.stdout.write(f"      ⚠ Formation non trouvée : {title}")
+
+        self.stdout.write(f"  ✓ Mise à jour du prix de base pour {updated} formations.")

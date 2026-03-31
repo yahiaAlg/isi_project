@@ -26,7 +26,7 @@
       {
         "designation": "Formation Superviseur HSE",
         "quantity": 2,
-        "unit": "Person",
+        "unit": "Personne",
         "unit_price_ht": 50000.0,
         "total_ht": 100000.0
       }
@@ -61,7 +61,7 @@
       {
         "designation": "Formation certification international ISM-ATEX 2EM",
         "quantity": 1,
-        "unit": "Person",
+        "unit": "Personne",
         "unit_price_ht": 192660.56,
         "total_ht": 192660.56
       }
@@ -95,7 +95,7 @@
       {
         "designation": "Formation certification international ISM-ATEX 2EM",
         "quantity": 5,
-        "unit": "Person",
+        "unit": "Personne",
         "unit_price_ht": 180000.0,
         "total_ht": 900000.0
       }
@@ -130,7 +130,7 @@
       {
         "designation": "Formation habilitation d'utilisation Produit chimique (12 Personnes)",
         "quantity": 4,
-        "unit": "Days",
+        "unit": "Jour",
         "unit_price_ht": 55000.0,
         "total_ht": 220000.0
       }
@@ -165,13 +165,15 @@
       {
         "designation": "Formation sensibilisation risqué à l'activité de carrières",
         "quantity": 2,
-        "unit": "Days",
+        "unit": "Jour",
+        "unit_price_ht": 45000.0,
         "total_ht": 90000.0
       },
       {
         "designation": "Formation superviseur HSE",
         "quantity": 1,
-        "unit": "Person",
+        "unit": "Personne",
+        "unit_price_ht": 48000.0,
         "total_ht": 48000.0
       }
     ],
@@ -204,13 +206,15 @@
       {
         "designation": "Formation L'Habilitation Conduit de Chariots Elévateur",
         "quantity": 20,
-        "unit": "Person",
+        "unit": "Personne",
+        "unit_price_ht": 22000.0,
         "total_ht": 440000.0
       },
       {
         "designation": "Frais Pédagogique",
         "quantity": 18,
-        "unit": "Person",
+        "unit": "Personne",
+        "unit_price_ht": 1000.0,
         "total_ht": 18000.0
       }
     ],
@@ -244,7 +248,8 @@
       {
         "designation": "Formation communication",
         "quantity": 3,
-        "unit": "Days",
+        "unit": "Jour",
+        "unit_price_ht": 65000.0,
         "total_ht": 195000.0
       }
     ],
@@ -277,7 +282,8 @@
       {
         "designation": "Formation audit SMQ",
         "quantity": 3,
-        "unit": "Days",
+        "unit": "Jour",
+        "unit_price_ht": 68000.0,
         "total_ht": 204000.0
       }
     ],
@@ -311,7 +317,8 @@
       {
         "designation": "Formation IOSH MS",
         "quantity": 1,
-        "unit": "Person",
+        "unit": "Personne",
+        "unit_price_ht": 65000.0,
         "total_ht": 65000.0
       }
     ],
@@ -344,19 +351,22 @@
       {
         "designation": "Formation ISO 9001",
         "quantity": 3,
-        "unit": "Days",
+        "unit": "Jour",
+        "unit_price_ht": 63000.0,
         "total_ht": 189000.0
       },
       {
         "designation": "Formation Gestion Des Risque",
         "quantity": 3,
-        "unit": "Days",
+        "unit": "Jour",
+        "unit_price_ht": 63000.0,
         "total_ht": 189000.0
       },
       {
         "designation": "Frais Pedagogique",
         "quantity": 20,
-        "unit": "Person",
+        "unit": "Personne",
+        "unit_price_ht": 1200.0,
         "total_ht": 24000.0
       }
     ],
@@ -390,7 +400,8 @@
       {
         "designation": "Formation Habilitation à la manipulation des produits chimiques",
         "quantity": 4,
-        "unit": "Days",
+        "unit": "Jour",
+        "unit_price_ht": 50000.0,
         "total_ht": 200000.0
       }
     ],
@@ -423,7 +434,8 @@
       {
         "designation": "Formation de Maitrise du temps et gestion des priorités",
         "quantity": 4,
-        "unit": "Days",
+        "unit": "Jour",
+        "unit_price_ht": 80000.0,
         "total_ht": 320000.0
       }
     ],
@@ -457,7 +469,8 @@
       {
         "designation": "Formation ISM-ATEX 2E",
         "quantity": 3,
-        "unit": "Person",
+        "unit": "Personne",
+        "unit_price_ht": 180000.0,
         "total_ht": 540000.0
       }
     ],
@@ -491,7 +504,8 @@
       {
         "designation": "Formation à la conduite de chariots élévateurs",
         "quantity": 1,
-        "unit": "Person",
+        "unit": "Personne",
+        "unit_price_ht": 22000.0,
         "total_ht": 22000.0
       }
     ],
