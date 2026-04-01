@@ -140,6 +140,9 @@
             </div>
             {% endif %}
 
+            {# Hidden role field — synced from the visual select in the right column #}
+            <input type="hidden" name="role" id="id_role_hidden">
+
             <div class="d-flex gap-2 pt-2">
               <button type="submit" class="btn btn-amber">
                 <i class="bi bi-check-lg"></i> {{ action }} l'utilisateur
@@ -159,10 +162,12 @@
           <h3>Rôle & Accès</h3>
         </div>
         <div class="isi-card-body">
-          <form id="role-form"></form>
-
-          <label class="form-label" for="{{ form.role.id_for_label }}">Rôle *</label>
-          {{ form.role }}
+          <label class="form-label" for="id_role_display">Rôle *</label>
+          <select id="id_role_display" class="form-select">
+            {% for val, lbl in form.role.field.choices %}
+            <option value="{{ val }}" {% if form.role.value == val %}selected{% endif %}>{{ lbl }}</option>
+            {% endfor %}
+          </select>
           {% if form.role.errors %}
           <div class="invalid-feedback d-block">{{ form.role.errors|join:", " }}</div>
           {% endif %}
@@ -213,8 +218,8 @@
 </div>
 
 <script>
-  // Ensure form fields get proper classes
-  document.querySelectorAll('#user-form input, #user-form select, #user-form textarea').forEach(el => {
+  // Ensure form fields get proper classes (includes fields linked via form= attribute)
+  document.querySelectorAll('#user-form input, #user-form select, #user-form textarea, [form="user-form"]').forEach(el => {
     if (!el.classList.contains('form-control') && !el.classList.contains('form-select') && el.type !== 'checkbox') {
       el.classList.add(el.tagName === 'SELECT' ? 'form-select' : 'form-control');
     }
@@ -224,15 +229,23 @@
     el.classList.add('form-check-input');
   });
 
+  // Sync visual role select -> hidden input inside the main form
+  const roleDisplay = document.getElementById('id_role_display');
+  const roleHidden  = document.getElementById('id_role_hidden');
+  function syncRole() {
+    if (roleDisplay && roleHidden) roleHidden.value = roleDisplay.value;
+  }
+  roleDisplay?.addEventListener('change', syncRole);
+  syncRole(); // run once on load
+
   // Role description toggle
-  const roleSelect = document.getElementById('id_role');
   function updateRoleDesc() {
-    const val = roleSelect?.value;
+    const val = roleDisplay?.value;
     document.querySelectorAll('.role-desc').forEach(d => d.style.display = 'none');
     if (val === 'admin') document.getElementById('role-desc-admin').style.display = 'block';
     if (val === 'receptionist') document.getElementById('role-desc-receptionist').style.display = 'block';
   }
-  roleSelect?.addEventListener('change', updateRoleDesc);
+  roleDisplay?.addEventListener('change', updateRoleDesc);
   updateRoleDesc();
 </script>
 {% endblock %}
