@@ -11,6 +11,9 @@
 <a href="{% url 'reporting:equipment_roi_report' %}" class="topbar-btn"><i class="bi bi-graph-up-arrow"></i> ROI</a>
 <a href="{% url 'reporting:maintenance_cost_report' %}" class="topbar-btn"><i class="bi bi-wrench-adjustable-fill"></i> Maintenance</a>
 {% endblock %}
+{% block extra_head %}<style>
+.fade-up,.fade-up-delay-1,.fade-up-delay-2{opacity:1!important;animation-fill-mode:forwards!important;}
+</style>{% endblock %}
 {% block content %}
 <div class="fade-up">
   <div class="page-header"><div class="page-header-left"><h1>Rapport équipements</h1><p>Utilisation, maintenance et statut du parc matériel</p></div></div>

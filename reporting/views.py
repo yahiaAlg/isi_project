@@ -276,7 +276,7 @@ def collections_report(request):
         "reporting/collections.html",
         {
             "payments": payments[:50],
-            "by_method": payments.values("payment_method")
+            "by_method": payments.values("method")
             .annotate(count=Count("pk"), total=Sum("amount"))
             .order_by("-total"),
             "by_month": payments.annotate(month=TruncMonth("date"))
@@ -919,8 +919,7 @@ def trainer_utilization_report(request):
 @admin_required
 def trainer_cost_analysis(request):
     """Trainer fees vs revenue generated — contribution per trainer."""
-    from resources.models import Trainer
-    from formations.models import Session
+    from formations.models import Trainer, Session
 
     date_from, date_to = _parse_date_range(request)
     trainers = Trainer.objects.filter(is_active=True).prefetch_related("sessions")
@@ -1709,8 +1708,7 @@ def chart_equipment_status(request):
 
 @admin_required
 def chart_trainer_workload(request):
-    from resources.models import Trainer
-    from formations.models import Session
+    from formations.models import Trainer, Session
 
     date_from, date_to = _current_year_range()
     trainers = (

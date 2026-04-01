@@ -7,6 +7,9 @@
 <i class="bi bi-chevron-right" style="font-size:10px;"></i>
 {% endblock %}
 {% block breadcrumb_active %}Flux de trésorerie{% endblock %}
+{% block extra_head %}<style>
+.fade-up,.fade-up-delay-1,.fade-up-delay-2{opacity:1!important;animation-fill-mode:forwards!important;}
+</style>{% endblock %}
 {% block content %}
 <div class="fade-up">
   <div class="page-header"><div class="page-header-left"><h1>Flux de trésorerie</h1><p>Encaissements vs dépenses par mois</p></div></div>
