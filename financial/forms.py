@@ -22,7 +22,6 @@ from financial.models import (
     Payment,
 )
 
-
 # ---------------------------------------------------------------------------
 # Proforma creation form
 # ---------------------------------------------------------------------------
@@ -272,6 +271,8 @@ class InvoiceItemForm(ISIFormMixin, forms.ModelForm):
             "description": forms.TextInput(
                 attrs={"placeholder": "Intitulé de la prestation"}
             ),
+            "nb_persons": forms.NumberInput(attrs={"step": "1", "min": "1"}),
+            "nb_days": forms.NumberInput(attrs={"step": "1", "min": "1"}),
         }
 
     def __init__(self, *args, **kwargs):

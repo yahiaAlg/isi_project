@@ -323,8 +323,8 @@
   function recalculate() {
     const mode     = modeSelect.value;
     const price    = parseFloat(priceInput.value)    || 0;
-    const persons  = parseFloat(personsInput.value)  || 1;
-    const days     = parseFloat(daysInput.value)     || 1;
+    const persons  = parseInt(personsInput.value)  || 1;
+    const days     = parseInt(daysInput.value)     || 1;
     const discount = parseFloat(discountInput.value) || 0;
     let base = 0, formula = '';
     if (mode === 'per_person')              { base = price * persons;        formula = `${fmt(price)} × ${persons} pers.`; }

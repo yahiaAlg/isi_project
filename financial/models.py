@@ -32,7 +32,6 @@ from django.utils import timezone
 from clients.models import Client
 from core.base_models import TimeStampedModel
 
-
 # ======================================================================= #
 # Invoice
 # ======================================================================= #
@@ -341,7 +340,8 @@ class Invoice(TimeStampedModel):
 
     @classmethod
     def _next_final_reference(cls, invoice_type: str, year: int) -> str:
-        """F-NNN-YYYY / E-NNN-YYYY — gapless sequence, assigned at finalization."""
+        """F-NNN-YYYY / E-NNN-YYYY — gapless sequence, assigned at finalization.
+        INCREMENTS the counter — call only during actual finalization."""
         from core.models import BureauEtudeInfo, FormationInfo
 
         if invoice_type == cls.InvoiceType.FORMATION:
@@ -360,6 +360,25 @@ class Invoice(TimeStampedModel):
             seq.save(update_fields=["last_number"])
             count = seq.last_number
 
+        return f"{prefix}-{count:03d}-{year}"
+
+    @classmethod
+    def _peek_final_reference(cls, invoice_type: str, year: int) -> str:
+        """Return what the next final reference WOULD be without incrementing the counter.
+        Use this for UI previews only — never during actual finalization."""
+        from core.models import BureauEtudeInfo, FormationInfo
+
+        if invoice_type == cls.InvoiceType.FORMATION:
+            prefix = FormationInfo.get_instance().invoice_prefix or "F"
+        else:
+            prefix = BureauEtudeInfo.get_instance().invoice_prefix or "E"
+
+        seq = InvoiceSequence.objects.filter(
+            invoice_type=invoice_type,
+            year=year,
+            phase=InvoiceSequence.Phase.FINALE,
+        ).first()
+        count = (seq.last_number if seq else 0) + 1
         return f"{prefix}-{count:03d}-{year}"
 
     # ------------------------------------------------------------------ #

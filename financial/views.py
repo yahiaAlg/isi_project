@@ -59,7 +59,6 @@ from financial.utils import (
     top_clients_by_revenue,
 )
 
-
 # ─────────────────────────────────────────────────────────────────────────── #
 # Invoices — list & detail
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -323,7 +322,7 @@ def invoice_finalize(request, pk):
         blockers.append("La facture ne contient aucune ligne de facturation.")
 
     year = timezone.now().year
-    next_reference = Invoice._next_final_reference(invoice.invoice_type, year)
+    next_reference = Invoice._peek_final_reference(invoice.invoice_type, year)
 
     if request.method == "GET":
         initial_words = amount_to_words_fr(invoice.amount_ttc) if not blockers else ""
@@ -431,6 +430,34 @@ def invoice_cancel_finalization(request, pk):
         return redirect("financial:invoice_detail", pk=pk)
 
     with transaction.atomic():
+        # Decrement the sequence counter only if this invoice holds the last number
+        # (i.e. no newer finale invoice was issued after it).
+        if invoice.reference:
+            from financial.models import InvoiceSequence
+
+            try:
+                seq = InvoiceSequence.objects.select_for_update().get(
+                    invoice_type=invoice.invoice_type,
+                    year=(
+                        invoice.finalized_at.year
+                        if invoice.finalized_at
+                        else timezone.now().year
+                    ),
+                    phase=InvoiceSequence.Phase.FINALE,
+                )
+                # Extract the number from the reference (e.g. "F-017-2026" → 17)
+                ref_number = int(invoice.reference.split("-")[-2])
+                if seq.last_number == ref_number:
+                    seq.last_number -= 1
+                    seq.save(update_fields=["last_number"])
+            except (
+                InvoiceSequence.DoesNotExist,
+                ValueError,
+                IndexError,
+                AttributeError,
+            ):
+                pass  # Can't safely decrement — leave sequence as-is
+
         invoice.phase = Invoice.Phase.PROFORMA
         invoice.status = Invoice.Status.DRAFT
         invoice.reference = None
