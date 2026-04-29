@@ -511,7 +511,6 @@ class Command(BaseCommand):
         specs = [
             # ── 001 / Metal Steel — Superviseur HSE ──────────────────
             dict(
-                reference="001/2026",
                 date=datetime.date(2026, 2, 8),
                 client=C["metal_steel"],
                 bc="03/2026",
@@ -526,7 +525,6 @@ class Command(BaseCommand):
             ),
             # ── 002 / GS Automation — ISM-ATEX 2EM (forfait) ─────────
             dict(
-                reference="0022026",
                 date=datetime.date(2026, 2, 10),
                 client=C["gs_automation"],
                 bc="001-2026",
@@ -548,7 +546,6 @@ class Command(BaseCommand):
             ),
             # ── 003 / ACG SIM — ISM-ATEX 2EM × 5 ────────────────────
             dict(
-                reference="0032026",
                 date=datetime.date(2026, 2, 10),
                 client=C["acg_sim"],
                 bc="002-2026",
@@ -570,7 +567,6 @@ class Command(BaseCommand):
             ),
             # ── 004 / SMOFE — Produit chimique 4J ────────────────────
             dict(
-                reference="0042026",
                 date=datetime.date(2026, 2, 10),
                 client=C["smofe"],
                 bc="01/2026",
@@ -592,7 +588,6 @@ class Command(BaseCommand):
             ),
             # ── 005 / Kebiche — Carrières + HSE ──────────────────────
             dict(
-                reference="005/2026",
                 date=datetime.date(2026, 2, 12),
                 client=C["kebiche"],
                 bc="001/2026",
@@ -615,7 +610,6 @@ class Command(BaseCommand):
             ),
             # ── 006 / Riadh El-Feth — Chariots élévateurs (20p) ──────
             dict(
-                reference="0062026",
                 date=datetime.date(2026, 2, 12),
                 client=C["riadh_el_feth"],
                 bc="02/2026",
@@ -638,7 +632,6 @@ class Command(BaseCommand):
             ),
             # ── 007 / Tahweel DZ — Communication 3J ──────────────────
             dict(
-                reference="0072026",
                 date=datetime.date(2026, 2, 25),
                 client=C["tahweel_dz"],
                 bc="001-2026",
@@ -653,7 +646,6 @@ class Command(BaseCommand):
             ),
             # ── 008 / WEG Algeria — Audit SMQ 3J ──────────────────────
             dict(
-                reference="0082026",
                 date=datetime.date(2026, 2, 25),
                 client=C["weg_algeria"],
                 bc="10-2026",
@@ -668,7 +660,6 @@ class Command(BaseCommand):
             ),
             # ── 009 / Ronix — IOSH MS 1P ──────────────────────────────
             dict(
-                reference="0092026",
                 date=datetime.date(2026, 3, 4),
                 client=C["ronix"],
                 bc="003/2026",
@@ -690,7 +681,6 @@ class Command(BaseCommand):
             ),
             # ── 010 / A2M Electronics — ISO 9001 + Gestion Risques ────
             dict(
-                reference="0102026",
                 date=datetime.date(2026, 3, 4),
                 client=C["a2m_electronics"],
                 bc="04/2026",
@@ -714,7 +704,6 @@ class Command(BaseCommand):
             ),
             # ── 011 / Bait El Outour — Produits chimiques 4J ──────────
             dict(
-                reference="0112026",
                 date=datetime.date(2026, 3, 12),
                 client=C["bait_el_outour"],
                 bc="004/2026",
@@ -736,7 +725,6 @@ class Command(BaseCommand):
             ),
             # ── 012 / Riadh El-Feth — Gestion du temps 4J ─────────────
             dict(
-                reference="0122026",
                 date=datetime.date(2026, 3, 26),
                 client=C["riadh_el_feth"],
                 bc="005/2026",
@@ -758,7 +746,6 @@ class Command(BaseCommand):
             ),
             # ── 013 / AFNES-Project — ISM-ATEX 2E × 3p ───────────────
             dict(
-                reference="0132026",
                 date=datetime.date(2026, 3, 26),
                 client=C["afnes_project"],
                 bc="006/2026",
@@ -773,7 +760,6 @@ class Command(BaseCommand):
             ),
             # ── 014 / Metal Steel — Chariots élévateurs 1p ────────────
             dict(
-                reference="014/2026",
                 date=datetime.date(2026, 3, 30),
                 client=C["metal_steel"],
                 bc="007/2026",
@@ -796,6 +782,7 @@ class Command(BaseCommand):
         ]
 
         created = 0
+        year = 2026
         for spec in specs:
             client = spec["client"]
 
@@ -828,13 +815,16 @@ class Command(BaseCommand):
 
             InvoiceItem.objects.bulk_create(item_objs)
 
+            final_ref = Invoice._next_final_reference(
+                Invoice.InvoiceType.FORMATION, year
+            )
             finalized_at = timezone.make_aware(
                 datetime.datetime.combine(spec["date"], datetime.time(12, 0))
             )
             Invoice.objects.filter(pk=inv.pk).update(
                 phase=Invoice.Phase.FINALE,
                 status=Invoice.Status.UNPAID,
-                reference=spec["reference"],
+                reference=final_ref,
                 finalized_at=finalized_at,
                 amount_ht=spec["amount_ht"],
                 amount_tva=spec["amount_tva"],
@@ -852,7 +842,7 @@ class Command(BaseCommand):
                 client_tin_snapshot=client.tin,
             )
             created += 1
-            self.stdout.write(f"    + {spec['reference']}  {client.name[:40]}")
+            self.stdout.write(f"    + {final_ref}  {client.name[:40]}")
 
         self.stdout.write(f"  ✓ {created} factures FORMATION finalisées")
 

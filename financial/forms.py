@@ -431,10 +431,22 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "allocated_to_session",
             "allocated_to_project",
             "receipt",
+            "approval_status",  # not rendered in the create form; default applied below
             "approval_notes",
             "notes",
         ):
             self.fields[f].required = False
+
+    def clean_approval_status(self):
+        """
+        approval_status is not shown in the create/edit template.
+        Default to PENDING so the form never fails silently on missing data.
+        On edit the existing value is preserved via the bound instance.
+        """
+        value = self.cleaned_data.get("approval_status")
+        if not value:
+            return Expense.ApprovalStatus.PENDING
+        return value
 
 
 class ExpenseFilterForm(ISIFormMixin, forms.Form):
