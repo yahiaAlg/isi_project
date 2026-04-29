@@ -5,9 +5,9 @@ Seed command for SARL MOUASSASSET TAMAYOUZ LILIDARA W ESSALAMA
 Loads:
   • Institute & business-line settings (InstituteInfo, FormationInfo, BureauEtudeInfo)
   • Formes juridiques  (SARL, EURL, SPA, SNC, GIE, Autre)
-  • Formation categories & catalog  (5 categories, 46 formations)
-  • 12 clients (ENTREPRISE) extracted from the 2026 invoice set
-  • 14 finalized FORMATION invoices (phase=FINALE, status=UNPAID)
+  • Formation categories & catalog  (5 categories, 47 formations)
+  • 16 clients (ENTREPRISE) extracted from the 2026 invoice set
+  • 20 finalized FORMATION invoices (phase=FINALE, status=UNPAID)
   • Admin user (admin / admin1234!)
   • Formation base_price set from per‑person invoice prices (direct mapping)
 
@@ -27,7 +27,6 @@ from clients.models import Client, FormeJuridique
 from core.models import BureauEtudeInfo, FormationInfo, InstituteInfo
 from financial.models import Invoice, InvoiceItem, InvoiceSequence
 from formations.models import Formation, FormationCategory
-
 
 TVA_9 = Decimal("0.09")
 TVA_19 = Decimal("0.19")
@@ -158,7 +157,7 @@ class Command(BaseCommand):
     def _seed_formation_catalog(self):
         from django.utils.text import slugify
 
-        # (code, name, color, [(title, duration_days, duration_hours), ...])
+        # (code, name, color, [(title, duration_days, duration_hours), ...])\
         # Base prices derived from 2026 invoice unit prices (max observed per formation).
         # Formations not yet invoiced keep ZERO and can be updated manually.
         BASE_PRICES = {
@@ -173,6 +172,8 @@ class Command(BaseCommand):
             "Formation ISO 9001 / ISO 14001 / ISO 45001": Decimal("63000.00"),
             "Maîtrise du Temps et Gestion des Priorités": Decimal("80000.00"),
             "Agent Commercial": Decimal("65000.00"),
+            "Habilitation Électrique": Decimal("50000.00"),
+            "Formation CPHs": Decimal("50000.00"),
         }
 
         catalog = [
@@ -261,6 +262,8 @@ class Command(BaseCommand):
                     ("Sensibilisation Risque à l'Activité de Carrières", 2, 16),
                     ("Audit SMQ", 3, 24),
                     ("Gestion des Risques", 3, 24),
+                    # Added from invoice 018 — GOLDEN BODY PRODUCTION
+                    ("Formation CPHs", 4, 32),
                 ],
             ),
             (
@@ -297,12 +300,12 @@ class Command(BaseCommand):
         self.stdout.write(f"  ✓ 5 catégories, {total} formations")
 
     # ------------------------------------------------------------------ #
-    # Clients (aligned with initial_db.json)
+    # Clients (aligned with 2026 invoices)
     # ------------------------------------------------------------------ #
     def _seed_clients(self):
         fj = {
             n: FormeJuridique.objects.get(name=n)
-            for n in ("SARL", "EURL", "SPA", "SNC")
+            for n in ("SARL", "EURL", "SPA", "SNC", "Autre")
         }
         E = Client.ClientType.ENTREPRISE
 
@@ -334,7 +337,7 @@ class Command(BaseCommand):
                     activity_sector="Engineering & Services",
                     rc="16B0116457-00/31",
                     nif="001631011645745",
-                    nis="001631030034561",  # fixed
+                    nis="001631030034561",
                     article_imposition="316464471038",
                 ),
             ),
@@ -392,7 +395,7 @@ class Command(BaseCommand):
                     city="Sétif",
                     activity_sector="Fabrication De Cables Electriques Et Telephoniques",
                     rc="97B0082016-00/19",
-                    nif="09971900820164600000",  # fixed (removed extra zero)
+                    nif="09971900820164600000",
                     nis="099719010778514",
                 ),
             ),
@@ -435,7 +438,7 @@ class Command(BaseCommand):
                     city="Sétif",
                     activity_sector="Fabrication d'Emballages en Toutes Matières",
                     rc="18B0093479-00/19",
-                    nif="001819200047451",  # fixed
+                    nif="001819200047451",
                     nis="001819200047451",
                     article_imposition="19018404021",
                 ),
@@ -455,6 +458,7 @@ class Command(BaseCommand):
                 ),
             ),
             (
+                # Updated with actual fiscal data from invoice 017
                 "bait_el_outour",
                 dict(
                     name="EURL BAIT EL OUTOUR EL ALAMIA",
@@ -463,10 +467,10 @@ class Command(BaseCommand):
                     address="Cité Kaaboub Coop Belle Vue Section 07 Groupe 911 Rdc",
                     city="Sétif",
                     activity_sector="Fabrication Des Produits Cosmétiques et d'hygiène Corporelle",
-                    rc="22B0095116-00/19",  # fixed
-                    nif="002219009511634",  # fixed
-                    nis="002219010134018",  # fixed
-                    article_imposition="19018604901",  # fixed
+                    rc="16B0092089-00/19",
+                    nif="001619009208992",
+                    nis="001619010011762",
+                    article_imposition="19018604901",
                 ),
             ),
             (
@@ -484,6 +488,64 @@ class Command(BaseCommand):
                     article_imposition="23019505645",
                 ),
             ),
+            # ── New clients from invoices 015–019 ──────────────────────
+            (
+                "alger_chimie",
+                dict(
+                    name="SARL Alger Chimie",
+                    client_type=E,
+                    forme_juridique=fj["SARL"],
+                    address="Lot n°33, zone industrielle Oued Smar",
+                    city="Alger",
+                    activity_sector="Travaux de Construction",
+                    rc="99B0007933-00/16",
+                    nif="099916020438623",
+                    nis="099916020438623",
+                    article_imposition="16158447021",
+                ),
+            ),
+            (
+                "eurl_zouaoui",
+                dict(
+                    name="EURL SOCIETE ZOUAOUI",
+                    client_type=E,
+                    forme_juridique=fj["EURL"],
+                    address="Section N°23 groupement N°38 EL-Barriaka commune Guedjal",
+                    city="Sétif",
+                    activity_sector="Production panneaux sandwichs & accessoires",
+                    rc="05B0086380-19/03",
+                    nif="00051900863802819003",
+                    article_imposition="19170440908",
+                ),
+            ),
+            (
+                "golden_body",
+                dict(
+                    name="GOLDEN BODY PRODUCTION",
+                    client_type=E,
+                    forme_juridique=fj["Autre"],
+                    address="Zone d'Activité Artisanale Classe 10 Sec 282/283/284 Oued Sabor",
+                    city="Sétif",
+                    activity_sector="Production des produits diététiques",
+                    rc="20B0094127-00/19",
+                    nif="002019009412767",
+                    article_imposition="19011162144",
+                ),
+            ),
+            (
+                "eurl_yaakoub",
+                dict(
+                    name="EURL SOCIETE YAAKOUB ABDELOUARETH",
+                    client_type=E,
+                    forme_juridique=fj["EURL"],
+                    address="Zone d'activité N°01 rdc N°3 Setif 19000",
+                    city="Sétif",
+                    activity_sector="Production des boissons non alcoolisées",
+                    rc="14B0091389-19/00",
+                    nif="001419009138932",
+                    article_imposition="19018001059",
+                ),
+            ),
         ]
 
         clients = {}
@@ -497,7 +559,7 @@ class Command(BaseCommand):
         return clients
 
     # ------------------------------------------------------------------ #
-    # Invoices (BC numbers from initial_db.json)
+    # Invoices (BC numbers from invoice documents)
     # ------------------------------------------------------------------ #
     def _seed_invoices(self, C: dict):
         """
@@ -779,6 +841,132 @@ class Command(BaseCommand):
                     ),
                 ],
             ),
+            # ── 015 / Alger Chimie — Produits chimiques 12p×5J ────────
+            dict(
+                date=datetime.date(2026, 4, 8),
+                client=C["alger_chimie"],
+                bc="001/2026",
+                bc_date=None,
+                mode="",
+                amount_ht=D("200000.00"),
+                amount_tva=D("18000.00"),
+                amount_ttc=D("218000.00"),
+                items=[
+                    (
+                        1,
+                        "Formation Habilitation à la manipulation des produits chimiques",
+                        PD,
+                        D("12"),
+                        D("5"),
+                        D("40000.00"),
+                    ),
+                ],
+            ),
+            # ── 016 / EURL Zouaoui — Habilitation électrique 2p ──────
+            dict(
+                date=datetime.date(2026, 4, 6),
+                client=C["eurl_zouaoui"],
+                bc="",
+                bc_date=None,
+                mode="",
+                amount_ht=D("90000.00"),
+                amount_tva=D("8100.00"),
+                amount_ttc=D("98100.00"),
+                items=[
+                    (
+                        1,
+                        "Formation habilitation électrique",
+                        PP,
+                        D("2"),
+                        D("1"),
+                        D("45000.00"),
+                    ),
+                ],
+            ),
+            # ── 017 / Bait El Outour — Habilitation électrique 13p×5J ─
+            dict(
+                date=datetime.date(2026, 4, 7),
+                client=C["bait_el_outour"],
+                bc="",
+                bc_date=None,
+                mode="",
+                amount_ht=D("250000.00"),
+                amount_tva=D("22500.00"),
+                amount_ttc=D("272500.00"),
+                items=[
+                    (
+                        1,
+                        "Formation habilitation électrique",
+                        PD,
+                        D("13"),
+                        D("5"),
+                        D("50000.00"),
+                    ),
+                ],
+            ),
+            # ── 018 / Golden Body — Formation CPHs 10p×4J ─────────────
+            dict(
+                date=datetime.date(2026, 4, 13),
+                client=C["golden_body"],
+                bc="00057/2026",
+                bc_date=None,
+                mode="",
+                amount_ht=D("200000.00"),
+                amount_tva=D("18000.00"),
+                amount_ttc=D("218000.00"),
+                items=[
+                    (
+                        1,
+                        "Formation CPHs",
+                        PD,
+                        D("10"),
+                        D("4"),
+                        D("50000.00"),
+                    ),
+                ],
+            ),
+            # ── 019 / EURL Yaakoub — Chariot élévateur 2p (espèces) ───
+            dict(
+                date=datetime.date(2026, 4, 14),
+                client=C["eurl_yaakoub"],
+                bc="",
+                bc_date=None,
+                mode=Invoice.PaymentMode.ESPECE,
+                amount_ht=D("44000.00"),
+                amount_tva=D("3960.00"),
+                amount_ttc=D("47960.00"),
+                items=[
+                    (
+                        1,
+                        "Formation conduit chariot élévateur",
+                        PP,
+                        D("2"),
+                        D("1"),
+                        D("22000.00"),
+                    ),
+                ],
+            ),
+            # ── 020 / Metal Steel — Chariot élévateur 1p (espèces) ────
+            dict(
+                date=datetime.date(2026, 4, 14),
+                client=C["metal_steel"],
+                bc="",
+                bc_date=None,
+                mode=Invoice.PaymentMode.ESPECE,
+                amount_ht=D("22000.00"),
+                amount_tva=D("1980.00"),
+                amount_ttc=D("23980.00"),
+                items=[
+                    (
+                        1,
+                        "Formation conduit chariot élévateur",
+                        PP,
+                        D("1"),
+                        D("1"),
+                        D("22000.00"),
+                    ),
+                ],
+            ),
         ]
 
         created = 0
@@ -855,10 +1043,10 @@ class Command(BaseCommand):
                 invoice_type=Invoice.InvoiceType.FORMATION,
                 year=2026,
                 phase=phase,
-                defaults={"last_number": 14},
+                defaults={"last_number": 20},
             )
         self.stdout.write(
-            "  ✓ InvoiceSequence 2026 → dernier n° 14 (proforma & finale)"
+            "  ✓ InvoiceSequence 2026 → dernier n° 20 (proforma & finale)"
         )
 
     # ------------------------------------------------------------------ #
@@ -930,6 +1118,7 @@ class Command(BaseCommand):
             "Formation L'Habilitation Conduit de Chariots Élévateur": "Habilitation Conduite des Chariots Élévateurs",
             "Formation L'Habilitation Conduit de Chariots Elévateur": "Habilitation Conduite des Chariots Élévateurs",
             "Formation à la conduite de chariots élévateurs": "Habilitation Conduite des Chariots Élévateurs",
+            "Formation conduit chariot élévateur": "Habilitation Conduite des Chariots Élévateurs",
             # ── Communication (3-day → Agent Commercial) ─────────────────
             "Formation Communication": "Agent Commercial",
             "Formation communication": "Agent Commercial",
@@ -947,6 +1136,11 @@ class Command(BaseCommand):
             # ── Maîtrise du temps ────────────────────────────────────────
             "Formation Maîtrise du Temps et Gestion des Priorités": "Maîtrise du Temps et Gestion des Priorités",
             "Formation de Maitrise du temps et gestion des priorités": "Maîtrise du Temps et Gestion des Priorités",
+            # ── Habilitation Électrique ───────────────────────────────────
+            "Formation habilitation électrique": "Habilitation Électrique",
+            "Formation habilitation éélectrique": "Habilitation Électrique",
+            # ── Formation CPHs ────────────────────────────────────────────
+            "Formation CPHs": "Formation CPHs",
         }
 
         # Build price map: formation title → list of unit prices
