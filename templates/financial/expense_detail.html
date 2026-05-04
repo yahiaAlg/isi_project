@@ -45,7 +45,7 @@
       <h1>{{ expense.description }}</h1>
       <p>
         {{ expense.date|date:"d/m/Y" }}
-        {% if expense.supplier %} — <i class="bi bi-shop" style="font-size:11px;"></i> {{ expense.supplier }}{% endif %}
+        {% if expense.beneficiary %} — <i class="bi bi-person-fill" style="font-size:11px;"></i> {{ expense.payee_display }}{% elif expense.supplier %} — <i class="bi bi-shop" style="font-size:11px;"></i> {{ expense.supplier }}{% endif %}
       </p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -85,11 +85,29 @@
             </div>
 
             <div class="col-md-6">
-              <div class="stat-label mb-1">Montant</div>
+              <div class="stat-label mb-1">Montant net</div>
               <div style="font-family:var(--font-head);font-size:28px;font-weight:700;color:var(--danger);">
                 {{ expense.amount|floatformat:2 }}
                 <span style="font-size:14px;color:var(--text-muted);font-weight:400;">DA</span>
               </div>
+              {% if expense.has_irg %}
+              <div style="margin-top:8px;padding:10px 12px;background:rgba(239,68,68,.05);
+                          border-radius:8px;border:1px solid rgba(239,68,68,.15);">
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-muted);margin-bottom:4px;">
+                  <span>Montant brut</span>
+                  <span style="font-weight:600;">{{ expense.gross_amount|floatformat:2 }} DA</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--danger);margin-bottom:4px;">
+                  <span>Retenue IRG ({% widthratio expense.irg_rate 0.01 1 %}%)</span>
+                  <span style="font-weight:600;">− {{ expense.irg_amount|floatformat:2 }} DA</span>
+                </div>
+                <div style="border-top:1px solid rgba(239,68,68,.2);padding-top:4px;
+                            display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;">
+                  <span>Net payé</span>
+                  <span style="color:var(--danger);">{{ expense.amount|floatformat:2 }} DA</span>
+                </div>
+              </div>
+              {% endif %}
             </div>
 
             <div class="col-md-4">
@@ -119,23 +137,50 @@
             </div>
 
             <div class="col-md-4">
-              <div class="stat-label mb-1">Fournisseur</div>
-              <div style="font-weight:500;font-size:14px;">{{ expense.supplier|default:"—" }}</div>
+              <div class="stat-label mb-1">Bénéficiaire</div>
+              {% if expense.beneficiary %}
+              <div style="margin-top:4px;">
+                <div style="font-weight:600;font-size:14px;">{{ expense.beneficiary.name }}</div>
+                <div style="margin-top:4px;">
+                  <span class="isi-badge"
+                        style="font-size:10px;background:{{ expense.beneficiary.beneficiary_type.color }}20;
+                               color:{{ expense.beneficiary.beneficiary_type.color }};">
+                    {{ expense.beneficiary.beneficiary_type }}
+                  </span>
+                </div>
+                {% if expense.beneficiary.nif %}
+                <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+                  NIF : {{ expense.beneficiary.nif }}
+                </div>
+                {% endif %}
+              </div>
+              {% elif expense.supplier %}
+              <div style="font-weight:500;font-size:14px;">
+                <i class="bi bi-shop" style="font-size:11px;color:var(--text-muted);"></i>
+                {{ expense.supplier }}
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Fournisseur libre</div>
+              </div>
+              {% else %}
+              <div style="color:var(--text-muted);">—</div>
+              {% endif %}
             </div>
 
+            {% if expense.payment_account %}
+            <div class="col-md-4">
+              <div class="stat-label mb-1">Compte de paiement</div>
+              <div style="font-weight:500;font-size:13.5px;">{{ expense.payment_account }}</div>
+              {% if expense.payment_account.bank_name %}
+              <div style="font-size:12px;color:var(--text-muted);">{{ expense.payment_account.bank_name }}</div>
+              {% endif %}
+            </div>
+            {% endif %}
+
             {% if expense.payment_reference %}
-            <div class="col-md-6">
+            <div class="col-md-{% if expense.payment_account %}4{% else %}6{% endif %}">
               <div class="stat-label mb-1">Référence de paiement</div>
               <div style="font-weight:500;font-size:13.5px;font-family:monospace;color:var(--text-muted);">
                 {{ expense.payment_reference }}
               </div>
-            </div>
-            {% endif %}
-
-            {% if expense.payment_method %}
-            <div class="col-md-6">
-              <div class="stat-label mb-1">Mode de règlement</div>
-              <div style="font-weight:500;font-size:14px;">{{ expense.get_payment_method_display }}</div>
             </div>
             {% endif %}
 
@@ -211,6 +256,69 @@
           {% endif %}
         </div>
       </div>
+
+      <!-- Trainer details (shown only when trainer_payment_mode is set) -->
+      {% if expense.trainer_payment_mode %}
+      <div class="isi-card mb-4">
+        <div class="isi-card-header">
+          <div class="card-icon" style="background:rgba(99,102,241,.12);color:#6366f1;">
+            <i class="bi bi-person-badge-fill"></i>
+          </div>
+          <h3>Paiement formateur</h3>
+          <span class="isi-badge" style="margin-left:auto;font-size:11px;
+                background:rgba(99,102,241,.1);color:#6366f1;">
+            {{ expense.get_trainer_payment_mode_display }}
+          </span>
+        </div>
+        <div class="isi-card-body">
+          <div class="row g-3">
+
+            {% if expense.linked_formation %}
+            <div class="col-md-6">
+              <div class="stat-label mb-1">Formation liée</div>
+              <a href="{% url 'formations:formation_detail' expense.linked_formation.pk %}"
+                 style="font-weight:600;font-size:13.5px;color:#6366f1;text-decoration:none;">
+                {{ expense.linked_formation.title }}
+              </a>
+            </div>
+            {% endif %}
+
+            {% if expense.training_period_label %}
+            <div class="col-md-6">
+              <div class="stat-label mb-1">Période couverte</div>
+              <div style="font-weight:500;font-size:13.5px;">{{ expense.training_period_label }}</div>
+            </div>
+            {% endif %}
+
+            {% if expense.g50_month %}
+            <div class="col-md-6">
+              <div class="stat-label mb-1">Mois G50</div>
+              <div style="font-weight:500;font-size:13.5px;">{{ expense.g50_month|date:"F Y" }}</div>
+            </div>
+            {% endif %}
+
+            {% if expense.daily_rate_snapshot %}
+            <div class="col-md-3">
+              <div class="stat-label mb-1">Tarif/jour (snapshot)</div>
+              <div style="font-weight:600;font-size:13.5px;font-family:var(--font-head);">
+                {{ expense.daily_rate_snapshot|floatformat:0 }} DA
+              </div>
+            </div>
+            {% endif %}
+
+            {% if expense.monthly_rate_snapshot %}
+            <div class="col-md-3">
+              <div class="stat-label mb-1">Tarif/mois (snapshot)</div>
+              <div style="font-weight:600;font-size:13.5px;font-family:var(--font-head);">
+                {{ expense.monthly_rate_snapshot|floatformat:0 }} DA
+              </div>
+            </div>
+            {% endif %}
+
+          </div>
+        </div>
+      </div>
+      {% endif %}
 
       <!-- Notes -->
       {% if expense.notes %}
@@ -325,20 +433,6 @@
               </div>
             </div>
 
-            {% if expense.approved_by %}
-            <div class="col-12">
-              <div class="stat-label mb-1">Par</div>
-              <div style="font-weight:500;font-size:13.5px;">{{ expense.approved_by }}</div>
-            </div>
-            {% endif %}
-
-            {% if expense.approved_at %}
-            <div class="col-12">
-              <div class="stat-label mb-1">Le</div>
-              <div style="font-weight:500;font-size:13.5px;">{{ expense.approved_at|date:"d/m/Y à H:i" }}</div>
-            </div>
-            {% endif %}
-
             {% if expense.approval_notes %}
             <div class="col-12">
               <div class="stat-label mb-1">Motif</div>
@@ -422,6 +516,16 @@
         </div>
         <div class="isi-card-body">
           <div class="row g-3">
+            {% if expense.fiscal_year %}
+            <div class="col-6">
+              <div class="stat-label mb-1">Exercice</div>
+              <div style="font-weight:500;font-size:13.5px;">{{ expense.fiscal_year }}</div>
+            </div>
+            <div class="col-6">
+              <div class="stat-label mb-1">Trimestre</div>
+              <div style="font-weight:500;font-size:13.5px;">T{{ expense.quarter }}</div>
+            </div>
+            {% endif %}
             <div class="col-12">
               <div class="stat-label mb-1">Créée le</div>
               <div style="font-weight:500;font-size:13.5px;">{{ expense.created_at|date:"d/m/Y à H:i" }}</div>

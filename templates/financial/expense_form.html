@@ -23,25 +23,23 @@
     </a>
   </div>
 
-  <form method="post" enctype="multipart/form-data" novalidate>
+  <form method="post" enctype="multipart/form-data" novalidate id="expense-form">
     {% csrf_token %}
     <div class="row g-4">
 
-      <!-- ── Main form ──────────────────────────────────────── -->
+      <!-- ── Main column ─────────────────────────────────────── -->
       <div class="col-lg-8">
 
-        <!-- Informations générales -->
+        <!-- ① Informations générales -->
         <div class="isi-card mb-4">
           <div class="isi-card-header">
             <div class="card-icon red"><i class="bi bi-credit-card-fill"></i></div>
             <h3>Informations générales</h3>
           </div>
           <div class="isi-card-body">
+            <div class="row g-3">
 
-            <div class="form-section-title">Détails</div>
-            <div class="row g-3 mb-4">
-
-              <div class="col-md-6">
+              <div class="col-md-4">
                 <label class="form-label" for="{{ form.date.id_for_label }}">Date *</label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-calendar-fill"></i>
@@ -52,7 +50,7 @@
                 {% endif %}
               </div>
 
-              <div class="col-md-6">
+              <div class="col-md-8">
                 <label class="form-label" for="{{ form.category.id_for_label }}">Catégorie *</label>
                 {{ form.category }}
                 {% if form.category.errors %}
@@ -68,49 +66,242 @@
                 {% endif %}
               </div>
 
-              <div class="col-md-6">
-                <label class="form-label" for="{{ form.amount.id_for_label }}">Montant (DA) *</label>
-                <div class="input-icon-wrap">
-                  <i class="bi bi-cash-coin"></i>
-                  {{ form.amount }}
+            </div>
+          </div>
+        </div>
+
+        <!-- ② Bénéficiaire & Paiement -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon blue"><i class="bi bi-person-fill"></i></div>
+            <h3>Bénéficiaire &amp; Paiement</h3>
+          </div>
+          <div class="isi-card-body">
+
+            <div class="form-section-title">Bénéficiaire enregistré</div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;">
+              <i class="bi bi-info-circle" style="color:var(--accent);"></i>
+              Sélectionnez un bénéficiaire enregistré — le taux IRG et les comptes de paiement seront remplis automatiquement.
+              Si le bénéficiaire n'est pas encore dans l'annuaire, utilisez le champ libre ci-dessous.
+            </div>
+
+            <div class="row g-3 mb-3">
+
+              <div class="col-12">
+                <label class="form-label" for="{{ form.beneficiary.id_for_label }}">Bénéficiaire</label>
+                <div style="display:flex;gap:8px;align-items:flex-start;">
+                  <div style="flex:1;">
+                    {{ form.beneficiary }}
+                    {% if form.beneficiary.errors %}
+                    <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.beneficiary.errors|join:", " }}</div>
+                    {% endif %}
+                  </div>
+                  <a href="{% url 'financial:beneficiary_quick_add' %}"
+                     class="btn btn-ghost btn-sm"
+                     style="white-space:nowrap;margin-top:2px;"
+                     id="btn-quick-add-beneficiary"
+                     title="Ajouter un nouveau bénéficiaire">
+                    <i class="bi bi-plus-lg"></i> Nouveau
+                  </a>
                 </div>
-                {% if form.amount.errors %}
-                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.amount.errors|join:", " }}</div>
-                {% endif %}
               </div>
 
-              <div class="col-md-6">
-                <label class="form-label" for="{{ form.supplier.id_for_label }}">Fournisseur / bénéficiaire</label>
+              <div class="col-12" id="payment-account-row">
+                <label class="form-label" for="{{ form.payment_account.id_for_label }}">Compte de paiement</label>
+                <div style="display:flex;gap:8px;align-items:flex-start;">
+                  <div style="flex:1;">
+                    {{ form.payment_account }}
+                    {% if form.payment_account.errors %}
+                    <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.payment_account.errors|join:", " }}</div>
+                    {% endif %}
+                    <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
+                      Les comptes disponibles se filtrent selon le bénéficiaire sélectionné.
+                    </div>
+                  </div>
+                  <a href="#"
+                     class="btn btn-ghost btn-sm"
+                     style="white-space:nowrap;margin-top:2px;"
+                     id="btn-quick-add-account"
+                     title="Ajouter un compte de paiement">
+                    <i class="bi bi-plus-lg"></i> Nouveau
+                  </a>
+                </div>
+              </div>
+
+            </div>
+
+            <div class="section-divider"></div>
+            <div class="form-section-title">Fournisseur libre <span style="font-size:11px;font-weight:400;color:#94a3b8;">(si non enregistré)</span></div>
+
+            <div class="row g-3">
+              <div class="col-md-7">
+                <label class="form-label" for="{{ form.supplier.id_for_label }}">Fournisseur / bénéficiaire libre</label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-shop"></i>
                   {{ form.supplier }}
                 </div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
+                  {{ form.supplier.help_text }}
+                </div>
               </div>
 
-              {% if form.payment_method %}
-              <div class="col-md-6">
-                <label class="form-label" for="{{ form.payment_method.id_for_label }}">Mode de règlement</label>
-                {{ form.payment_method }}
-                {% if form.payment_method.errors %}
-                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.payment_method.errors|join:", " }}</div>
-                {% endif %}
-              </div>
-              {% endif %}
-
-              <div class="col-md-6">
+              <div class="col-md-5">
                 <label class="form-label" for="{{ form.payment_reference.id_for_label }}">Référence de paiement</label>
                 <div class="input-icon-wrap">
                   <i class="bi bi-hash"></i>
                   {{ form.payment_reference }}
                 </div>
-                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">N° virement, chèque, ordre de paiement…</div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">N° virement, chèque, OP…</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ③ Montants & IRG -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-cash-coin"></i></div>
+            <h3>Montants &amp; IRG</h3>
+          </div>
+          <div class="isi-card-body">
+
+            <div class="row g-3">
+
+              <div class="col-md-5">
+                <label class="form-label" for="{{ form.gross_amount.id_for_label }}">Montant brut (DA) *</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-cash-coin"></i>
+                  {{ form.gross_amount }}
+                </div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">{{ form.gross_amount.help_text }}</div>
+                {% if form.gross_amount.errors %}
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.gross_amount.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label" for="{{ form.irg_rate.id_for_label }}">Taux IRG</label>
+                {{ form.irg_rate }}
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">{{ form.irg_rate.help_text }}</div>
+                {% if form.irg_rate.errors %}
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.irg_rate.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <!-- Live-computed IRG preview -->
+              <div class="col-md-4">
+                <label class="form-label">Aperçu net</label>
+                <div style="background:#f8fafc;border:1px solid var(--card-border);border-radius:8px;
+                            padding:8px 14px;min-height:40px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:12px;color:var(--text-muted);">IRG retenu</span>
+                    <span id="preview-irg" style="font-weight:600;font-size:13px;color:var(--danger);">— DA</span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                    <span style="font-size:12px;color:var(--text-muted);">Montant net</span>
+                    <span id="preview-net" style="font-weight:700;font-size:14px;color:var(--success);">— DA</span>
+                  </div>
+                </div>
               </div>
 
             </div>
 
-            <!-- Imputation -->
-            <div class="section-divider"></div>
-            <div class="form-section-title">Imputation</div>
+            {% if form.non_field_errors %}
+            <div style="margin-top:12px;">
+              {% for error in form.non_field_errors %}
+              <div style="color:var(--danger);font-size:13px;display:flex;gap:8px;align-items:flex-start;
+                          padding:10px 12px;background:rgba(239,68,68,.06);border-radius:8px;
+                          border-left:3px solid var(--danger);">
+                <i class="bi bi-exclamation-circle-fill" style="margin-top:1px;flex-shrink:0;"></i>
+                {{ error }}
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+          </div>
+        </div>
+
+        <!-- ④ Formateur (collapsible, shown via JS when is_trainer beneficiary) -->
+        <div class="isi-card mb-4" id="trainer-section" style="display:none;">
+          <div class="isi-card-header">
+            <div class="card-icon blue"><i class="bi bi-person-workspace"></i></div>
+            <h3>Paiement formateur</h3>
+          </div>
+          <div class="isi-card-body">
+
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px;">
+              <i class="bi bi-info-circle" style="color:var(--accent);"></i>
+              Ces champs sont destinés aux dépenses liées à la rémunération d'un formateur.
+            </div>
+
+            <div class="row g-3">
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.trainer_payment_mode.id_for_label }}">Mode de paiement</label>
+                {{ form.trainer_payment_mode }}
+                {% if form.trainer_payment_mode.errors %}
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.trainer_payment_mode.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6" id="linked-formation-row">
+                <label class="form-label" for="{{ form.linked_formation.id_for_label }}">Formation liée <span style="font-size:11px;color:#94a3b8;">(mode forfait)</span></label>
+                {{ form.linked_formation }}
+                {% if form.linked_formation.errors %}
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.linked_formation.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.training_period_label.id_for_label }}">Période couverte</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-calendar-range"></i>
+                  {{ form.training_period_label }}
+                </div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">{{ form.training_period_label.help_text }}</div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.g50_month.id_for_label }}">Mois G50</label>
+                {{ form.g50_month }}
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">{{ form.g50_month.help_text }}</div>
+                {% if form.g50_month.errors %}
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.g50_month.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.daily_rate_snapshot.id_for_label }}">Tarif journalier (snapshot)</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-currency-exchange"></i>
+                  {{ form.daily_rate_snapshot }}
+                </div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">Tarif appliqué au moment de la saisie.</div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.monthly_rate_snapshot.id_for_label }}">Tarif mensuel (snapshot)</label>
+                <div class="input-icon-wrap">
+                  <i class="bi bi-currency-exchange"></i>
+                  {{ form.monthly_rate_snapshot }}
+                </div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">Pour les contrats au forfait mensuel.</div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- ⑤ Imputation -->
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon purple"><i class="bi bi-diagram-3-fill"></i></div>
+            <h3>Imputation</h3>
+          </div>
+          <div class="isi-card-body">
+
             <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;">
               <i class="bi bi-info-circle" style="color:var(--accent);"></i>
               Imputez la dépense à <strong>un seul</strong> centre de coût — session, projet ou frais généraux.
@@ -152,24 +343,10 @@
 
             </div>
 
-            <!-- Imputation mutual-exclusion error -->
-            {% if form.non_field_errors %}
-            <div style="margin-top:12px;">
-              {% for error in form.non_field_errors %}
-              <div style="color:var(--danger);font-size:13px;display:flex;gap:8px;align-items:flex-start;
-                          padding:10px 12px;background:rgba(239,68,68,.06);border-radius:8px;
-                          border-left:3px solid var(--danger);">
-                <i class="bi bi-exclamation-circle-fill" style="margin-top:1px;flex-shrink:0;"></i>
-                {{ error }}
-              </div>
-              {% endfor %}
-            </div>
-            {% endif %}
-
           </div>
         </div>
 
-        <!-- Justificatif -->
+        <!-- ⑥ Justificatif -->
         <div class="isi-card mb-4">
           <div class="isi-card-header">
             <div class="card-icon amber"><i class="bi bi-file-earmark-fill"></i></div>
@@ -194,13 +371,9 @@
 
             <div class="row g-3">
               <div class="col-md-8">
-                <label class="form-label" for="{{ form.receipt.id_for_label }}">
-                  Fichier justificatif
-                </label>
+                <label class="form-label" for="{{ form.receipt.id_for_label }}">Fichier justificatif</label>
                 {{ form.receipt }}
-                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
-                  PDF, JPG ou PNG — max 5 Mo.
-                </div>
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">PDF, JPG ou PNG — max 5 Mo.</div>
               </div>
 
               <div class="col-md-4">
@@ -227,8 +400,36 @@
           </div>
         </div>
 
+        <!-- ⑦ Approbation (visible uniquement en modification) -->
+        {% if expense %}
+        <div class="isi-card mb-4">
+          <div class="isi-card-header">
+            <div class="card-icon amber"><i class="bi bi-shield-check"></i></div>
+            <h3>Approbation</h3>
+          </div>
+          <div class="isi-card-body">
+            <div class="row g-3">
+
+              <div class="col-md-5">
+                <label class="form-label" for="{{ form.approval_status.id_for_label }}">Décision</label>
+                {{ form.approval_status }}
+                {% if form.approval_status.errors %}
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.approval_status.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-7">
+                <label class="form-label" for="{{ form.approval_notes.id_for_label }}">Notes d'approbation</label>
+                {{ form.approval_notes }}
+              </div>
+
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
         <!-- Submit -->
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mb-4">
           <button type="submit" class="btn btn-amber">
             <i class="bi bi-check-lg"></i>
             {% if expense %}Enregistrer les modifications{% else %}Créer la dépense{% endif %}
@@ -240,67 +441,95 @@
 
       </div><!-- /col-lg-8 -->
 
-      <!-- ── Side panel ──────────────────────────────────────── -->
+      <!-- ── Side panel ──────────────────────────────────── -->
       <div class="col-lg-4">
 
-        <!-- Status / Approval (edit mode) -->
+        <!-- IRG summary card -->
+        <div class="isi-card mb-4" id="irg-summary-card">
+          <div class="isi-card-header">
+            <div class="card-icon red"><i class="bi bi-percent"></i></div>
+            <h3>Récapitulatif IRG</h3>
+          </div>
+          <div class="isi-card-body">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:13px;color:var(--text-muted);">Montant brut</span>
+              <span id="side-gross" style="font-weight:600;font-size:13.5px;">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:13px;color:var(--text-muted);">Taux IRG</span>
+              <span id="side-irg-rate" style="font-weight:600;font-size:13.5px;">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:13px;color:var(--text-muted);">Retenue IRG</span>
+              <span id="side-irg-amount" style="font-weight:600;font-size:13.5px;color:var(--danger);">—</span>
+            </div>
+            <div style="border-top:1px solid var(--card-border);padding-top:10px;margin-top:4px;
+                        display:flex;justify-content:space-between;">
+              <span style="font-size:14px;font-weight:700;">Montant net</span>
+              <span id="side-net" style="font-weight:700;font-size:16px;color:var(--success);">—</span>
+            </div>
+            <div style="margin-top:12px;font-size:11.5px;color:#94a3b8;line-height:1.5;">
+              <i class="bi bi-info-circle"></i>
+              IRG = retenue à la source sur les prestataires externes (10% pour les formateurs contractuels).
+            </div>
+          </div>
+        </div>
+
+        <!-- Statut (edit mode) -->
         {% if expense %}
         <div class="isi-card mb-4">
           <div class="isi-card-header">
             <div class="card-icon amber"><i class="bi bi-shield-check"></i></div>
-            <h3>Statut & Approbation</h3>
+            <h3>Statut actuel</h3>
           </div>
           <div class="isi-card-body">
             <div class="row g-3">
 
               <div class="col-12">
                 <div class="stat-label mb-1">Décision</div>
-                <div style="margin-top:4px;">
-                  {% if expense.approval_status == 'approved' %}
-                    <span class="isi-badge green" style="font-size:13px;padding:5px 12px;">
-                      <i class="bi bi-check-circle-fill"></i> Approuvée
-                    </span>
-                  {% elif expense.approval_status == 'rejected' %}
-                    <span class="isi-badge red" style="font-size:13px;padding:5px 12px;">
-                      <i class="bi bi-x-circle-fill"></i> Refusée
-                    </span>
-                  {% else %}
-                    <span class="isi-badge amber" style="font-size:13px;padding:5px 12px;">
-                      <i class="bi bi-clock-fill"></i> En attente
-                    </span>
-                  {% endif %}
-                </div>
+                {% if expense.approval_status == 'approved' %}
+                  <span class="isi-badge green" style="font-size:13px;padding:5px 12px;">
+                    <i class="bi bi-check-circle-fill"></i> Approuvée
+                  </span>
+                {% elif expense.approval_status == 'rejected' %}
+                  <span class="isi-badge red" style="font-size:13px;padding:5px 12px;">
+                    <i class="bi bi-x-circle-fill"></i> Refusée
+                  </span>
+                {% else %}
+                  <span class="isi-badge amber" style="font-size:13px;padding:5px 12px;">
+                    <i class="bi bi-clock-fill"></i> En attente
+                  </span>
+                {% endif %}
               </div>
 
-              {% if expense.approved_by %}
               <div class="col-12">
-                <div class="stat-label mb-1">Par</div>
-                <div style="font-weight:500;font-size:13.5px;">{{ expense.approved_by }}</div>
-              </div>
-              {% endif %}
-
-              {% if expense.approved_at %}
-              <div class="col-12">
-                <div class="stat-label mb-1">Le</div>
-                <div style="font-weight:500;font-size:13.5px;">{{ expense.approved_at|date:"d/m/Y à H:i" }}</div>
-              </div>
-              {% endif %}
-
-              {% if expense.rejection_reason %}
-              <div class="col-12">
-                <div class="stat-label mb-1">Motif de refus</div>
-                <div style="font-size:13px;color:var(--danger);padding:8px 12px;
-                            background:rgba(239,68,68,.06);border-radius:6px;border-left:2px solid var(--danger);">
-                  {{ expense.rejection_reason }}
-                </div>
-              </div>
-              {% endif %}
-
-              <div class="col-12">
-                <div class="stat-label mb-1">Montant</div>
-                <div class="stat-value" style="font-size:24px;">{{ expense.amount|floatformat:2 }}</div>
+                <div class="stat-label mb-1">Montant brut</div>
+                <div class="stat-value" style="font-size:22px;">{{ expense.gross_amount|default:expense.amount|floatformat:2 }}</div>
                 <div style="font-size:11px;color:var(--text-muted);">DA</div>
               </div>
+
+              {% if expense.irg_amount %}
+              <div class="col-12">
+                <div class="stat-label mb-1">Retenue IRG ({{ expense.irg_rate|floatformat:0 }}%)</div>
+                <div style="font-weight:700;font-size:16px;color:var(--danger);">
+                  − {{ expense.irg_amount|floatformat:2 }} DA
+                </div>
+              </div>
+              {% endif %}
+
+              <div class="col-12">
+                <div class="stat-label mb-1">Montant net payé</div>
+                <div class="stat-value" style="font-size:22px;color:var(--success);">{{ expense.amount|floatformat:2 }}</div>
+                <div style="font-size:11px;color:var(--text-muted);">DA</div>
+              </div>
+
+              {% if expense.beneficiary %}
+              <div class="col-12">
+                <div class="stat-label mb-1">Bénéficiaire</div>
+                <div style="font-weight:500;font-size:13.5px;">{{ expense.beneficiary.name }}</div>
+                <div style="font-size:12px;color:var(--text-muted);">{{ expense.beneficiary.beneficiary_type }}</div>
+              </div>
+              {% endif %}
 
             </div>
 
@@ -308,8 +537,7 @@
             {% if expense.approval_status == 'pending' %}
             <div class="section-divider"></div>
             <div class="d-flex gap-2">
-              <form method="post" action="{% url 'financial:expense_approve' expense.pk %}"
-                    style="flex:1;">
+              <form method="post" action="{% url 'financial:expense_approve' expense.pk %}" style="flex:1;">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-ghost w-100"
                         style="color:var(--success);border-color:rgba(16,185,129,.3);"
@@ -317,8 +545,7 @@
                   <i class="bi bi-check-lg"></i> Approuver
                 </button>
               </form>
-              <form method="post" action="{% url 'financial:expense_reject' expense.pk %}"
-                    style="flex:1;">
+              <form method="post" action="{% url 'financial:expense_reject' expense.pk %}" style="flex:1;">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-danger-soft w-100"
                         onclick="return confirm('Refuser cette dépense ?')">
@@ -380,36 +607,146 @@
 
 {% block extra_scripts %}
 <script>
-  // Mutual exclusion for imputation fields:
-  // Selecting session/project should uncheck is_overhead, and vice versa.
-  (function () {
-    const sessionSel  = document.getElementById('id_allocated_to_session');
-    const projectSel  = document.getElementById('id_allocated_to_project');
-    const overheadChk = document.getElementById('id_is_overhead');
+(function () {
+  'use strict';
 
-    if (!sessionSel || !projectSel || !overheadChk) return;
+  /* ── Element refs ──────────────────────────────────────── */
+  const beneficiarySelect  = document.getElementById('id_beneficiary');
+  const paymentAccountSel  = document.getElementById('id_payment_account');
+  const irgRateInput       = document.getElementById('id_irg_rate');
+  const grossAmountInput   = document.getElementById('id_gross_amount');
+  const dailyRateInput     = document.getElementById('id_daily_rate_snapshot');
+  const monthlyRateInput   = document.getElementById('id_monthly_rate_snapshot');
+  const trainerSection     = document.getElementById('trainer-section');
+  const trainerModeSelect  = document.getElementById('id_trainer_payment_mode');
+  const linkedFormationRow = document.getElementById('linked-formation-row');
 
-    function clearOthers(changed) {
-      if (changed === 'session' || changed === 'project') {
-        overheadChk.checked = false;
-        if (changed === 'session') projectSel.value = '';
-        if (changed === 'project') sessionSel.value = '';
-      } else {
-        sessionSel.value = '';
-        projectSel.value = '';
+  const sessionSel   = document.getElementById('id_allocated_to_session');
+  const projectSel   = document.getElementById('id_allocated_to_project');
+  const overheadChk  = document.getElementById('id_is_overhead');
+
+  /* ── IRG preview ────────────────────────────────────────── */
+  function updateIRGPreview() {
+    const gross = parseFloat(grossAmountInput ? grossAmountInput.value : 0) || 0;
+    const rate  = parseFloat(irgRateInput ? irgRateInput.value : 0) || 0;
+    const irg   = Math.round(gross * rate * 100) / 100;
+    const net   = Math.round((gross - irg) * 100) / 100;
+
+    const fmt = n => n.toLocaleString('fr-DZ', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DA';
+
+    // Inline preview
+    const prevIrg = document.getElementById('preview-irg');
+    const prevNet = document.getElementById('preview-net');
+    if (prevIrg) prevIrg.textContent = irg > 0 ? ('− ' + fmt(irg)) : '0,00 DA';
+    if (prevNet) prevNet.textContent = gross > 0 ? fmt(net) : '— DA';
+
+    // Side panel
+    document.getElementById('side-gross')      && (document.getElementById('side-gross').textContent = gross > 0 ? fmt(gross) : '—');
+    document.getElementById('side-irg-rate')   && (document.getElementById('side-irg-rate').textContent = rate > 0 ? (rate * 100).toFixed(0) + ' %' : '0 %');
+    document.getElementById('side-irg-amount') && (document.getElementById('side-irg-amount').textContent = irg > 0 ? ('− ' + fmt(irg)) : '0,00 DA');
+    document.getElementById('side-net')        && (document.getElementById('side-net').textContent = gross > 0 ? fmt(net) : '—');
+  }
+
+  if (grossAmountInput) grossAmountInput.addEventListener('input', updateIRGPreview);
+  if (irgRateInput)     irgRateInput.addEventListener('input', updateIRGPreview);
+  updateIRGPreview(); // init on page load
+
+  /* ── Beneficiary → filter payment accounts + fill IRG ───── */
+  const accountsJsonUrl = "{% url 'financial:beneficiary_accounts_json' pk=0 %}".replace('/0/', '/');
+
+  async function onBeneficiaryChange() {
+    if (!beneficiarySelect) return;
+    const pk = beneficiarySelect.value;
+
+    if (!pk) {
+      // No beneficiary — reset account dropdown, hide trainer section
+      if (paymentAccountSel) {
+        paymentAccountSel.innerHTML = '<option value="">— Sélectionner un compte —</option>';
       }
+      if (trainerSection) trainerSection.style.display = 'none';
+      return;
     }
 
-    sessionSel.addEventListener('change',  () => { if (sessionSel.value)  clearOthers('session');  });
-    projectSel.addEventListener('change',  () => { if (projectSel.value)  clearOthers('project');  });
-    overheadChk.addEventListener('change', () => { if (overheadChk.checked) clearOthers('overhead'); });
-
-    // Pre-fill today's date if empty (create mode)
-    const dateInput = document.getElementById('id_date');
-    if (dateInput && !dateInput.value) {
-      const today = new Date();
-      dateInput.value = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    // Fetch beneficiary accounts via AJAX
+    try {
+      const resp = await fetch(accountsJsonUrl + pk + '/accounts/');
+      if (resp.ok) {
+        const data = await resp.json();
+        if (paymentAccountSel) {
+          paymentAccountSel.innerHTML = '<option value="">— Sélectionner un compte —</option>';
+          data.accounts.forEach(acc => {
+            const opt = document.createElement('option');
+            opt.value = acc.id;
+            opt.textContent = acc.label;
+            if (acc.is_default) opt.selected = true;
+            paymentAccountSel.appendChild(opt);
+          });
+        }
+        // Show trainer section if the beneficiary is a trainer
+        if (trainerSection) {
+          trainerSection.style.display = data.is_trainer ? '' : 'none';
+        }
+        // Auto-fill IRG rate from beneficiary default
+        if (irgRateInput && data.irg_rate !== undefined) {
+          irgRateInput.value = data.irg_rate;
+          updateIRGPreview();
+        }
+        // Auto-fill rate snapshots
+        if (dailyRateInput && data.daily_rate) dailyRateInput.value = data.daily_rate;
+        if (monthlyRateInput && data.monthly_rate) monthlyRateInput.value = data.monthly_rate;
+      }
+    } catch (e) {
+      console.warn('Could not load beneficiary accounts:', e);
     }
-  })();
+
+    // Update quick-add account button href
+    const btnAccount = document.getElementById('btn-quick-add-account');
+    if (btnAccount) {
+      btnAccount.href = "{% url 'financial:payment_account_create' beneficiary_pk=0 %}".replace('/0/', '/' + pk + '/');
+    }
+  }
+
+  if (beneficiarySelect) {
+    beneficiarySelect.addEventListener('change', onBeneficiaryChange);
+    // Trigger once on load if already has a value (edit mode)
+    if (beneficiarySelect.value) onBeneficiaryChange();
+  }
+
+  /* ── Trainer payment mode → show/hide linked_formation ──── */
+  function onTrainerModeChange() {
+    if (!trainerModeSelect || !linkedFormationRow) return;
+    const show = trainerModeSelect.value === 'per_formation';
+    linkedFormationRow.style.display = show ? '' : 'none';
+  }
+
+  if (trainerModeSelect) {
+    trainerModeSelect.addEventListener('change', onTrainerModeChange);
+    onTrainerModeChange(); // init
+  }
+
+  /* ── Imputation mutual exclusion ────────────────────────── */
+  function clearOthers(changed) {
+    if (changed === 'session' || changed === 'project') {
+      if (overheadChk) overheadChk.checked = false;
+      if (changed === 'session' && projectSel) projectSel.value = '';
+      if (changed === 'project' && sessionSel) sessionSel.value = '';
+    } else {
+      if (sessionSel) sessionSel.value = '';
+      if (projectSel) projectSel.value = '';
+    }
+  }
+
+  if (sessionSel)  sessionSel.addEventListener('change',  () => { if (sessionSel.value)    clearOthers('session');  });
+  if (projectSel)  projectSel.addEventListener('change',  () => { if (projectSel.value)    clearOthers('project');  });
+  if (overheadChk) overheadChk.addEventListener('change', () => { if (overheadChk.checked) clearOthers('overhead'); });
+
+  /* ── Pre-fill today's date (create mode) ────────────────── */
+  const dateInput = document.getElementById('id_date');
+  if (dateInput && !dateInput.value) {
+    const t = new Date();
+    dateInput.value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  }
+
+})();
 </script>
 {% endblock %}

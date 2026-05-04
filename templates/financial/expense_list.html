@@ -77,19 +77,30 @@
       <form method="get" novalidate>
         <div class="row g-3 align-items-end">
 
+          <!-- Row 1 -->
           <div class="col-lg-3 col-md-6">
             <label class="form-label">Recherche</label>
             <div class="input-icon-wrap">
               <i class="bi bi-search"></i>
               <input type="text" name="q" class="form-control"
                      value="{{ filter_form.q.value|default:'' }}"
-                     placeholder="Description, fournisseur…">
+                     placeholder="Description, bénéficiaire…">
             </div>
           </div>
 
           <div class="col-lg-2 col-md-3 col-sm-6">
             <label class="form-label">Catégorie</label>
             {{ filter_form.category }}
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Bénéficiaire</label>
+            {{ filter_form.beneficiary }}
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Type bénéficiaire</label>
+            {{ filter_form.beneficiary_type }}
           </div>
 
           <div class="col-lg-2 col-md-3 col-sm-6">
@@ -101,16 +112,60 @@
             </select>
           </div>
 
-          <div class="col-lg-1 col-md-3 col-sm-6">
+          <!-- Row 2 -->
+          <div class="col-lg-1 col-md-2 col-sm-4">
             <label class="form-label">Du</label>
             <input type="date" name="date_from" class="form-control"
                    value="{{ filter_form.date_from.value|default:'' }}">
           </div>
 
-          <div class="col-lg-1 col-md-3 col-sm-6">
+          <div class="col-lg-1 col-md-2 col-sm-4">
             <label class="form-label">Au</label>
             <input type="date" name="date_to" class="form-control"
                    value="{{ filter_form.date_to.value|default:'' }}">
+          </div>
+
+          <div class="col-lg-1 col-md-2 col-sm-4">
+            <label class="form-label">Exercice</label>
+            <input type="number" name="fiscal_year" class="form-control"
+                   value="{{ filter_form.fiscal_year.value|default:'' }}"
+                   placeholder="2026">
+          </div>
+
+          <div class="col-lg-1 col-md-2 col-sm-4">
+            <label class="form-label">Trimestre</label>
+            <select name="quarter" class="form-select">
+              {% for val, label in filter_form.quarter.field.choices %}
+              <option value="{{ val }}" {% if filter_form.quarter.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Affectation</label>
+            <select name="allocation" class="form-select">
+              {% for val, label in filter_form.allocation.field.choices %}
+              <option value="{{ val }}" {% if filter_form.allocation.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label">Mode formateur</label>
+            <select name="trainer_payment_mode" class="form-select">
+              {% for val, label in filter_form.trainer_payment_mode.field.choices %}
+              <option value="{{ val }}" {% if filter_form.trainer_payment_mode.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-lg-1 col-md-2 col-sm-4">
+            <label class="form-label">IRG</label>
+            <select name="has_irg" class="form-select">
+              {% for val, label in filter_form.has_irg.field.choices %}
+              <option value="{{ val }}" {% if filter_form.has_irg.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
           </div>
 
           <!-- Missing receipt quick-filter -->
@@ -130,7 +185,7 @@
             </div>
           </div>
 
-          <div class="col-lg-1 col-md-3">
+          <div class="col-lg-1 col-md-2">
             <div class="d-flex gap-2">
               <button type="submit" class="btn btn-amber flex-grow-1">
                 <i class="bi bi-funnel-fill"></i>
@@ -190,7 +245,13 @@
                    style="font-weight:600;color:var(--text-primary);text-decoration:none;">
                   {{ expense.description }}
                 </a>
-                {% if expense.supplier %}
+                {% if expense.beneficiary %}
+                <div style="font-size:12px;color:var(--text-muted);">
+                  <i class="bi bi-person-fill" style="font-size:10px;"></i>
+                  {{ expense.beneficiary.name }}
+                  <span style="opacity:.6;">· {{ expense.beneficiary.beneficiary_type }}</span>
+                </div>
+                {% elif expense.supplier %}
                 <div style="font-size:12px;color:var(--text-muted);">
                   <i class="bi bi-shop" style="font-size:10px;"></i> {{ expense.supplier }}
                 </div>
@@ -234,6 +295,16 @@
               {% else %}
                 <span style="color:var(--text-muted);font-size:13px;">—</span>
               {% endif %}
+              {% if expense.trainer_payment_mode %}
+              <div style="margin-top:4px;">
+                <span class="isi-badge" style="font-size:10px;background:rgba(99,102,241,.1);color:#6366f1;">
+                  <i class="bi bi-person-badge-fill"></i>
+                  {% if expense.trainer_payment_mode == 'per_formation' %}Forfait
+                  {% elif expense.trainer_payment_mode == 'per_session' %}Session
+                  {% else %}Direct{% endif %}
+                </span>
+              </div>
+              {% endif %}
             </td>
 
             <td>
@@ -264,10 +335,25 @@
             </td>
 
             <td style="text-align:right;">
+              {% if expense.has_irg %}
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">
+                Brut : {{ expense.gross_amount|floatformat:2 }} DA
+              </div>
+              <div style="font-size:11px;color:var(--danger);margin-bottom:2px;">
+                IRG −{{ expense.irg_amount|floatformat:2 }} DA
+              </div>
+              {% endif %}
               <span style="font-weight:700;font-family:var(--font-head);font-size:15px;">
                 {{ expense.amount|floatformat:2 }}
               </span>
               <span style="font-size:11px;color:var(--text-muted);"> DA</span>
+              {% if expense.has_irg %}
+              <div style="margin-top:2px;">
+                <span class="isi-badge" style="font-size:10px;background:rgba(239,68,68,.08);color:var(--danger);">
+                  IRG {% widthratio expense.irg_rate 0.01 1 %}%
+                </span>
+              </div>
+              {% endif %}
             </td>
 
             <td>
@@ -346,7 +432,7 @@
       <div style="font-size:52px;color:#e2e8f0;margin-bottom:16px;">
         <i class="bi bi-credit-card"></i>
       </div>
-      {% if filter_form.q.value or filter_form.category.value or filter_form.approval_status.value or filter_form.missing_receipt.value %}
+      {% if filter_form.q.value or filter_form.category.value or filter_form.approval_status.value or filter_form.missing_receipt.value or filter_form.beneficiary.value or filter_form.beneficiary_type.value or filter_form.fiscal_year.value or filter_form.quarter.value or filter_form.allocation.value or filter_form.trainer_payment_mode.value or filter_form.has_irg.value %}
         <p style="color:var(--text-muted);font-size:15px;margin:0 0 16px;">
           Aucune dépense ne correspond à vos critères.
         </p>

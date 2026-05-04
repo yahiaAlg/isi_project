@@ -81,7 +81,7 @@
 
   <!-- ── KPI row ───────────────────────────────────────────── -->
   <div class="row g-3 mb-4">
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-sm-6 col-lg-{% if total_irg %}2{% else %}3{% endif %}">
       <div class="isi-card">
         <div class="isi-card-body" style="display:flex;align-items:center;gap:14px;padding:18px 20px;">
           <div class="card-icon red"
@@ -90,12 +90,42 @@
           </div>
           <div>
             <div class="stat-value" style="color:var(--danger);">{{ total|floatformat:0 }}</div>
-            <div class="stat-label">Total dépenses (DA)</div>
+            <div class="stat-label">Total net (DA)</div>
           </div>
         </div>
       </div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    {% if total_irg %}
+    <div class="col-sm-6 col-lg-2">
+      <div class="isi-card">
+        <div class="isi-card-body" style="display:flex;align-items:center;gap:14px;padding:18px 20px;">
+          <div class="card-icon" style="width:48px;height:48px;font-size:20px;border-radius:12px;
+                                        background:rgba(239,68,68,.1);color:var(--danger);">
+            <i class="bi bi-receipt-cutoff"></i>
+          </div>
+          <div>
+            <div class="stat-value" style="color:var(--danger);">{{ total_gross|floatformat:0 }}</div>
+            <div class="stat-label">Total brut (DA)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-2">
+      <div class="isi-card">
+        <div class="isi-card-body" style="display:flex;align-items:center;gap:14px;padding:18px 20px;">
+          <div class="card-icon" style="width:48px;height:48px;font-size:20px;border-radius:12px;
+                                        background:rgba(239,68,68,.08);color:#b91c1c;">
+            <i class="bi bi-percent"></i>
+          </div>
+          <div>
+            <div class="stat-value" style="font-size:18px;color:#b91c1c;">{{ total_irg|floatformat:0 }}</div>
+            <div class="stat-label">Retenues IRG (DA)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    <div class="col-sm-6 col-lg-{% if total_irg %}2{% else %}3{% endif %}">
       <div class="isi-card">
         <div class="isi-card-body" style="display:flex;align-items:center;gap:14px;padding:18px 20px;">
           <div class="card-icon blue"
@@ -109,7 +139,7 @@
         </div>
       </div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-sm-6 col-lg-{% if total_irg %}2{% else %}3{% endif %}">
       <div class="isi-card">
         <div class="isi-card-body" style="display:flex;align-items:center;gap:14px;padding:18px 20px;">
           <div class="card-icon purple"
@@ -123,7 +153,7 @@
         </div>
       </div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-sm-6 col-lg-{% if total_irg %}2{% else %}3{% endif %}">
       <div class="isi-card">
         <div class="isi-card-body" style="display:flex;align-items:center;gap:14px;padding:18px 20px;">
           <div class="card-icon amber"
@@ -156,7 +186,7 @@
                 <th>Catégorie</th>
                 <th>Type</th>
                 <th style="text-align:right;">Nb</th>
-                <th style="text-align:right;">Montant (DA)</th>
+                <th style="text-align:right;">Montant net (DA)</th>
                 <th style="text-align:right;">Part</th>
               </tr>
             </thead>
@@ -223,7 +253,7 @@
       </div>
 
       <!-- ── By approval status ──────────────────────────── -->
-      <div class="isi-card">
+      <div class="isi-card mb-4">
         <div class="isi-card-header">
           <div class="card-icon blue"><i class="bi bi-shield-check"></i></div>
           <h3>Répartition par statut d'approbation</h3>
@@ -269,7 +299,73 @@
           </div>
         </div>
       </div>
-    </div>
+
+      <!-- ── By beneficiary type ─────────────────────────── -->
+      {% if by_beneficiary_type %}
+      <div class="isi-card">
+        <div class="isi-card-header">
+          <div class="card-icon" style="background:rgba(99,102,241,.12);color:#6366f1;">
+            <i class="bi bi-people-fill"></i>
+          </div>
+          <h3>Répartition par type de bénéficiaire</h3>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="isi-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th style="text-align:right;">Nb</th>
+                <th style="text-align:right;">Montant net (DA)</th>
+                {% if total_irg %}<th style="text-align:right;">IRG (DA)</th>{% endif %}
+                <th style="text-align:right;">Part</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in by_beneficiary_type %}
+              <tr>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="width:10px;height:10px;border-radius:3px;flex-shrink:0;
+                                background:{{ row.beneficiary__beneficiary_type__color|default:'#94a3b8' }};
+                                border:1px solid rgba(0,0,0,.08);"></div>
+                    <span style="font-weight:600;">
+                      {{ row.beneficiary__beneficiary_type__name|default:"Sans type" }}
+                    </span>
+                  </div>
+                </td>
+                <td style="text-align:right;color:var(--text-muted);font-size:13px;">
+                  {{ row.count|default:"0" }}
+                </td>
+                <td style="text-align:right;font-family:var(--font-head);font-weight:700;font-size:14px;">
+                  {{ row.total|floatformat:2 }}
+                </td>
+                {% if total_irg %}
+                <td style="text-align:right;font-size:13px;color:#b91c1c;">
+                  {{ row.total_irg|default:"0"|floatformat:2 }}
+                </td>
+                {% endif %}
+                <td style="text-align:right;">
+                  {% if total > 0 %}
+                  <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+                    <div style="width:50px;height:5px;background:var(--card-border);border-radius:99px;overflow:hidden;">
+                      <div style="height:100%;width:{% widthratio row.total total 100 %}%;
+                                  background:#6366f1;border-radius:99px;"></div>
+                    </div>
+                    <span class="isi-badge gray" style="font-size:10px;padding:2px 6px;">
+                      {% widthratio row.total total 100 %}%
+                    </span>
+                  </div>
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+
+    </div><!-- /col-lg-7 -->
 
     <!-- ── Chart + Imputation breakdown ─────────────────── -->
     <div class="col-lg-5">
@@ -348,6 +444,78 @@
         </div>
         {% endif %}
       </div>
+
+      <!-- IRG summary -->
+      {% if total_irg %}
+      <div class="isi-card mb-4">
+        <div class="isi-card-header">
+          <div class="card-icon" style="background:rgba(239,68,68,.1);color:#b91c1c;">
+            <i class="bi bi-percent"></i>
+          </div>
+          <h3>IRG — Retenues à la source</h3>
+        </div>
+        <div class="isi-card-body">
+
+          <!-- Gross → IRG → Net waterfall -->
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;
+                        padding:8px 12px;background:#f8fafc;border-radius:8px;
+                        border:1px solid var(--card-border);">
+              <span style="font-size:13px;color:var(--text-muted);">
+                <i class="bi bi-receipt-cutoff" style="margin-right:4px;"></i>Montant brut total
+              </span>
+              <span style="font-weight:700;font-family:var(--font-head);font-size:14px;">
+                {{ total_gross|floatformat:2 }} DA
+              </span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;
+                        padding:8px 12px;background:rgba(239,68,68,.06);border-radius:8px;
+                        border:1px solid rgba(239,68,68,.15);">
+              <span style="font-size:13px;color:#b91c1c;">
+                <i class="bi bi-percent" style="margin-right:4px;"></i>Retenues IRG
+              </span>
+              <span style="font-weight:700;font-family:var(--font-head);font-size:14px;color:#b91c1c;">
+                − {{ total_irg|floatformat:2 }} DA
+              </span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;
+                        padding:10px 12px;background:rgba(239,68,68,.08);border-radius:8px;
+                        border:1px solid rgba(239,68,68,.2);">
+              <span style="font-size:13px;font-weight:600;color:var(--danger);">
+                <i class="bi bi-credit-card-fill" style="margin-right:4px;"></i>Net décaissé
+              </span>
+              <span style="font-weight:700;font-family:var(--font-head);font-size:15px;color:var(--danger);">
+                {{ total|floatformat:2 }} DA
+              </span>
+            </div>
+          </div>
+
+          <!-- IRG share bar -->
+          {% if total_gross > 0 %}
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:11.5px;
+                        color:var(--text-muted);margin-bottom:6px;">
+              <span>Part IRG / brut</span>
+              <span style="font-weight:600;color:#b91c1c;">
+                {% widthratio total_irg total_gross 100 %}%
+              </span>
+            </div>
+            <div style="height:6px;background:var(--card-border);border-radius:99px;overflow:hidden;">
+              <div style="height:100%;width:{% widthratio total_irg total_gross 100 %}%;
+                          background:#ef4444;border-radius:99px;"></div>
+            </div>
+          </div>
+          {% endif %}
+
+          <!-- Link to IRG-filtered list -->
+          <a href="{% url 'financial:expense_list' %}?has_irg=yes"
+             class="btn btn-ghost btn-sm mt-3 w-100" style="border-color:rgba(239,68,68,.3);color:#b91c1c;">
+            <i class="bi bi-funnel-fill"></i> Voir les dépenses avec IRG
+          </a>
+
+        </div>
+      </div>
+      {% endif %}
 
       <!-- Missing receipts alert -->
       {% if missing_receipt_count > 0 %}
