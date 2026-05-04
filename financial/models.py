@@ -1,5 +1,5 @@
 """
-Financial models — v3.2
+Financial models — v4.0
 Invoices (3-stage lifecycle: proforma → BC → finale), line items with flexible
 pricing modes, payments, credit notes, expenses.
 
@@ -937,6 +937,225 @@ class CreditNote(TimeStampedModel):
 
 
 # ======================================================================= #
+# Beneficiary system — dealers / partners directory
+# ======================================================================= #
+
+
+class BeneficiaryType(TimeStampedModel):
+    """
+    Type / category of a beneficiary (e.g. Formateur, Hôtel, Commerçant).
+    Seeded entries cannot be deleted; users can add their own.
+    """
+
+    slug = models.SlugField(
+        max_length=50,
+        unique=True,
+        verbose_name="Slug",
+        help_text="Identifiant machine (ex. formateur, hotel).",
+    )
+    name = models.CharField(max_length=100, unique=True, verbose_name="Libellé")
+    color = models.CharField(
+        max_length=7, default="#6B7280", verbose_name="Couleur (hex)"
+    )
+    is_seeded = models.BooleanField(
+        default=False,
+        verbose_name="Entrée système",
+        help_text="Les entrées système ne peuvent pas être supprimées.",
+    )
+    is_active = models.BooleanField(default=True, verbose_name="Active")
+
+    class Meta:
+        verbose_name = "Type de bénéficiaire"
+        verbose_name_plural = "Types de bénéficiaires"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def seed_defaults(cls):
+        """
+        Create the standard seeded types.
+        Call from a data migration or management command.
+        """
+        defaults = [
+            ("formateur", "Formateur", "#3B82F6"),
+            ("employe", "Employé", "#10B981"),
+            ("hotel", "Hôtel / Hébergement", "#F59E0B"),
+            ("restaurant", "Restaurant", "#EF4444"),
+            ("transport", "Transport / Taxi", "#8B5CF6"),
+            ("imprimerie", "Imprimerie / Reprographie", "#EC4899"),
+            ("commercant", "Commerçant / Détaillant", "#F97316"),
+            ("organisation", "Organisation / Association", "#14B8A6"),
+            ("fournisseur", "Fournisseur de matériel", "#64748B"),
+            ("autre", "Autre", "#6B7280"),
+        ]
+        for slug, name, color in defaults:
+            cls.objects.get_or_create(
+                slug=slug,
+                defaults={"name": name, "color": color, "is_seeded": True},
+            )
+
+
+class Beneficiary(TimeStampedModel):
+    """
+    A registered payee / partner — the "dealers directory".
+
+    Trainers are auto-linked (OneToOne) via Trainer.save().
+    Other beneficiaries (hotels, suppliers, …) are created manually
+    or via the quick-add modal on the expense form.
+
+    IRG
+    ---
+    irg_rate = 0      → no withholding (employees, companies with exemption)
+    irg_rate = 0.10   → 10% withholding (external trainers under Algerian fiscal law)
+    irg_rate is stored here as a default and snapshotted on each Expense.
+    """
+
+    name = models.CharField(max_length=255, verbose_name="Nom / Raison sociale")
+    beneficiary_type = models.ForeignKey(
+        BeneficiaryType,
+        on_delete=models.PROTECT,
+        related_name="beneficiaries",
+        verbose_name="Type",
+    )
+
+    # ---- Link to Trainer (optional) ---------------------------------- #
+    trainer = models.OneToOneField(
+        "formations.Trainer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="beneficiary",
+        verbose_name="Formateur lié",
+        help_text="Rempli automatiquement pour les formateurs.",
+    )
+    is_trainer = models.BooleanField(default=False, verbose_name="Est un formateur")
+    is_employee = models.BooleanField(
+        default=False,
+        verbose_name="Est un employé (interne)",
+        help_text="True pour les formateurs internes ou le personnel administratif.",
+    )
+
+    # ---- Contact & fiscal ------------------------------------------- #
+    nif = models.CharField(max_length=100, blank=True, verbose_name="NIF")
+    rib = models.CharField(max_length=255, blank=True, verbose_name="RIB")
+    phone = models.CharField(max_length=50, blank=True, verbose_name="Téléphone")
+    email = models.EmailField(blank=True, verbose_name="Email")
+    address = models.TextField(blank=True, verbose_name="Adresse")
+
+    # ---- Rates (snapshotted on expense entry) ------------------------ #
+    daily_rate = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        verbose_name="Tarif journalier (DA)",
+    )
+    monthly_rate = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        verbose_name="Tarif mensuel (DA)",
+    )
+
+    # ---- IRG default ------------------------------------------------- #
+    irg_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0"),
+        verbose_name="Taux IRG par défaut",
+        help_text="0 pour aucune retenue; 0.10 pour prestataires externes (10%).",
+    )
+
+    notes = models.TextField(blank=True, verbose_name="Notes")
+    is_active = models.BooleanField(default=True, verbose_name="Actif")
+
+    class Meta:
+        verbose_name = "Bénéficiaire"
+        verbose_name_plural = "Bénéficiaires"
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.beneficiary_type})"
+
+    @property
+    def default_payment_account(self):
+        """Return the default PaymentAccount or None."""
+        return self.payment_accounts.filter(is_default=True).first()
+
+
+class PaymentAccount(TimeStampedModel):
+    """
+    A payment account / channel belonging to a Beneficiary.
+
+    One beneficiary can have multiple accounts (e.g. CCP + bank virement).
+    The expense form shows only accounts belonging to the selected beneficiary.
+    A new account can be created via modal without leaving the expense form.
+    """
+
+    class AccountType(models.TextChoices):
+        ESPECES = "especes", "Espèces"
+        BANK = "bank", "Virement bancaire"
+        CCP = "ccp", "CCP"
+        CIB = "cib", "CIB / Carte bancaire"
+        CHEQUE = "cheque", "Chèque"
+        AUTRE = "autre", "Autre"
+
+    beneficiary = models.ForeignKey(
+        Beneficiary,
+        on_delete=models.CASCADE,
+        related_name="payment_accounts",
+        verbose_name="Bénéficiaire",
+    )
+    account_type = models.CharField(
+        max_length=20,
+        choices=AccountType.choices,
+        verbose_name="Type de compte",
+    )
+    label = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Libellé",
+        help_text="Ex. CPA Agence Sétif, CCP 12345-67.",
+    )
+    account_number = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Numéro / Code",
+        help_text="RIB, numéro CCP, code CIB, etc.",
+    )
+    bank_name = models.CharField(
+        max_length=255, blank=True, verbose_name="Banque / Établissement"
+    )
+    is_default = models.BooleanField(
+        default=False,
+        verbose_name="Compte par défaut",
+        help_text="Un seul compte par défaut par bénéficiaire.",
+    )
+    notes = models.TextField(blank=True, verbose_name="Notes")
+
+    class Meta:
+        verbose_name = "Compte de paiement"
+        verbose_name_plural = "Comptes de paiement"
+        ordering = ["-is_default", "account_type", "label"]
+
+    def __str__(self):
+        parts = [self.get_account_type_display()]
+        if self.label:
+            parts.append(self.label)
+        if self.account_number:
+            parts.append(self.account_number)
+        return " — ".join(parts)
+
+    def save(self, *args, **kwargs):
+        if self.is_default:
+            PaymentAccount.objects.filter(
+                beneficiary=self.beneficiary, is_default=True
+            ).exclude(pk=self.pk).update(is_default=False)
+        super().save(*args, **kwargs)
+
+
+# ======================================================================= #
 # Expenses
 # ======================================================================= #
 
@@ -964,14 +1183,38 @@ class ExpenseCategory(TimeStampedModel):
 
 class Expense(TimeStampedModel):
     """
-    An operational expenditure incurred by the institute.
+    An operational expenditure incurred by the institute — v4.0.
 
-    Allocation model — mutually exclusive cost centres:
-        allocated_to_session    → direct cost for a training session
-        allocated_to_project    → direct cost for a consulting project
-        is_overhead = True      → general overhead (frais généraux)
+    Beneficiary & payment
+    ─────────────────────
+    beneficiary         → registered payee (from the Beneficiary directory)
+    payment_account     → which account of that beneficiary was used
+    supplier            → legacy free-text fallback (kept for backward compat)
 
-    clean() enforces exactly one cost centre per expense.
+    IRG (withholding tax on service providers)
+    ──────────────────────────────────────────
+    gross_amount        → montant brut before deduction
+    irg_rate            → snapshotted from Beneficiary.irg_rate at entry time
+    irg_amount          → computed and stored: gross_amount × irg_rate
+    amount              → NET amount paid = gross_amount − irg_amount
+
+    For non-trainer expenses irg_rate = 0 so gross_amount == amount.
+
+    Trainer payment modes
+    ─────────────────────
+    trainer_payment_mode → PER_FORMATION | PER_SESSION | DIRECT | None
+    linked_formation     → for PER_FORMATION (covers the whole training program)
+    allocated_to_session → for PER_SESSION (one expense per session, existing field)
+    training_period_label→ free-text period description e.g. "22-24/12/2023"
+    g50_month            → G50 fiscal declaration month (first day of that month)
+    daily_rate_snapshot  → trainer daily rate at time of entry
+    monthly_rate_snapshot→ trainer monthly rate at time of entry
+
+    Cost centre allocation — mutually exclusive
+    ───────────────────────────────────────────
+    allocated_to_session  OR  allocated_to_project  OR  is_overhead = True
+    For TRAINER expenses the session link doubles as the cost centre.
+    clean() enforces exactly one cost centre.
     """
 
     class ApprovalStatus(models.TextChoices):
@@ -979,7 +1222,13 @@ class Expense(TimeStampedModel):
         APPROVED = "approved", "Approuvée"
         REJECTED = "rejected", "Refusée"
 
-    date = models.DateField(verbose_name="Date")
+    class TrainerPaymentMode(models.TextChoices):
+        PER_FORMATION = "per_formation", "Par formation (forfait global)"
+        PER_SESSION = "per_session", "Par session"
+        DIRECT = "direct", "Paiement direct (sans lien)"
+
+    # ---- Core -------------------------------------------------------- #
+    date = models.DateField(verbose_name="Date", db_index=True)
     category = models.ForeignKey(
         ExpenseCategory,
         on_delete=models.PROTECT,
@@ -987,16 +1236,111 @@ class Expense(TimeStampedModel):
         verbose_name="Catégorie",
     )
     description = models.CharField(max_length=500, verbose_name="Description")
-    amount = models.DecimalField(
-        max_digits=14, decimal_places=2, verbose_name="Montant (DA)"
+
+    # ---- Beneficiary -------------------------------------------------- #
+    beneficiary = models.ForeignKey(
+        Beneficiary,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="expenses",
+        verbose_name="Bénéficiaire",
     )
+    payment_account = models.ForeignKey(
+        PaymentAccount,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="expenses",
+        verbose_name="Compte de paiement",
+    )
+    # Legacy free-text (kept for backward compat / non-registered payees)
     supplier = models.CharField(
-        max_length=255, blank=True, verbose_name="Fournisseur / bénéficiaire"
+        max_length=255,
+        blank=True,
+        verbose_name="Fournisseur libre",
+        help_text="Utilisez le champ Bénéficiaire de préférence.",
+    )
+
+    # ---- Amounts & IRG ----------------------------------------------- #
+    gross_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Montant brut (DA)",
+        help_text="Montant avant retenue IRG. Rempli automatiquement si IRG = 0.",
+    )
+    irg_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0"),
+        verbose_name="Taux IRG",
+        help_text="Retenue à la source (ex. 0.10 = 10%). Copié depuis le bénéficiaire.",
+    )
+    irg_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal("0"),
+        verbose_name="Montant IRG (DA)",
+        help_text="Calculé automatiquement : montant brut × taux IRG.",
+    )
+    amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        verbose_name="Montant net (DA)",
+        help_text="Montant effectivement payé = montant brut − IRG.",
     )
     payment_reference = models.CharField(
         max_length=100, blank=True, verbose_name="Référence de paiement"
     )
 
+    # ---- Trainer-specific fields ------------------------------------- #
+    trainer_payment_mode = models.CharField(
+        max_length=20,
+        choices=TrainerPaymentMode.choices,
+        null=True,
+        blank=True,
+        verbose_name="Mode de paiement formateur",
+        help_text="Renseigner uniquement pour les dépenses liées à un formateur.",
+    )
+    linked_formation = models.ForeignKey(
+        "formations.Formation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="trainer_expenses",
+        verbose_name="Formation liée (forfait)",
+        help_text="Pour le mode 'Par formation' — couvre l'ensemble des sessions.",
+    )
+    training_period_label = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Période de formation",
+        help_text="Ex. '22-24/12/2023' — description libre de la période couverte.",
+    )
+    g50_month = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Mois G50",
+        help_text="Premier jour du mois de déclaration G50 (ex. 2026-01-01 pour janvier 2026).",
+    )
+    daily_rate_snapshot = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Tarif journalier (snapshot)",
+    )
+    monthly_rate_snapshot = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Tarif mensuel (snapshot)",
+    )
+
+    # ---- Cost centre allocation --------------------------------------- #
     allocated_to_session = models.ForeignKey(
         "formations.Session",
         on_delete=models.SET_NULL,
@@ -1019,6 +1363,22 @@ class Expense(TimeStampedModel):
         help_text="Cocher si non imputable à un service ou projet.",
     )
 
+    # ---- Archiving / organization ------------------------------------ #
+    fiscal_year = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Exercice fiscal",
+        help_text="Rempli automatiquement d'après la date.",
+        db_index=True,
+    )
+    quarter = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Trimestre",
+        help_text="1–4, calculé automatiquement.",
+    )
+
+    # ---- Documents & approval ---------------------------------------- #
     receipt = models.FileField(
         upload_to="receipts/%Y/%m/", blank=True, verbose_name="Justificatif"
     )
@@ -1042,10 +1402,40 @@ class Expense(TimeStampedModel):
             models.Index(fields=["date"]),
             models.Index(fields=["approval_status"]),
             models.Index(fields=["category"]),
+            models.Index(fields=["fiscal_year", "quarter"]),
+            models.Index(fields=["beneficiary"]),
         ]
 
     def __str__(self):
-        return f"{self.date} — {self.description} ({self.amount} DA)"
+        payee = str(self.beneficiary) if self.beneficiary_id else self.supplier or "—"
+        return f"{self.date} — {self.description} ({self.amount} DA) [{payee}]"
+
+    # ------------------------------------------------------------------ #
+    # Save — auto-compute IRG, gross_amount, fiscal_year, quarter
+    # ------------------------------------------------------------------ #
+
+    def save(self, *args, **kwargs):
+        # Compute IRG and net amount
+        if self.gross_amount is not None:
+            self.irg_amount = (self.gross_amount * self.irg_rate).quantize(
+                Decimal("0.01")
+            )
+            self.amount = self.gross_amount - self.irg_amount
+        else:
+            # gross_amount not provided — treat amount as net (no IRG)
+            self.gross_amount = self.amount
+            self.irg_amount = Decimal("0")
+
+        # Auto-fill fiscal metadata
+        if self.date:
+            self.fiscal_year = self.date.year
+            self.quarter = (self.date.month - 1) // 3 + 1
+
+        super().save(*args, **kwargs)
+
+    # ------------------------------------------------------------------ #
+    # Validation
+    # ------------------------------------------------------------------ #
 
     def clean(self):
         filled = sum(
@@ -1064,6 +1454,29 @@ class Expense(TimeStampedModel):
                 "Une dépense ne peut être imputée qu'à un seul centre de coût."
             )
 
+        # Trainer payment mode cross-field checks
+        if self.trainer_payment_mode == self.TrainerPaymentMode.PER_FORMATION:
+            if not self.linked_formation_id:
+                raise ValidationError(
+                    "Le mode 'Par formation' requiert une formation liée."
+                )
+        if self.trainer_payment_mode == self.TrainerPaymentMode.PER_SESSION:
+            if not self.allocated_to_session_id:
+                raise ValidationError(
+                    "Le mode 'Par session' requiert une session liée."
+                )
+
+        # Payment account must belong to selected beneficiary
+        if self.payment_account_id and self.beneficiary_id:
+            if self.payment_account.beneficiary_id != self.beneficiary_id:
+                raise ValidationError(
+                    "Le compte de paiement ne correspond pas au bénéficiaire sélectionné."
+                )
+
+    # ------------------------------------------------------------------ #
+    # Properties
+    # ------------------------------------------------------------------ #
+
     @property
     def cost_centre_label(self) -> str:
         if self.allocated_to_session_id:
@@ -1081,6 +1494,17 @@ class Expense(TimeStampedModel):
     @property
     def is_approved(self) -> bool:
         return self.approval_status == self.ApprovalStatus.APPROVED
+
+    @property
+    def payee_display(self) -> str:
+        """Human-readable payee for templates."""
+        if self.beneficiary_id:
+            return self.beneficiary.name
+        return self.supplier or "—"
+
+    @property
+    def has_irg(self) -> bool:
+        return self.irg_amount > Decimal("0")
 
 
 # ======================================================================= #

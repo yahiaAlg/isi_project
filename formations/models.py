@@ -104,11 +104,54 @@ class Formation(TimeStampedModel):
 
 
 class Trainer(TimeStampedModel):
+    """
+    A trainer who delivers sessions.
+
+    trainer_type
+    ────────────
+    INTERNAL  — salaried employee of the institute. A linked Beneficiary record
+                (with is_employee=True) is auto-created/kept in sync on save.
+    EXTERNAL  — independent contractor or freelancer.
+
+    IRG withholding (10%) applies only to external trainers under Algerian fiscal law.
+    Internal trainers are paid through payroll, not via expense vouchers.
+    """
+
+    TRAINER_TYPE_INTERNAL = "internal"
+    TRAINER_TYPE_EXTERNAL = "external"
+    TRAINER_TYPE_CHOICES = [
+        (TRAINER_TYPE_INTERNAL, "Interne (salarié)"),
+        (TRAINER_TYPE_EXTERNAL, "Externe (prestataire)"),
+    ]
+
     first_name = models.CharField(max_length=100, verbose_name="Prénom")
     last_name = models.CharField(max_length=100, verbose_name="Nom")
     specialty = models.CharField(max_length=255, blank=True, verbose_name="Spécialité")
+    trainer_type = models.CharField(
+        max_length=10,
+        choices=TRAINER_TYPE_CHOICES,
+        default=TRAINER_TYPE_EXTERNAL,
+        verbose_name="Type",
+        db_index=True,
+    )
+    # ---- Rates ------------------------------------------------------- #
     daily_rate = models.DecimalField(
         max_digits=12, decimal_places=2, default=0, verbose_name="Tarif journalier (DA)"
+    )
+    monthly_rate = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        verbose_name="Tarif mensuel (DA)",
+        help_text="Utilisé pour les formateurs internes ou les contrats au forfait mensuel.",
+    )
+    # ---- Fiscal (external contractors) ------------------------------ #
+    nif = models.CharField(max_length=100, blank=True, verbose_name="NIF")
+    rib = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="RIB",
+        help_text="Relevé d'Identité Bancaire — pour virement.",
     )
     phone = models.CharField(max_length=50, blank=True, verbose_name="Téléphone")
     email = models.EmailField(blank=True, verbose_name="Email")
@@ -125,11 +168,22 @@ class Trainer(TimeStampedModel):
         ordering = ["last_name", "first_name"]
 
     def __str__(self):
-        return self.full_name
+        type_label = (
+            " (Int.)" if self.trainer_type == self.TRAINER_TYPE_INTERNAL else ""
+        )
+        return f"{self.full_name}{type_label}"
 
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
+
+    @property
+    def is_internal(self):
+        return self.trainer_type == self.TRAINER_TYPE_INTERNAL
+
+    @property
+    def is_external(self):
+        return self.trainer_type == self.TRAINER_TYPE_EXTERNAL
 
     @property
     def session_count(self):
@@ -137,6 +191,7 @@ class Trainer(TimeStampedModel):
 
     @property
     def total_earnings(self):
+        """Estimated earnings based on daily rate × session days."""
         sessions = self.sessions.all()
         total_days = sum((s.date_end - s.date_start).days + 1 for s in sessions)
         return total_days * self.daily_rate
@@ -146,6 +201,35 @@ class Trainer(TimeStampedModel):
         return self.sessions.filter(date_start__gte=timezone.now().date()).order_by(
             "date_start"
         )
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Keep linked Beneficiary in sync (lazy import to avoid circular)
+        try:
+            from financial.models import Beneficiary, BeneficiaryType
+
+            btype, _ = BeneficiaryType.objects.get_or_create(
+                slug="formateur",
+                defaults={"name": "Formateur", "is_seeded": True, "color": "#3B82F6"},
+            )
+            Beneficiary.objects.update_or_create(
+                trainer=self,
+                defaults={
+                    "name": self.full_name,
+                    "beneficiary_type": btype,
+                    "is_trainer": True,
+                    "is_employee": self.trainer_type == self.TRAINER_TYPE_INTERNAL,
+                    "nif": self.nif,
+                    "rib": self.rib,
+                    "phone": self.phone,
+                    "email": self.email,
+                    "daily_rate": self.daily_rate,
+                    "monthly_rate": self.monthly_rate,
+                    "is_active": self.is_active,
+                },
+            )
+        except Exception:
+            pass  # financial app may not be migrated yet
 
 
 class TrainingRoom(TimeStampedModel):
