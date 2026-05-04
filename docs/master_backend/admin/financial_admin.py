@@ -337,13 +337,7 @@ class ExpenseAdmin(ImportExportModelAdmin):
         "receipt_missing",
         "needs_action",
     ]
-    list_filter = [
-        "approval_status",
-        "category",
-        "receipt_missing",
-        "fiscal_year",
-        "quarter",
-    ]
+    list_filter = ["approval_status", "category", "receipt_missing", "fiscal_year", "quarter"]
     search_fields = ["description", "supplier", "beneficiary__name"]
     raw_id_fields = [
         "allocated_to_session",
@@ -502,6 +496,7 @@ class InvoiceSequenceAdmin(ImportExportModelAdmin):
         return format_html("<strong>{}</strong>", f"{int(obj.next_number):03d}")
 
 
+
 # ---------------------------------------------------------------------------
 # InvoiceItem (standalone, for bulk import/export support)
 # ---------------------------------------------------------------------------
@@ -542,14 +537,7 @@ class BeneficiaryTypeAdmin(ImportExportModelAdmin):
 class PaymentAccountInline(admin.TabularInline):
     model = PaymentAccount
     extra = 0
-    fields = [
-        "account_type",
-        "label",
-        "account_number",
-        "bank_name",
-        "is_default",
-        "notes",
-    ]
+    fields = ["account_type", "label", "account_number", "bank_name", "is_default", "notes"]
     ordering = ["-is_default", "account_type"]
 
 

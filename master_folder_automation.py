@@ -2,11 +2,11 @@
 import os, shutil
 
 base = "docs/master_backend"
-for module in ("urls",):
+for module in ("admin",):
     os.makedirs(os.path.join(base, module), exist_ok=True)
 
 for app in os.listdir("."):
-    for module in ("urls",):
+    for module in ("admin",):
         src = os.path.join(app, f"{module}.py")
         if os.path.isfile(src):
             dst = os.path.join(base, module, f"{app}_{module}.py")
