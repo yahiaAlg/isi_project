@@ -25,7 +25,6 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils.text import slugify
 
-
 # ─────────────────────────── helpers ──────────────────────────────────── #
 
 
@@ -252,13 +251,13 @@ CLIENTS = [
 ]
 
 FORMATION_CATEGORIES = [
-    {"name": "Sécurité Incendie", "color": "#EF4444"},
-    {"name": "Travaux en Hauteur", "color": "#F97316"},
-    {"name": "Risques Chimiques & ATEX", "color": "#EAB308"},
-    {"name": "Secours & Premiers Secours", "color": "#22C55E"},
-    {"name": "Santé & Sécurité au Travail (SST)", "color": "#3B82F6"},
-    {"name": "Risques Électriques", "color": "#8B5CF6"},
-    {"name": "Manutention & Équipements", "color": "#6B7280"},
+    {"code": "SI", "name": "Sécurité Incendie", "color": "#EF4444"},
+    {"code": "TEH", "name": "Travaux en Hauteur", "color": "#F97316"},
+    {"code": "ATEX", "name": "Risques Chimiques & ATEX", "color": "#EAB308"},
+    {"code": "SPS", "name": "Secours & Premiers Secours", "color": "#22C55E"},
+    {"code": "SST", "name": "Santé & Sécurité au Travail (SST)", "color": "#3B82F6"},
+    {"code": "RE", "name": "Risques Électriques", "color": "#8B5CF6"},
+    {"code": "ME", "name": "Manutention & Équipements", "color": "#6B7280"},
 ]
 
 FORMATIONS = [
@@ -696,13 +695,18 @@ class Command(BaseCommand):
     def _flush(self):
         self.stdout.write(self.style.WARNING("Flushing application data…"))
         from financial.models import (
+            Beneficiary,
+            BeneficiaryType,
             CreditNote,
             Expense,
             ExpenseCategory,
             FinancialPeriod,
             Invoice,
             InvoiceItem,
+            InvoiceSequence,
             Payment,
+            PaymentAccount,
+            ProformaSnapshot,
         )
         from etudes.models import ProjectDeliverable, ProjectPhase, StudyProject
         from formations.models import (
@@ -727,7 +731,9 @@ class Command(BaseCommand):
             CreditNote,
             Payment,
             InvoiceItem,
+            ProformaSnapshot,  # must precede Invoice (OneToOne CASCADE)
             Invoice,
+            InvoiceSequence,  # standalone counter — no FK deps
             Expense,
             ExpenseCategory,
             FinancialPeriod,
@@ -743,6 +749,9 @@ class Command(BaseCommand):
             EquipmentUsage,
             MaintenanceLog,
             Equipment,
+            PaymentAccount,  # must precede Beneficiary
+            Beneficiary,  # must precede BeneficiaryType (PROTECT FK)
+            BeneficiaryType,
             Trainer,
             TrainingRoom,
             ClientContact,
@@ -1166,6 +1175,7 @@ class Command(BaseCommand):
         from clients.models import Client
         from etudes.models import StudyProject
         from financial.models import (
+            BeneficiaryType,
             Expense,
             ExpenseCategory,
             FinancialPeriod,
@@ -1175,6 +1185,11 @@ class Command(BaseCommand):
         )
         from financial.utils import amount_to_words_fr
         from formations.models import Session
+
+        # ---- Beneficiary types (required by Trainer.save() signal) ---- #
+        self._log("Seeding beneficiary types…")
+        BeneficiaryType.seed_defaults()
+        self._ok("  Beneficiary types seeded.")
 
         # ---- Expense categories ---- #
         self._log("Seeding expense categories…")

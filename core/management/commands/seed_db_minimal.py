@@ -10,7 +10,6 @@ Run: python manage.py seed_db
 
 from django.core.management.base import BaseCommand
 
-
 # ── Institute data extracted from the real invoice document ────────────── #
 INSTITUTE = {
     "name": "SARL Mouassasset Tamayouz Lilidara W Essalama",
@@ -125,6 +124,7 @@ class Command(BaseCommand):
         self._seed_admin(force)
         self._seed_institute(force)
         self._seed_formes_juridiques()
+        self._seed_beneficiary_types()
         self._seed_expense_categories()
         self.stdout.write(self.style.SUCCESS("✓ Seed completed successfully."))
 
@@ -225,6 +225,16 @@ class Command(BaseCommand):
             f"  → FormeJuridique: {created} created, "
             f"{len(FORMES_JURIDIQUES) - created} already existed."
         )
+
+    def _seed_beneficiary_types(self):
+        try:
+            from financial.models import BeneficiaryType
+        except ImportError:
+            return
+
+        BeneficiaryType.seed_defaults()
+        count = BeneficiaryType.objects.filter(is_seeded=True).count()
+        self.stdout.write(f"  → BeneficiaryType: {count} system entries ensured.")
 
     def _seed_expense_categories(self):
         try:

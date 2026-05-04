@@ -23,6 +23,8 @@ from django.views.decorators.http import require_POST
 
 from core.utils import admin_required
 from financial.forms import (
+    BeneficiaryForm,
+    BeneficiaryTypeForm,
     BonCommandeForm,
     CreditNoteForm,
     ExpenseCategoryForm,
@@ -32,11 +34,14 @@ from financial.forms import (
     FinancialPeriodForm,
     InvoiceFilterForm,
     InvoiceItemForm,
+    PaymentAccountForm,
     PaymentForm,
     ProformaCreateForm,
     ReportFilterForm,
 )
 from financial.models import (
+    Beneficiary,
+    BeneficiaryType,
     CreditNote,
     Expense,
     ExpenseCategory,
@@ -44,6 +49,7 @@ from financial.models import (
     Invoice,
     InvoiceItem,
     Payment,
+    PaymentAccount,
 )
 from financial.utils import (
     amount_to_words_fr,
@@ -937,7 +943,12 @@ def expense_list(request):
     from django.utils.timezone import now
 
     qs = Expense.objects.select_related(
-        "category", "allocated_to_session", "allocated_to_project"
+        "category",
+        "allocated_to_session",
+        "allocated_to_project",
+        "beneficiary",
+        "beneficiary__beneficiary_type",
+        "payment_account",
     ).order_by("-date")
     form = ExpenseFilterForm(request.GET or None)
 
@@ -949,9 +960,18 @@ def expense_list(request):
         date_to = form.cleaned_data.get("date_to")
         allocation = form.cleaned_data.get("allocation")
         missing_receipt = form.cleaned_data.get("missing_receipt")
+        beneficiary_type = form.cleaned_data.get("beneficiary_type")
+        has_irg = form.cleaned_data.get("has_irg")
+        g50_month = form.cleaned_data.get("g50_month")
+        trainer_payment_mode = form.cleaned_data.get("trainer_payment_mode")
+        quarter = form.cleaned_data.get("quarter")
 
         if q:
-            qs = qs.filter(Q(description__icontains=q) | Q(supplier__icontains=q))
+            qs = qs.filter(
+                Q(description__icontains=q)
+                | Q(beneficiary__name__icontains=q)
+                | Q(supplier__icontains=q)
+            )
         if category:
             qs = qs.filter(category=category)
         if approval_status:
@@ -968,6 +988,29 @@ def expense_list(request):
             qs = qs.filter(is_overhead=True)
         if missing_receipt:
             qs = qs.filter(receipt="", receipt_missing=False)
+        if beneficiary_type:
+            qs = qs.filter(beneficiary__beneficiary_type=beneficiary_type)
+        if has_irg == "yes":
+            qs = qs.filter(irg_rate__gt=0)
+        elif has_irg == "no":
+            qs = qs.filter(irg_rate=0)
+        if g50_month:
+            qs = qs.filter(g50_month=g50_month)
+        if trainer_payment_mode:
+            qs = qs.filter(trainer_payment_mode=trainer_payment_mode)
+        if quarter:
+            year, q_num = int(quarter[:4]), int(quarter[5])
+            month_start = (q_num - 1) * 3 + 1
+            from datetime import date as _date
+
+            qs = qs.filter(
+                date__gte=_date(year, month_start, 1),
+                date__lt=(
+                    _date(year, month_start + 3, 1)
+                    if month_start <= 9
+                    else _date(year + 1, 1, 1)
+                ),
+            )
 
     today = now().date()
     first_of_month = today.replace(day=1)
@@ -1004,11 +1047,30 @@ def expense_list(request):
 def expense_detail(request, pk):
     expense = get_object_or_404(
         Expense.objects.select_related(
-            "category", "allocated_to_session", "allocated_to_project"
+            "category",
+            "allocated_to_session",
+            "allocated_to_project",
+            "beneficiary",
+            "beneficiary__beneficiary_type",
+            "payment_account",
         ),
         pk=pk,
     )
     return render(request, "financial/expense_detail.html", {"expense": expense})
+
+
+def _expense_form_context(form, expense=None, action=""):
+    """Build extra context for expense create/edit (modal forms, beneficiary types)."""
+    from financial.forms import BeneficiaryForm, BeneficiaryTypeForm, PaymentAccountForm
+
+    return {
+        "form": form,
+        "expense": expense,
+        "action": action,
+        "beneficiary_form": BeneficiaryForm(),
+        "beneficiary_type_form": BeneficiaryTypeForm(),
+        "payment_account_form": PaymentAccountForm(),
+    }
 
 
 @admin_required
@@ -1029,7 +1091,7 @@ def expense_create(request):
     return render(
         request,
         "financial/expense_form.html",
-        {"form": form, "action": "Nouvelle dépense"},
+        _expense_form_context(form, action="Nouvelle dépense"),
     )
 
 
@@ -1040,9 +1102,9 @@ def expense_edit(request, pk):
 
     if request.method == "POST" and form.is_valid():
         try:
-            expense = form.save(commit=False)
-            expense.full_clean()
-            expense.save()
+            updated = form.save(commit=False)
+            updated.full_clean()
+            updated.save()
             messages.success(request, "Dépense mise à jour.")
             return redirect("financial:expense_detail", pk=expense.pk)
         except ValidationError as exc:
@@ -1052,7 +1114,7 @@ def expense_edit(request, pk):
     return render(
         request,
         "financial/expense_form.html",
-        {"form": form, "expense": expense, "action": "Modifier la dépense"},
+        _expense_form_context(form, expense=expense, action="Modifier la dépense"),
     )
 
 
@@ -1424,3 +1486,311 @@ def invoice_sequence_list(request):
         "financial/invoice_sequence_list.html",
         {"sequences": sequences, "years": years},
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Beneficiary directory — CRUD
+# ─────────────────────────────────────────────────────────────────────────── #
+
+
+@admin_required
+def beneficiary_list(request):
+    qs = Beneficiary.objects.select_related("beneficiary_type", "trainer").order_by(
+        "name"
+    )
+
+    q = request.GET.get("q", "").strip()
+    btype = request.GET.get("type", "").strip()
+    if q:
+        qs = qs.filter(Q(name__icontains=q) | Q(nif__icontains=q))
+    if btype:
+        qs = qs.filter(beneficiary_type_id=btype)
+
+    paginator = Paginator(qs, 30)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    btypes = BeneficiaryType.objects.order_by("name")
+    return render(
+        request,
+        "financial/beneficiary_list.html",
+        {"page_obj": page_obj, "btypes": btypes, "q": q, "btype": btype},
+    )
+
+
+@admin_required
+def beneficiary_detail(request, pk):
+    beneficiary = get_object_or_404(
+        Beneficiary.objects.select_related("beneficiary_type", "trainer"),
+        pk=pk,
+    )
+    accounts = beneficiary.accounts.order_by("-is_default", "account_type")
+    expenses = (
+        Expense.objects.filter(beneficiary=beneficiary)
+        .select_related("category")
+        .order_by("-date")[:20]
+    )
+    return render(
+        request,
+        "financial/beneficiary_detail.html",
+        {
+            "beneficiary": beneficiary,
+            "accounts": accounts,
+            "expenses": expenses,
+            "account_form": PaymentAccountForm(beneficiary=beneficiary),
+        },
+    )
+
+
+@admin_required
+def beneficiary_create(request):
+    from financial.forms import BeneficiaryForm, BeneficiaryTypeForm
+
+    form = BeneficiaryForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        beneficiary = form.save()
+        messages.success(request, f"Bénéficiaire « {beneficiary.name} » créé.")
+        return redirect("financial:beneficiary_detail", pk=beneficiary.pk)
+    return render(
+        request,
+        "financial/beneficiary_form.html",
+        {
+            "form": form,
+            "action": "Nouveau bénéficiaire",
+            "beneficiary_type_form": BeneficiaryTypeForm(),
+        },
+    )
+
+
+@admin_required
+def beneficiary_edit(request, pk):
+    from financial.forms import BeneficiaryForm
+
+    beneficiary = get_object_or_404(Beneficiary, pk=pk)
+    form = BeneficiaryForm(request.POST or None, instance=beneficiary)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Bénéficiaire mis à jour.")
+        return redirect("financial:beneficiary_detail", pk=pk)
+    return render(
+        request,
+        "financial/beneficiary_form.html",
+        {"form": form, "action": "Modifier", "beneficiary": beneficiary},
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# PaymentAccount — nested under beneficiary
+# ─────────────────────────────────────────────────────────────────────────── #
+
+
+@admin_required
+def payment_account_create(request, beneficiary_pk):
+    beneficiary = get_object_or_404(Beneficiary, pk=beneficiary_pk)
+    form = PaymentAccountForm(request.POST or None, beneficiary=beneficiary)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Compte ajouté.")
+        return redirect("financial:beneficiary_detail", pk=beneficiary_pk)
+    return render(
+        request,
+        "financial/payment_account_form.html",
+        {"form": form, "beneficiary": beneficiary, "action": "Nouveau compte"},
+    )
+
+
+@admin_required
+def payment_account_edit(request, beneficiary_pk, pk):
+    beneficiary = get_object_or_404(Beneficiary, pk=beneficiary_pk)
+    account = get_object_or_404(PaymentAccount, pk=pk, beneficiary=beneficiary)
+    form = PaymentAccountForm(
+        request.POST or None, instance=account, beneficiary=beneficiary
+    )
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Compte mis à jour.")
+        return redirect("financial:beneficiary_detail", pk=beneficiary_pk)
+    return render(
+        request,
+        "financial/payment_account_form.html",
+        {
+            "form": form,
+            "beneficiary": beneficiary,
+            "account": account,
+            "action": "Modifier le compte",
+        },
+    )
+
+
+@admin_required
+@require_POST
+def payment_account_delete(request, beneficiary_pk, pk):
+    account = get_object_or_404(PaymentAccount, pk=pk, beneficiary_id=beneficiary_pk)
+    account.delete()
+    messages.success(request, "Compte supprimé.")
+    return redirect("financial:beneficiary_detail", pk=beneficiary_pk)
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# BeneficiaryType — inline management
+# ─────────────────────────────────────────────────────────────────────────── #
+
+
+@admin_required
+def beneficiary_type_list(request):
+    from financial.forms import BeneficiaryTypeForm as BTForm
+
+    types = BeneficiaryType.objects.order_by("name")
+    form = BTForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        btype = form.save()
+        messages.success(request, f"Type « {btype.name} » créé.")
+        return redirect("financial:beneficiary_type_list")
+    return render(
+        request,
+        "financial/beneficiary_type_list.html",
+        {"types": types, "form": form},
+    )
+
+
+@admin_required
+@require_POST
+def beneficiary_type_delete(request, pk):
+    btype = get_object_or_404(BeneficiaryType, pk=pk)
+    if btype.beneficiaries.exists():
+        messages.error(
+            request,
+            f"Impossible de supprimer « {btype.name} » — des bénéficiaires y sont rattachés.",
+        )
+    else:
+        btype.delete()
+        messages.success(request, f"Type « {btype.name} » supprimé.")
+    return redirect("financial:beneficiary_type_list")
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# AJAX / modal quick-add endpoints
+# ─────────────────────────────────────────────────────────────────────────── #
+
+
+@admin_required
+def beneficiary_quick_add(request):
+    """
+    POST-only modal endpoint.
+    On success: returns JSON {success: true, id, name, irg_rate, default_account_id}.
+    On error:   returns JSON {success: false, errors: {field: [msg]}}.
+    The expense form JS uses this to add the new beneficiary to the select
+    and immediately populate the accounts dropdown.
+    """
+    from financial.forms import BeneficiaryForm
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "errors": {"__all__": ["Méthode non autorisée."]}},
+            status=405,
+        )
+
+    form = BeneficiaryForm(request.POST)
+    if form.is_valid():
+        beneficiary = form.save()
+        default_acct = beneficiary.default_account
+        return JsonResponse(
+            {
+                "success": True,
+                "id": beneficiary.pk,
+                "name": beneficiary.name,
+                "irg_rate": str(beneficiary.irg_rate),
+                "default_account_id": default_acct.pk if default_acct else None,
+            }
+        )
+    return JsonResponse({"success": False, "errors": form.errors}, status=400)
+
+
+@admin_required
+def payment_account_quick_add(request):
+    """
+    POST-only modal endpoint.
+    Expects beneficiary_id in POST data.
+    On success: returns JSON {success: true, id, label, account_type, is_default}.
+    """
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "errors": {"__all__": ["Méthode non autorisée."]}},
+            status=405,
+        )
+
+    beneficiary_pk = request.POST.get("beneficiary_id")
+    try:
+        beneficiary = Beneficiary.objects.get(pk=beneficiary_pk)
+    except (Beneficiary.DoesNotExist, ValueError, TypeError):
+        return JsonResponse(
+            {
+                "success": False,
+                "errors": {"beneficiary_id": ["Bénéficiaire introuvable."]},
+            },
+            status=400,
+        )
+
+    form = PaymentAccountForm(request.POST, beneficiary=beneficiary)
+    if form.is_valid():
+        account = form.save()
+        return JsonResponse(
+            {
+                "success": True,
+                "id": account.pk,
+                "label": str(account),
+                "account_type": account.account_type,
+                "account_type_display": account.get_account_type_display(),
+                "is_default": account.is_default,
+            }
+        )
+    return JsonResponse({"success": False, "errors": form.errors}, status=400)
+
+
+@admin_required
+def beneficiary_type_quick_add(request):
+    """
+    POST-only modal endpoint to create a BeneficiaryType on-the-fly.
+    Returns JSON {success: true, id, name}.
+    """
+    from financial.forms import BeneficiaryTypeForm
+
+    if request.method != "POST":
+        return JsonResponse({"success": False}, status=405)
+
+    form = BeneficiaryTypeForm(request.POST)
+    if form.is_valid():
+        btype = form.save()
+        return JsonResponse({"success": True, "id": btype.pk, "name": btype.name})
+    return JsonResponse({"success": False, "errors": form.errors}, status=400)
+
+
+@admin_required
+def beneficiary_accounts_json(request, pk):
+    """
+    GET endpoint — returns all payment accounts for a beneficiary as JSON.
+    Used by the expense form to populate the accounts <select> when the
+    beneficiary dropdown changes.
+
+    Response shape:
+      {
+        accounts: [{id, label, account_type, account_type_display, is_default}, ...],
+        irg_rate: "0.10"
+      }
+    """
+    beneficiary = get_object_or_404(Beneficiary, pk=pk)
+    accounts = list(
+        beneficiary.accounts.values(
+            "id", "account_type", "account_number", "bank_name", "is_default"
+        ).order_by("-is_default", "account_type")
+    )
+    # Build human-readable label for each account
+    type_display = dict(PaymentAccount.ACCOUNT_TYPE_CHOICES)
+    for acct in accounts:
+        parts = [type_display.get(acct["account_type"], acct["account_type"])]
+        if acct["account_number"]:
+            parts.append(acct["account_number"])
+        if acct["bank_name"]:
+            parts.append(f"({acct['bank_name']})")
+        acct["label"] = " — ".join(parts)
+        acct["account_type_display"] = type_display.get(acct["account_type"], "")
+
+    return JsonResponse({"accounts": accounts, "irg_rate": str(beneficiary.irg_rate)})

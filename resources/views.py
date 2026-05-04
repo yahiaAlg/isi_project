@@ -23,7 +23,6 @@ from resources.utils import (
     equipment_maintenance_due_list,
 )
 
-
 # ---------------------------------------------------------------------------
 # Trainers
 # ---------------------------------------------------------------------------
@@ -55,10 +54,36 @@ def trainer_list(request):
 def trainer_detail(request, pk):
     trainer = get_object_or_404(Trainer, pk=pk)
     sessions = trainer.sessions.select_related("formation").order_by("-date_start")[:10]
+
+    # Linked beneficiary (auto-created on save for external trainers)
+    beneficiary = None
+    beneficiary_accounts = []
+    recent_expenses = []
+    try:
+        from financial.models import Beneficiary, Expense
+
+        beneficiary = trainer.beneficiary  # OneToOneField reverse
+        beneficiary_accounts = beneficiary.accounts.order_by(
+            "-is_default", "account_type"
+        )
+        recent_expenses = (
+            Expense.objects.filter(beneficiary=beneficiary)
+            .select_related("category")
+            .order_by("-date")[:10]
+        )
+    except Exception:
+        pass
+
     return render(
         request,
         "resources/trainer_detail.html",
-        {"trainer": trainer, "sessions": sessions},
+        {
+            "trainer": trainer,
+            "sessions": sessions,
+            "beneficiary": beneficiary,
+            "beneficiary_accounts": beneficiary_accounts,
+            "recent_expenses": recent_expenses,
+        },
     )
 
 

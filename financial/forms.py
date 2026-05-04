@@ -1,8 +1,15 @@
 # =============================================================================
-# financial/forms.py  —  v3.1
+# financial/forms.py  —  v4.0
 # =============================================================================
-# Changes in v3.1:
-# * FinalizeInvoiceForm — added mode_reglement (required) + due_date (optional).
+# Changes in v4.0:
+# * Added BeneficiaryTypeForm  — quick-add modal for beneficiary types.
+# * Added BeneficiaryForm      — quick-add modal for registered payees.
+# * Added PaymentAccountForm   — quick-add modal for payment accounts.
+# * ExpenseForm rewritten      — full new fields: beneficiary, payment_account,
+#   gross_amount, irg_rate, trainer_payment_mode, linked_formation,
+#   training_period_label, g50_month, rate snapshots.
+# * ExpenseFilterForm extended — beneficiary, beneficiary_type, fiscal_year,
+#   quarter, g50_month, trainer_payment_mode filters.
 # =============================================================================
 
 from decimal import Decimal
@@ -13,12 +20,15 @@ from django.core.exceptions import ValidationError
 from clients.models import Client
 from core.form_mixins import ISIFormMixin
 from financial.models import (
+    Beneficiary,
+    BeneficiaryType,
     CreditNote,
     Expense,
     ExpenseCategory,
     FinancialPeriod,
     Invoice,
     InvoiceItem,
+    PaymentAccount,
     Payment,
 )
 
@@ -379,23 +389,230 @@ class CreditNoteForm(ISIFormMixin, forms.ModelForm):
 
 
 # ---------------------------------------------------------------------------
-# Expense forms
+# Beneficiary system forms  (v4.0 — quick-add modals)
+# ---------------------------------------------------------------------------
+
+
+class BeneficiaryTypeForm(ISIFormMixin, forms.ModelForm):
+    """
+    Quick-add modal form for creating a new BeneficiaryType on-the-fly
+    from the expense entry screen.
+    """
+
+    class Meta:
+        model = BeneficiaryType
+        fields = ["name", "color"]
+        labels = {
+            "name": "Libellé",
+            "color": "Couleur",
+        }
+        widgets = {
+            "color": forms.TextInput(
+                attrs={"type": "color", "style": "height:38px;padding:4px 6px;"}
+            ),
+        }
+
+    def clean_name(self):
+        name = self.cleaned_data.get("name", "").strip()
+        if not name:
+            raise ValidationError("Le libellé est obligatoire.")
+        qs = BeneficiaryType.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise ValidationError(f"« {name} » existe déjà.")
+        return name
+
+
+class BeneficiaryForm(ISIFormMixin, forms.ModelForm):
+    """
+    Quick-add modal form for creating / editing a Beneficiary record.
+    Used from the expense entry screen when the payee is not yet registered.
+    IRG rate is pre-filled (0% for employees, 10% for external trainers)
+    but can be adjusted.
+    """
+
+    class Meta:
+        model = Beneficiary
+        fields = [
+            "name",
+            "beneficiary_type",
+            "nif",
+            "rib",
+            "phone",
+            "email",
+            "address",
+            "daily_rate",
+            "monthly_rate",
+            "irg_rate",
+            "notes",
+        ]
+        labels = {
+            "name": "Nom / Raison sociale",
+            "beneficiary_type": "Type",
+            "nif": "NIF",
+            "rib": "RIB",
+            "phone": "Téléphone",
+            "email": "Email",
+            "address": "Adresse",
+            "daily_rate": "Tarif journalier (DA)",
+            "monthly_rate": "Tarif mensuel (DA)",
+            "irg_rate": "Taux IRG",
+            "notes": "Notes",
+        }
+        widgets = {
+            "address": forms.Textarea(attrs={"rows": 2}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+        help_texts = {
+            "irg_rate": "Retenue IRG : 0 pour aucune, 0.10 pour 10% (prestataires externes).",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for f in (
+            "nif",
+            "rib",
+            "phone",
+            "email",
+            "address",
+            "daily_rate",
+            "monthly_rate",
+            "irg_rate",
+            "notes",
+        ):
+            self.fields[f].required = False
+        self.fields["beneficiary_type"].queryset = BeneficiaryType.objects.filter(
+            is_active=True
+        ).order_by("name")
+        # irg_rate: show as percentage-friendly with 4 decimal places
+        self.fields["irg_rate"].widget.attrs.update(
+            {"step": "0.01", "min": "0", "max": "1"}
+        )
+
+    def clean_irg_rate(self):
+        rate = self.cleaned_data.get("irg_rate")
+        if rate is not None and not (Decimal("0") <= rate <= Decimal("1")):
+            raise ValidationError(
+                "Le taux IRG doit être compris entre 0 et 1 (ex. 0.10 pour 10%)."
+            )
+        return rate or Decimal("0")
+
+    def clean_name(self):
+        name = self.cleaned_data.get("name", "").strip()
+        if not name:
+            raise ValidationError("Le nom est obligatoire.")
+        return name
+
+
+class PaymentAccountForm(ISIFormMixin, forms.ModelForm):
+    """
+    Quick-add modal form for adding a PaymentAccount to a Beneficiary.
+    Shown from the expense entry screen when the required account doesn't
+    exist yet. The `beneficiary` FK is injected from the view, not from
+    user input, so it is not exposed in the form fields.
+    """
+
+    class Meta:
+        model = PaymentAccount
+        fields = [
+            "account_type",
+            "label",
+            "account_number",
+            "bank_name",
+            "is_default",
+            "notes",
+        ]
+        labels = {
+            "account_type": "Type de compte",
+            "label": "Libellé",
+            "account_number": "Numéro / Code",
+            "bank_name": "Banque / Établissement",
+            "is_default": "Compte par défaut",
+            "notes": "Notes",
+        }
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def __init__(self, *args, beneficiary=None, **kwargs):
+        self.beneficiary = beneficiary
+        super().__init__(*args, **kwargs)
+        for f in ("label", "account_number", "bank_name", "notes"):
+            self.fields[f].required = False
+
+    def save(self, commit=True):
+        account = super().save(commit=False)
+        if self.beneficiary:
+            account.beneficiary = self.beneficiary
+        if commit:
+            account.save()
+        return account
+
+
+# ---------------------------------------------------------------------------
+# Expense forms  (v4.0)
 # ---------------------------------------------------------------------------
 
 
 class ExpenseForm(ISIFormMixin, forms.ModelForm):
+    """
+    Full expense entry form — v4.0.
+
+    Beneficiary & payment account
+    ──────────────────────────────
+    - beneficiary:       select from registered payees. JS auto-populates
+                         irg_rate from Beneficiary.irg_rate and filters the
+                         payment_account dropdown to that beneficiary's accounts.
+    - payment_account:   select from the chosen beneficiary's accounts.
+      Both can be left blank for unregistered / one-off payees; use
+      `supplier` (legacy free-text) in that case.
+
+    IRG
+    ───
+    gross_amount is the brut figure; irg_rate and irg_amount are computed
+    in Expense.save(). The form exposes gross_amount and irg_rate so the
+    user can verify them before saving.
+
+    Trainer fields
+    ──────────────
+    trainer_payment_mode, linked_formation, training_period_label, g50_month,
+    daily_rate_snapshot, monthly_rate_snapshot are only relevant when the
+    beneficiary is a trainer. The template uses JS to show/hide them.
+
+    Cost centre
+    ───────────
+    Exactly one of allocated_to_session / allocated_to_project / is_overhead
+    must be set. Enforced in Expense.clean().
+    """
+
     class Meta:
         model = Expense
         fields = [
+            # Core
             "date",
             "category",
             "description",
-            "amount",
+            # Beneficiary
+            "beneficiary",
+            "payment_account",
             "supplier",
+            # Amounts & IRG
+            "gross_amount",
+            "irg_rate",
             "payment_reference",
+            # Trainer-specific
+            "trainer_payment_mode",
+            "linked_formation",
+            "training_period_label",
+            "g50_month",
+            "daily_rate_snapshot",
+            "monthly_rate_snapshot",
+            # Cost centre
             "allocated_to_session",
             "allocated_to_project",
             "is_overhead",
+            # Archiving
             "receipt",
             "receipt_missing",
             "approval_status",
@@ -406,9 +623,18 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "date": "Date",
             "category": "Catégorie",
             "description": "Description",
-            "amount": "Montant (DA)",
-            "supplier": "Fournisseur / bénéficiaire",
+            "beneficiary": "Bénéficiaire",
+            "payment_account": "Compte de paiement",
+            "supplier": "Fournisseur libre (si non enregistré)",
+            "gross_amount": "Montant brut (DA)",
+            "irg_rate": "Taux IRG",
             "payment_reference": "Réf. paiement",
+            "trainer_payment_mode": "Mode de paiement formateur",
+            "linked_formation": "Formation liée (forfait)",
+            "training_period_label": "Période couverte",
+            "g50_month": "Mois G50",
+            "daily_rate_snapshot": "Tarif journalier (snapshot)",
+            "monthly_rate_snapshot": "Tarif mensuel (snapshot)",
             "allocated_to_session": "Session",
             "allocated_to_project": "Projet",
             "is_overhead": "Frais généraux",
@@ -420,41 +646,138 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
         }
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
-            "notes": forms.Textarea(attrs={"rows": 3}),
+            "g50_month": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
             "approval_notes": forms.Textarea(attrs={"rows": 2}),
+            "irg_rate": forms.NumberInput(
+                attrs={"step": "0.01", "min": "0", "max": "1"}
+            ),
+        }
+        help_texts = {
+            "gross_amount": "Montant avant retenue IRG. Si IRG = 0, identique au montant net.",
+            "irg_rate": "0 = pas de retenue ; 0.10 = 10% (prestataires externes).",
+            "g50_month": "Premier jour du mois de déclaration G50 (ex. 2026-01-01).",
+            "training_period_label": "Ex. « 22-24/12/2023 » — description libre de la période.",
+            "supplier": "Utilisez ce champ uniquement si le bénéficiaire n'est pas enregistré.",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for f in (
+
+        # Optional fields
+        optional = [
+            "beneficiary",
+            "payment_account",
             "supplier",
+            "irg_rate",
             "payment_reference",
+            "trainer_payment_mode",
+            "linked_formation",
+            "training_period_label",
+            "g50_month",
+            "daily_rate_snapshot",
+            "monthly_rate_snapshot",
             "allocated_to_session",
             "allocated_to_project",
             "receipt",
-            "approval_status",  # not rendered in the create form; default applied below
+            "approval_status",
             "approval_notes",
             "notes",
-        ):
-            self.fields[f].required = False
+        ]
+        for f in optional:
+            if f in self.fields:
+                self.fields[f].required = False
 
-    def clean_approval_status(self):
-        """
-        approval_status is not shown in the create/edit template.
-        Default to PENDING so the form never fails silently on missing data.
-        On edit the existing value is preserved via the bound instance.
-        """
-        value = self.cleaned_data.get("approval_status")
-        if not value:
-            return Expense.ApprovalStatus.PENDING
-        return value
+        # Beneficiary — active only
+        self.fields["beneficiary"].queryset = (
+            Beneficiary.objects.filter(is_active=True)
+            .select_related("beneficiary_type")
+            .order_by("name")
+        )
+        self.fields["beneficiary"].empty_label = "— Sélectionner ou ajouter —"
+
+        # Payment account — filtered dynamically by JS; start with all or
+        # filter by bound instance's beneficiary if editing.
+        pa_qs = PaymentAccount.objects.select_related("beneficiary")
+        if self.instance and self.instance.pk and self.instance.beneficiary_id:
+            pa_qs = pa_qs.filter(beneficiary=self.instance.beneficiary)
+        self.fields["payment_account"].queryset = pa_qs
+        self.fields["payment_account"].empty_label = "— Sélectionner un compte —"
+
+        # Trainer mode initial values from bound instance
+        if self.instance and self.instance.pk:
+            if self.instance.daily_rate_snapshot:
+                self.fields["daily_rate_snapshot"].initial = (
+                    self.instance.daily_rate_snapshot
+                )
+            if self.instance.monthly_rate_snapshot:
+                self.fields["monthly_rate_snapshot"].initial = (
+                    self.instance.monthly_rate_snapshot
+                )
+
+    def clean_irg_rate(self):
+        rate = self.cleaned_data.get("irg_rate")
+        if rate is None:
+            return Decimal("0")
+        if not (Decimal("0") <= rate <= Decimal("1")):
+            raise ValidationError("Le taux IRG doit être compris entre 0 et 1.")
+        return rate
+
+    def clean_gross_amount(self):
+        amount = self.cleaned_data.get("gross_amount")
+        if amount is not None and amount <= 0:
+            raise ValidationError("Le montant brut doit être positif.")
+        return amount
+
+    def clean(self):
+        cleaned = super().clean()
+
+        # gross_amount is required — if omitted, treat amount field as gross
+        gross = cleaned.get("gross_amount")
+        if gross is None:
+            raise ValidationError({"gross_amount": "Le montant brut est requis."})
+
+        # Payment account must belong to selected beneficiary
+        beneficiary = cleaned.get("beneficiary")
+        payment_account = cleaned.get("payment_account")
+        if payment_account and beneficiary:
+            if payment_account.beneficiary_id != beneficiary.pk:
+                self.add_error(
+                    "payment_account",
+                    "Ce compte n'appartient pas au bénéficiaire sélectionné.",
+                )
+
+        # Trainer mode cross-checks
+        tpm = cleaned.get("trainer_payment_mode")
+        if tpm == Expense.TrainerPaymentMode.PER_FORMATION:
+            if not cleaned.get("linked_formation"):
+                self.add_error(
+                    "linked_formation", "La formation liée est requise pour ce mode."
+                )
+        if tpm == Expense.TrainerPaymentMode.PER_SESSION:
+            if not cleaned.get("allocated_to_session"):
+                self.add_error(
+                    "allocated_to_session",
+                    "La session est requise pour le mode 'Par session'.",
+                )
+
+        return cleaned
+
+    def save(self, commit=True):
+        expense = super().save(commit=False)
+        # Mirror gross_amount into Expense.amount (net computed in model.save())
+        if expense.gross_amount is not None:
+            expense.amount = expense.gross_amount  # model.save() will subtract IRG
+        if commit:
+            expense.save()
+        return expense
 
 
 class ExpenseFilterForm(ISIFormMixin, forms.Form):
     q = forms.CharField(
         label="Recherche",
         required=False,
-        widget=forms.TextInput(attrs={"placeholder": "Description, fournisseur…"}),
+        widget=forms.TextInput(attrs={"placeholder": "Description, bénéficiaire…"}),
     )
     category = forms.ModelChoiceField(
         label="Catégorie",
@@ -462,10 +785,27 @@ class ExpenseFilterForm(ISIFormMixin, forms.Form):
         queryset=ExpenseCategory.objects.all(),
         empty_label="Toutes",
     )
+    beneficiary = forms.ModelChoiceField(
+        label="Bénéficiaire",
+        required=False,
+        queryset=Beneficiary.objects.filter(is_active=True).order_by("name"),
+        empty_label="Tous",
+    )
+    beneficiary_type = forms.ModelChoiceField(
+        label="Type de bénéficiaire",
+        required=False,
+        queryset=BeneficiaryType.objects.filter(is_active=True).order_by("name"),
+        empty_label="Tous les types",
+    )
     approval_status = forms.ChoiceField(
         label="Approbation",
         required=False,
         choices=[("", "Tous")] + Expense.ApprovalStatus.choices,
+    )
+    trainer_payment_mode = forms.ChoiceField(
+        label="Mode formateur",
+        required=False,
+        choices=[("", "Tous")] + Expense.TrainerPaymentMode.choices,
     )
     date_from = forms.DateField(
         label="Du",
@@ -477,6 +817,22 @@ class ExpenseFilterForm(ISIFormMixin, forms.Form):
         required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
     )
+    fiscal_year = forms.IntegerField(
+        label="Exercice",
+        required=False,
+        widget=forms.NumberInput(attrs={"placeholder": "ex. 2026"}),
+    )
+    quarter = forms.ChoiceField(
+        label="Trimestre",
+        required=False,
+        choices=[("", "Tous"), ("1", "T1"), ("2", "T2"), ("3", "T3"), ("4", "T4")],
+    )
+    g50_month = forms.DateField(
+        label="Mois G50",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+        help_text="Filtre par mois G50 (date exacte du premier du mois).",
+    )
     allocation = forms.ChoiceField(
         label="Affectation",
         required=False,
@@ -486,6 +842,11 @@ class ExpenseFilterForm(ISIFormMixin, forms.Form):
             ("project", "Projet"),
             ("overhead", "Frais généraux"),
         ],
+    )
+    has_irg = forms.ChoiceField(
+        label="IRG",
+        required=False,
+        choices=[("", "Tous"), ("yes", "Avec IRG"), ("no", "Sans IRG")],
     )
 
 
