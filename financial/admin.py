@@ -10,6 +10,7 @@
 
 from django.contrib import admin
 from django.utils.html import format_html
+from import_export.admin import ImportExportModelAdmin
 
 from financial.models import (
     CreditNote,
@@ -21,7 +22,16 @@ from financial.models import (
     InvoiceSequence,
     Payment,
 )
-
+from financial.resources import (
+    CreditNoteResource,
+    ExpenseCategoryResource,
+    ExpenseResource,
+    FinancialPeriodResource,
+    InvoiceItemResource,
+    InvoiceResource,
+    InvoiceSequenceResource,
+    PaymentResource,
+)
 
 # ---------------------------------------------------------------------------
 # Inlines
@@ -66,7 +76,9 @@ class PaymentInline(admin.TabularInline):
 
 
 @admin.register(Invoice)
-class InvoiceAdmin(admin.ModelAdmin):
+class InvoiceAdmin(ImportExportModelAdmin):
+    resource_class = InvoiceResource
+
     list_display = [
         "display_reference",
         "phase",
@@ -205,8 +217,6 @@ class InvoiceAdmin(admin.ModelAdmin):
         ("Textes", {"fields": ["notes", "footer_text"]}),
     ]
 
-    # ---- Custom list display columns --------------------------------- #
-
     @admin.display(description="Référence")
     def display_reference(self, obj):
         return obj.reference or obj.proforma_reference
@@ -218,8 +228,6 @@ class InvoiceAdmin(admin.ModelAdmin):
     @admin.display(description="En retard", boolean=True)
     def is_overdue_display(self, obj):
         return obj.is_overdue
-
-    # ---- Computed readonly fields (v3.1) ----------------------------- #
 
     @admin.display(description="Timbre fiscal (DA)")
     def timbre_fiscal(self, obj):
@@ -255,7 +263,9 @@ class InvoiceAdmin(admin.ModelAdmin):
 
 
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
+class PaymentAdmin(ImportExportModelAdmin):
+    resource_class = PaymentResource
+
     list_display = ["invoice", "date", "amount", "method", "status", "reference"]
     list_filter = ["status", "method", "date"]
     search_fields = ["invoice__reference", "invoice__proforma_reference", "reference"]
@@ -268,7 +278,9 @@ class PaymentAdmin(admin.ModelAdmin):
 
 
 @admin.register(CreditNote)
-class CreditNoteAdmin(admin.ModelAdmin):
+class CreditNoteAdmin(ImportExportModelAdmin):
+    resource_class = CreditNoteResource
+
     list_display = [
         "reference",
         "original_invoice",
@@ -291,13 +303,17 @@ class CreditNoteAdmin(admin.ModelAdmin):
 
 
 @admin.register(ExpenseCategory)
-class ExpenseCategoryAdmin(admin.ModelAdmin):
+class ExpenseCategoryAdmin(ImportExportModelAdmin):
+    resource_class = ExpenseCategoryResource
+
     list_display = ["name", "is_direct_cost", "color"]
     list_filter = ["is_direct_cost"]
 
 
 @admin.register(Expense)
-class ExpenseAdmin(admin.ModelAdmin):
+class ExpenseAdmin(ImportExportModelAdmin):
+    resource_class = ExpenseResource
+
     list_display = [
         "date",
         "description",
@@ -352,7 +368,9 @@ class ExpenseAdmin(admin.ModelAdmin):
 
 
 @admin.register(FinancialPeriod)
-class FinancialPeriodAdmin(admin.ModelAdmin):
+class FinancialPeriodAdmin(ImportExportModelAdmin):
+    resource_class = FinancialPeriodResource
+
     list_display = [
         "name",
         "period_type",
@@ -380,12 +398,14 @@ class FinancialPeriodAdmin(admin.ModelAdmin):
 
 
 @admin.register(InvoiceSequence)
-class InvoiceSequenceAdmin(admin.ModelAdmin):
+class InvoiceSequenceAdmin(ImportExportModelAdmin):
     """
     Allows operators to inspect and override the proforma / finale counters.
     Set `last_number` to N-1 so that the next invoice gets number N.
     Example: last_number = 4  →  next invoice = FP-005-2026.
     """
+
+    resource_class = InvoiceSequenceResource
 
     list_display = [
         "__str__",
@@ -401,4 +421,20 @@ class InvoiceSequenceAdmin(admin.ModelAdmin):
 
     @admin.display(description="Prochain n°")
     def next_number_display(self, obj):
-        return format_html("<strong>{:03d}</strong>", obj.next_number)
+        return format_html("<strong>{}</strong>", f"{int(obj.next_number):03d}")
+
+
+# ---------------------------------------------------------------------------
+# InvoiceItem (standalone, for bulk import/export support)
+# ---------------------------------------------------------------------------
+
+
+@admin.register(InvoiceItem)
+class InvoiceItemAdmin(ImportExportModelAdmin):
+    resource_class = InvoiceItemResource
+
+    list_display = ["invoice", "order", "description", "pricing_mode", "total_ht"]
+    list_filter = ["pricing_mode"]
+    search_fields = ["description", "invoice__reference", "invoice__proforma_reference"]
+    raw_id_fields = ["invoice"]
+    readonly_fields = ["total_ht"]

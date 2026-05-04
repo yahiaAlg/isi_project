@@ -3,6 +3,8 @@
 # =============================================================================
 
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
+
 from formations.models import (
     Attestation,
     Formation,
@@ -10,10 +12,19 @@ from formations.models import (
     Participant,
     Session,
 )
+from formations.resources import (
+    AttestationResource,
+    FormationCategoryResource,
+    FormationResource,
+    ParticipantResource,
+    SessionResource,
+)
 
 
 @admin.register(FormationCategory)
-class FormationCategoryAdmin(admin.ModelAdmin):
+class FormationCategoryAdmin(ImportExportModelAdmin):
+    resource_class = FormationCategoryResource
+
     list_display = ["name", "color"]
     search_fields = ["name"]
 
@@ -27,7 +38,9 @@ class SessionInline(admin.TabularInline):
 
 
 @admin.register(Formation)
-class FormationAdmin(admin.ModelAdmin):
+class FormationAdmin(ImportExportModelAdmin):
+    resource_class = FormationResource
+
     list_display = [
         "title",
         "category",
@@ -76,7 +89,9 @@ class ParticipantInline(admin.TabularInline):
 
 
 @admin.register(Session)
-class SessionAdmin(admin.ModelAdmin):
+class SessionAdmin(ImportExportModelAdmin):
+    resource_class = SessionResource
+
     list_display = [
         "formation",
         "client",
@@ -125,7 +140,9 @@ class SessionAdmin(admin.ModelAdmin):
 
 
 @admin.register(Participant)
-class ParticipantAdmin(admin.ModelAdmin):
+class ParticipantAdmin(ImportExportModelAdmin):
+    resource_class = ParticipantResource
+
     list_display = ["full_name", "employer", "session", "attended", "has_attestation"]
     list_filter = ["attended", "session__status"]
     search_fields = ["first_name", "last_name", "email", "employer"]
@@ -137,7 +154,9 @@ class ParticipantAdmin(admin.ModelAdmin):
 
 
 @admin.register(Attestation)
-class AttestationAdmin(admin.ModelAdmin):
+class AttestationAdmin(ImportExportModelAdmin):
+    resource_class = AttestationResource
+
     list_display = [
         "reference",
         "participant",

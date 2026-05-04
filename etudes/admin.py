@@ -3,7 +3,14 @@
 # =============================================================================
 
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
+
 from etudes.models import ProjectDeliverable, ProjectPhase, StudyProject
+from etudes.resources import (
+    ProjectDeliverableResource,
+    ProjectPhaseResource,
+    StudyProjectResource,
+)
 
 
 class ProjectPhaseInline(admin.TabularInline):
@@ -15,7 +22,9 @@ class ProjectPhaseInline(admin.TabularInline):
 
 
 @admin.register(StudyProject)
-class StudyProjectAdmin(admin.ModelAdmin):
+class StudyProjectAdmin(ImportExportModelAdmin):
+    resource_class = StudyProjectResource
+
     list_display = [
         "title",
         "client",
@@ -68,7 +77,9 @@ class ProjectDeliverableInline(admin.TabularInline):
 
 
 @admin.register(ProjectPhase)
-class ProjectPhaseAdmin(admin.ModelAdmin):
+class ProjectPhaseAdmin(ImportExportModelAdmin):
+    resource_class = ProjectPhaseResource
+
     list_display = [
         "name",
         "project",
@@ -86,7 +97,9 @@ class ProjectPhaseAdmin(admin.ModelAdmin):
 
 
 @admin.register(ProjectDeliverable)
-class ProjectDeliverableAdmin(admin.ModelAdmin):
+class ProjectDeliverableAdmin(ImportExportModelAdmin):
+    resource_class = ProjectDeliverableResource
+
     list_display = ["title", "phase", "version", "submission_date", "client_approved"]
     list_filter = ["client_approved"]
     search_fields = ["title", "phase__project__title"]

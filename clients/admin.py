@@ -2,9 +2,14 @@
 # Changes: FormeJuridique registered; Client admin updated for FK field.
 
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
 
 from clients.models import Client, ClientContact, FormeJuridique
-
+from clients.resources import (
+    ClientContactResource,
+    ClientResource,
+    FormeJuridiqueResource,
+)
 
 # ---------------------------------------------------------------------------
 # FormeJuridique
@@ -12,7 +17,9 @@ from clients.models import Client, ClientContact, FormeJuridique
 
 
 @admin.register(FormeJuridique)
-class FormeJuridiqueAdmin(admin.ModelAdmin):
+class FormeJuridiqueAdmin(ImportExportModelAdmin):
+    resource_class = FormeJuridiqueResource
+
     list_display = ["name", "description", "is_active", "client_count"]
     list_editable = ["is_active"]
     search_fields = ["name", "description"]
@@ -41,7 +48,9 @@ class ClientContactInline(admin.TabularInline):
 
 
 @admin.register(Client)
-class ClientAdmin(admin.ModelAdmin):
+class ClientAdmin(ImportExportModelAdmin):
+    resource_class = ClientResource
+
     list_display = [
         "name",
         "client_type",
@@ -147,7 +156,9 @@ class ClientAdmin(admin.ModelAdmin):
 
 
 @admin.register(ClientContact)
-class ClientContactAdmin(admin.ModelAdmin):
+class ClientContactAdmin(ImportExportModelAdmin):
+    resource_class = ClientContactResource
+
     list_display = ["full_name", "client", "job_title", "phone", "email", "is_primary"]
     list_filter = ["is_primary"]
     search_fields = ["first_name", "last_name", "client__name", "email"]

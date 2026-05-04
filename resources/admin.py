@@ -3,20 +3,31 @@
 # =============================================================================
 
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
+
 from formations.models import (
     Trainer,
     TrainingRoom,
 )
+from formations.resources import TrainerResource, TrainingRoomResource
 from resources.models import (
     Equipment,
     EquipmentBooking,
     EquipmentUsage,
     MaintenanceLog,
 )
+from resources.resources import (
+    EquipmentBookingResource,
+    EquipmentResource,
+    EquipmentUsageResource,
+    MaintenanceLogResource,
+)
 
 
 @admin.register(Trainer)
-class TrainerAdmin(admin.ModelAdmin):
+class TrainerAdmin(ImportExportModelAdmin):
+    resource_class = TrainerResource
+
     list_display = [
         "full_name",
         "specialty",
@@ -54,7 +65,9 @@ class TrainerAdmin(admin.ModelAdmin):
 
 
 @admin.register(TrainingRoom)
-class TrainingRoomAdmin(admin.ModelAdmin):
+class TrainingRoomAdmin(ImportExportModelAdmin):
+    resource_class = TrainingRoomResource
+
     list_display = [
         "name",
         "capacity",
@@ -105,7 +118,9 @@ class EquipmentBookingInline(admin.TabularInline):
 
 
 @admin.register(Equipment)
-class EquipmentAdmin(admin.ModelAdmin):
+class EquipmentAdmin(ImportExportModelAdmin):
+    resource_class = EquipmentResource
+
     list_display = [
         "name",
         "category",
@@ -211,7 +226,9 @@ class EquipmentAdmin(admin.ModelAdmin):
 
 
 @admin.register(EquipmentUsage)
-class EquipmentUsageAdmin(admin.ModelAdmin):
+class EquipmentUsageAdmin(ImportExportModelAdmin):
+    resource_class = EquipmentUsageResource
+
     list_display = [
         "equipment",
         "date",
@@ -225,7 +242,9 @@ class EquipmentUsageAdmin(admin.ModelAdmin):
 
 
 @admin.register(EquipmentBooking)
-class EquipmentBookingAdmin(admin.ModelAdmin):
+class EquipmentBookingAdmin(ImportExportModelAdmin):
+    resource_class = EquipmentBookingResource
+
     list_display = [
         "equipment",
         "date_from",
@@ -239,7 +258,9 @@ class EquipmentBookingAdmin(admin.ModelAdmin):
 
 
 @admin.register(MaintenanceLog)
-class MaintenanceLogAdmin(admin.ModelAdmin):
+class MaintenanceLogAdmin(ImportExportModelAdmin):
+    resource_class = MaintenanceLogResource
+
     list_display = [
         "equipment",
         "date",
