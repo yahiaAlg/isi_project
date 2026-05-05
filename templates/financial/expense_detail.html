@@ -184,6 +184,26 @@
             </div>
             {% endif %}
 
+            {% if expense.payment_date %}
+            <div class="col-md-4">
+              <div class="stat-label mb-1">Date de règlement</div>
+              <div style="font-weight:500;font-size:14px;">
+                <i class="bi bi-calendar-check-fill" style="font-size:11px;color:var(--success);margin-right:4px;"></i>
+                {{ expense.payment_date|date:"d/m/Y" }}
+              </div>
+            </div>
+            {% endif %}
+
+            {% if expense.g50_month %}
+            <div class="col-md-4">
+              <div class="stat-label mb-1">Mois G50</div>
+              <div style="font-weight:500;font-size:14px;">
+                <i class="bi bi-calendar3" style="font-size:11px;color:var(--text-muted);margin-right:4px;"></i>
+                {{ expense.g50_month|date:"F Y" }}
+              </div>
+            </div>
+            {% endif %}
+
           </div>
         </div>
       </div>
@@ -287,13 +307,6 @@
             <div class="col-md-6">
               <div class="stat-label mb-1">Période couverte</div>
               <div style="font-weight:500;font-size:13.5px;">{{ expense.training_period_label }}</div>
-            </div>
-            {% endif %}
-
-            {% if expense.g50_month %}
-            <div class="col-md-6">
-              <div class="stat-label mb-1">Mois G50</div>
-              <div style="font-weight:500;font-size:13.5px;">{{ expense.g50_month|date:"F Y" }}</div>
             </div>
             {% endif %}
 
@@ -495,6 +508,12 @@
             <a href="{% url 'etudes:project_detail' expense.allocated_to_project.pk %}"
                class="btn btn-ghost">
               <i class="bi bi-diagram-3-fill"></i> Voir le projet
+            </a>
+            {% endif %}
+            {% if expense.linked_formation %}
+            <a href="{% url 'formations:formation_detail' expense.linked_formation.pk %}"
+               class="btn btn-ghost">
+              <i class="bi bi-collection-fill"></i> Voir la formation liée
             </a>
             {% endif %}
             <form method="post" action="{% url 'financial:expense_delete' expense.pk %}">
