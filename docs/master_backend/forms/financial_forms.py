@@ -9,7 +9,7 @@
 #   gross_amount, irg_rate, trainer_payment_mode, linked_formation,
 #   training_period_label, g50_month, rate snapshots.
 # * ExpenseFilterForm extended — beneficiary, beneficiary_type, fiscal_year,
-#   quarter, g50_month, trainer_payment_mode filters.
+#   quarter, g50_month (fiscal period), trainer_payment_mode filters.
 # =============================================================================
 
 from decimal import Decimal
@@ -576,7 +576,7 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
 
     Trainer fields
     ──────────────
-    trainer_payment_mode, linked_formation, training_period_label, g50_month,
+    trainer_payment_mode, linked_formation, training_period_label,
     daily_rate_snapshot, monthly_rate_snapshot are only relevant when the
     beneficiary is a trainer. The template uses JS to show/hide them.
 
@@ -601,18 +601,19 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "gross_amount",
             "irg_rate",
             "payment_reference",
+            "payment_date",
             # Trainer-specific
             "trainer_payment_mode",
             "linked_formation",
             "training_period_label",
-            "g50_month",
             "daily_rate_snapshot",
             "monthly_rate_snapshot",
             # Cost centre
             "allocated_to_session",
             "allocated_to_project",
             "is_overhead",
-            # Archiving
+            # Archiving / fiscal period
+            "g50_month",
             "receipt",
             "receipt_missing",
             "approval_status",
@@ -629,6 +630,7 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "gross_amount": "Montant brut (DA)",
             "irg_rate": "Taux IRG",
             "payment_reference": "Réf. paiement",
+            "payment_date": "Date de règlement",
             "trainer_payment_mode": "Mode de paiement formateur",
             "linked_formation": "Formation liée (forfait)",
             "training_period_label": "Période couverte",
@@ -647,6 +649,7 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "g50_month": forms.DateInput(attrs={"type": "date"}),
+            "payment_date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),
             "approval_notes": forms.Textarea(attrs={"rows": 2}),
             "irg_rate": forms.NumberInput(
@@ -671,6 +674,7 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "supplier",
             "irg_rate",
             "payment_reference",
+            "payment_date",
             "trainer_payment_mode",
             "linked_formation",
             "training_period_label",

@@ -1,5 +1,5 @@
 """
-Management command: seed_db  —  v3.0
+Management command: seed_db  —  v4.0
 
 Populates the database with a realistic base dataset for the ISI system.
 Safe to run multiple times — uses get_or_create / update_or_create throughout.
@@ -14,6 +14,13 @@ Usage
     python manage.py seed_db --module etudes
     python manage.py seed_db --module financial
     python manage.py seed_db --flush           # ⚠ wipes all data first
+
+v4.0 changes
+------------
+* Expense: trainer honoraire expenses now use gross_amount + irg_rate + beneficiary
+  + trainer_payment_mode (PER_SESSION). amount (net) is auto-computed by Expense.save().
+  fiscal_year / quarter are also auto-filled by save() — no manual assignment needed.
+* _seed_financial imports Beneficiary for trainer FK resolution.
 """
 
 import random
@@ -1175,6 +1182,7 @@ class Command(BaseCommand):
         from clients.models import Client
         from etudes.models import StudyProject
         from financial.models import (
+            Beneficiary,
             BeneficiaryType,
             Expense,
             ExpenseCategory,
@@ -1314,19 +1322,34 @@ class Command(BaseCommand):
                 f"{session.formation.title}"
             )
 
-            # Matching session expenses
+            # Matching session expenses — v4.0: beneficiary + IRG withholding
+            trainer_beneficiary = None
+            irg_rate = Decimal("0")
+            if session.trainer:
+                trainer_beneficiary = (
+                    getattr(session.trainer, "beneficiary", None)
+                    or Beneficiary.objects.filter(trainer=session.trainer).first()
+                )
+                if trainer_beneficiary:
+                    irg_rate = trainer_beneficiary.irg_rate
+            gross = (
+                session.trainer.daily_rate * session.duration_days
+                if session.trainer
+                else Decimal("12000.00")
+            )
             Expense.objects.get_or_create(
                 date=session.date_start,
                 description=f"Honoraires formateur — {session.formation.title}",
                 defaults={
                     "category": honoraires_cat,
-                    "amount": (
-                        session.trainer.daily_rate * session.duration_days
-                        if session.trainer
-                        else Decimal("12000.00")
-                    ),
+                    "gross_amount": gross,
+                    "irg_rate": irg_rate,
+                    # amount (net) is auto-computed by Expense.save()
+                    "amount": gross,  # placeholder; overwritten by save() when irg_rate > 0
+                    "beneficiary": trainer_beneficiary,
+                    "trainer_payment_mode": Expense.TrainerPaymentMode.PER_SESSION,
                     "allocated_to_session": session,
-                    "approval_status": Expense.ApprovalStatus.APPROVED,  # v3
+                    "approval_status": Expense.ApprovalStatus.APPROVED,
                 },
             )
             Expense.objects.get_or_create(

@@ -1206,7 +1206,6 @@ class Expense(TimeStampedModel):
     linked_formation     → for PER_FORMATION (covers the whole training program)
     allocated_to_session → for PER_SESSION (one expense per session, existing field)
     training_period_label→ free-text period description e.g. "22-24/12/2023"
-    g50_month            → G50 fiscal declaration month (first day of that month)
     daily_rate_snapshot  → trainer daily rate at time of entry
     monthly_rate_snapshot→ trainer monthly rate at time of entry
 
@@ -1294,6 +1293,13 @@ class Expense(TimeStampedModel):
     payment_reference = models.CharField(
         max_length=100, blank=True, verbose_name="Référence de paiement"
     )
+    payment_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Date de règlement",
+        help_text="Date effective du virement / paiement.",
+        db_index=True,
+    )
 
     # ---- Trainer-specific fields ------------------------------------- #
     trainer_payment_mode = models.CharField(
@@ -1318,12 +1324,6 @@ class Expense(TimeStampedModel):
         blank=True,
         verbose_name="Période de formation",
         help_text="Ex. '22-24/12/2023' — description libre de la période couverte.",
-    )
-    g50_month = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name="Mois G50",
-        help_text="Premier jour du mois de déclaration G50 (ex. 2026-01-01 pour janvier 2026).",
     )
     daily_rate_snapshot = models.DecimalField(
         max_digits=12,
@@ -1376,6 +1376,13 @@ class Expense(TimeStampedModel):
         blank=True,
         verbose_name="Trimestre",
         help_text="1–4, calculé automatiquement.",
+    )
+    g50_month = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Mois G50",
+        help_text="Premier jour du mois de déclaration G50 (ex. 2026-01-01 pour janvier 2026). Période fiscale générale — non liée au formateur.",
+        db_index=True,
     )
 
     # ---- Documents & approval ---------------------------------------- #
@@ -1445,26 +1452,13 @@ class Expense(TimeStampedModel):
                 bool(self.is_overhead),
             ]
         )
-        if filled == 0:
-            raise ValidationError(
-                "Imputez la dépense à une session, un projet, ou cochez 'Frais généraux'."
-            )
         if filled > 1:
             raise ValidationError(
                 "Une dépense ne peut être imputée qu'à un seul centre de coût."
             )
 
-        # Trainer payment mode cross-field checks
-        if self.trainer_payment_mode == self.TrainerPaymentMode.PER_FORMATION:
-            if not self.linked_formation_id:
-                raise ValidationError(
-                    "Le mode 'Par formation' requiert une formation liée."
-                )
-        if self.trainer_payment_mode == self.TrainerPaymentMode.PER_SESSION:
-            if not self.allocated_to_session_id:
-                raise ValidationError(
-                    "Le mode 'Par session' requiert une session liée."
-                )
+        # Trainer payment mode cross-field checks (optional — not enforced)
+        # PER_FORMATION and PER_SESSION validations are advisory only
 
         # Payment account must belong to selected beneficiary
         if self.payment_account_id and self.beneficiary_id:

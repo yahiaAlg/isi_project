@@ -332,6 +332,7 @@ class ExpenseAdmin(ImportExportModelAdmin):
         "gross_amount",
         "irg_amount",
         "amount",
+        "payment_date",
         "cost_centre_label",
         "approval_status",
         "receipt_missing",
@@ -360,6 +361,8 @@ class ExpenseAdmin(ImportExportModelAdmin):
         "irg_amount",
         "fiscal_year",
         "quarter",
+        "created_at",
+        "updated_at",
     ]
     fieldsets = [
         (
@@ -392,6 +395,7 @@ class ExpenseAdmin(ImportExportModelAdmin):
                     "irg_amount",
                     "amount",
                     "payment_reference",
+                    "payment_date",
                 ]
             },
         ),
@@ -402,7 +406,6 @@ class ExpenseAdmin(ImportExportModelAdmin):
                     "trainer_payment_mode",
                     "linked_formation",
                     "training_period_label",
-                    "g50_month",
                     "daily_rate_snapshot",
                     "monthly_rate_snapshot",
                 ],
@@ -423,7 +426,7 @@ class ExpenseAdmin(ImportExportModelAdmin):
         (
             "Période fiscale",
             {
-                "fields": ["fiscal_year", "quarter"],
+                "fields": ["fiscal_year", "quarter", "g50_month"],
                 "classes": ["collapse"],
             },
         ),
@@ -433,6 +436,14 @@ class ExpenseAdmin(ImportExportModelAdmin):
             {"fields": ["approval_status", "approval_notes", "is_approved"]},
         ),
         ("Notes", {"fields": ["notes"]}),
+        (
+            "Dates de saisie (système)",
+            {
+                "fields": ["created_at", "updated_at"],
+                "classes": ["collapse"],
+                "description": "Dates gérées automatiquement par le système — non modifiables.",
+            },
+        ),
     ]
 
     @admin.display(description="Bénéficiaire")

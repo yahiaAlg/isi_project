@@ -1070,6 +1070,9 @@ def _expense_form_context(form, expense=None, action=""):
         "beneficiary_form": BeneficiaryForm(),
         "beneficiary_type_form": BeneficiaryTypeForm(),
         "payment_account_form": PaymentAccountForm(),
+        "beneficiary_types": BeneficiaryType.objects.filter(is_active=True).order_by(
+            "name"
+        ),
     }
 
 
@@ -1793,4 +1796,33 @@ def beneficiary_accounts_json(request, pk):
         acct["label"] = " — ".join(parts)
         acct["account_type_display"] = type_display.get(acct["account_type"], "")
 
-    return JsonResponse({"accounts": accounts, "irg_rate": str(beneficiary.irg_rate)})
+    # Trainer-specific data
+    trainer_sessions = []
+    if beneficiary.is_trainer and beneficiary.trainer:
+        from formations.models import Session
+
+        sessions_qs = (
+            Session.objects.filter(
+                trainer=beneficiary.trainer,
+            )
+            .order_by("-date_start")
+            .values("id", "formation__title", "date_start")
+        )
+        for s in sessions_qs:
+            label = f"{s['formation__title']} — {s['date_start'].strftime('%Y-%m-%d') if s['date_start'] else ''}"
+            trainer_sessions.append({"id": s["id"], "label": label})
+
+    return JsonResponse(
+        {
+            "accounts": accounts,
+            "irg_rate": str(beneficiary.irg_rate),
+            "is_trainer": beneficiary.is_trainer,
+            "daily_rate": (
+                str(beneficiary.daily_rate) if beneficiary.daily_rate else "0"
+            ),
+            "monthly_rate": (
+                str(beneficiary.monthly_rate) if beneficiary.monthly_rate else "0"
+            ),
+            "trainer_sessions": trainer_sessions,
+        }
+    )
