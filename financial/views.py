@@ -1042,10 +1042,18 @@ def expense_list(request):
 
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
+    # Build query string without the 'page' key for pagination links (Django 4.2 compat)
+    qp = request.GET.copy()
+    qp.pop("page", None)
     return render(
         request,
         "financial/expense_list.html",
-        {"page_obj": page_obj, "filter_form": form, "kpis": kpis},
+        {
+            "page_obj": page_obj,
+            "filter_form": form,
+            "kpis": kpis,
+            "query_params": qp.urlencode(),
+        },
     )
 
 
