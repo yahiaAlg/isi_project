@@ -28,6 +28,7 @@ Notes
 
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from typing import Optional
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -348,7 +349,7 @@ class Command(BaseCommand):
             return
 
         # ── Resolve / create BeneficiaryType helpers ─────────────────── #
-        def _get_btype(hint: str) -> BeneficiaryType | None:
+        def _get_btype(hint: str) -> Optional[BeneficiaryType]:
             """Return the best-matching seeded BeneficiaryType or None."""
             qs = BeneficiaryType.objects.filter(is_seeded=True)
             # Exact match first
@@ -363,7 +364,7 @@ class Command(BaseCommand):
             # Fallback: any seeded type
             return qs.first()
 
-        btype_cache: dict[str, BeneficiaryType | None] = {}
+        btype_cache: dict = {}
 
         # ── Process each row ─────────────────────────────────────────── #
         created = skipped = 0
