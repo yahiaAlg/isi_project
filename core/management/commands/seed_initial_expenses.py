@@ -16,8 +16,8 @@ Notes
 ─────────────────────────────────────────────────────────────────────
 * All CSV records are overhead (is_overhead=True, no session/project link).
 * Amounts use French comma notation  e.g. "58 040,00" → 58040.00
-* For trainer payments (category "Honoraires Formateurs") irg_rate is left
-  at 0 because the CSV does not contain IRG data — adjust manually if needed.
+* For trainer payments (category "Honoraires Formateurs") irg_rate is set
+  to 10% on both the Beneficiary record and each Expense row.
 * Each unique supplier gets a Beneficiary record (name-based get_or_create).
 * payment_reference is stored on the Expense directly; a PaymentAccount is
   NOT created because the CSV mixes CCP numbers, cheque refs, and invoice
@@ -26,6 +26,7 @@ Notes
   on (date, gross_amount, supplier name fragment, payment_reference).
 """
 
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from django.core.management.base import BaseCommand
@@ -257,24 +258,24 @@ EXPENSES = [
 
 # CSV category slug → canonical ExpenseCategory name
 CATEGORY_MAP = {
-    "charge":             "Charges & Honoraires Professionnels",
-    "charge espece":      "Charges & Honoraires Professionnels",
-    "telecommunication":  "Télécommunications",
-    "hotelerie":          "Hôtellerie & Hébergement",
-    "paiment formateur":  "Honoraires Formateurs",
-    "salaire":            "Salaires & Charges Sociales",
-    "salaire espece":     "Salaires & Charges Sociales",
+    "charge": "Charges & Honoraires Professionnels",
+    "charge espece": "Charges & Honoraires Professionnels",
+    "telecommunication": "Télécommunications",
+    "hotelerie": "Hôtellerie & Hébergement",
+    "paiment formateur": "Honoraires Formateurs",
+    "salaire": "Salaires & Charges Sociales",
+    "salaire espece": "Salaires & Charges Sociales",
 }
 
 # BeneficiaryType slug hint per CSV category  (matched against seeded type names)
 BTYPE_HINT = {
-    "charge":             "Entreprise / Prestataire",
-    "charge espece":      "Entreprise / Prestataire",
-    "telecommunication":  "Entreprise / Prestataire",
-    "hotelerie":          "Hôtel / Hébergement",
-    "paiment formateur":  "Formateur",
-    "salaire":            "Salarié",
-    "salaire espece":     "Salarié",
+    "charge": "Entreprise / Prestataire",
+    "charge espece": "Entreprise / Prestataire",
+    "telecommunication": "Entreprise / Prestataire",
+    "hotelerie": "Hôtel / Hébergement",
+    "paiment formateur": "Formateur",
+    "salaire": "Salarié",
+    "salaire espece": "Salarié",
 }
 
 
@@ -306,7 +307,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
         if dry_run:
-            self.stdout.write(self.style.WARNING("DRY-RUN mode — nothing will be saved.\n"))
+            self.stdout.write(
+                self.style.WARNING("DRY-RUN mode — nothing will be saved.\n")
+            )
 
         with transaction.atomic():
             self._run(dry_run)
@@ -318,7 +321,12 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------ #
 
     def _run(self, dry_run: bool):
-        from financial.models import Beneficiary, BeneficiaryType, Expense, ExpenseCategory
+        from financial.models import (
+            Beneficiary,
+            BeneficiaryType,
+            Expense,
+            ExpenseCategory,
+        )
 
         # ── Resolve category objects ─────────────────────────────────── #
         cat_cache: dict[str, ExpenseCategory] = {}
@@ -361,13 +369,13 @@ class Command(BaseCommand):
         created = skipped = 0
 
         for row in EXPENSES:
-            csv_cat   = row["csv_category"]
+            csv_cat = row["csv_category"]
             canonical = CATEGORY_MAP[csv_cat]
-            category  = cat_cache[canonical]
-            amount    = _parse_amount(row["amount_str"])
-            supplier  = row["supplier"].strip()
-            pay_ref   = row["payment_reference"].strip()
-            exp_date  = row["date"]
+            category = cat_cache[canonical]
+            amount = _parse_amount(row["amount_str"])
+            supplier = row["supplier"].strip()
+            pay_ref = row["payment_reference"].strip()
+            exp_date = datetime.strptime(row["date"], "%Y-%m-%d").date()
 
             # ── Duplicate check ──────────────────────────────────────── #
             if Expense.objects.filter(
@@ -392,7 +400,11 @@ class Command(BaseCommand):
                     name=supplier,
                     defaults={
                         "beneficiary_type": btype,
-                        "irg_rate": Decimal("0"),  # no IRG data in CSV
+                        "irg_rate": (
+                            Decimal("0.10")
+                            if csv_cat == "paiment formateur"
+                            else Decimal("0")
+                        ),
                     },
                 )
             else:
@@ -408,8 +420,12 @@ class Command(BaseCommand):
                     category=category,
                     description=row["description"],
                     gross_amount=amount,
-                    irg_rate=Decimal("0"),
-                    supplier=supplier,         # legacy text fallback
+                    irg_rate=(
+                        Decimal("0.10")
+                        if csv_cat == "paiment formateur"
+                        else Decimal("0")
+                    ),
+                    supplier=supplier,  # legacy text fallback
                     beneficiary=beneficiary,
                     payment_reference=pay_ref,
                     is_overhead=True,
