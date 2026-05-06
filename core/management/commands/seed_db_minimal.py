@@ -88,24 +88,27 @@ FORMES_JURIDIQUES = [
     ("SSPA", "Société par Actions Simplifiée Unipersonnelle"),
 ]
 
-# ── Default expense categories ─────────────────────────────────────────── #
+# ── Expense categories (unified naming — kept in sync with seed_db.py) ── #
 EXPENSE_CATEGORIES = [
-    ("Salaires et charges sociales", True, "#3B82F6"),
-    ("Formateurs externes", True, "#8B5CF6"),
-    ("Location de salle", True, "#F59E0B"),
-    ("Matériel pédagogique", True, "#10B981"),
-    ("Déplacements et transport", True, "#EF4444"),
-    ("Restauration / hébergement", True, "#F97316"),
-    ("Équipements et matériels", True, "#06B6D4"),
-    ("Maintenance et réparations", False, "#6B7280"),
-    ("Fournitures de bureau", False, "#9CA3AF"),
-    ("Téléphone et internet", False, "#6B7280"),
-    ("Loyer et charges locatives", False, "#64748B"),
-    ("Assurances", False, "#94A3B8"),
-    ("Frais bancaires", False, "#A1A1AA"),
-    ("Honoraires (comptable, avocat)", False, "#7C3AED"),
-    ("Publicité et communication", False, "#EC4899"),
-    ("Divers", False, "#6B7280"),
+    # Direct costs
+    ("Honoraires Formateurs",               True,  "#EAB308"),
+    ("Salaires & Charges Sociales",         True,  "#3B82F6"),
+    ("Sous-traitance",                      True,  "#8B5CF6"),
+    ("Hôtellerie & Hébergement",            True,  "#F97316"),
+    ("Transport & Déplacements",            True,  "#06B6D4"),
+    ("Matériel Consommable",                True,  "#10B981"),
+    ("Location de Salles",                  True,  "#F59E0B"),
+    ("Équipements & Matériels",             True,  "#84CC16"),
+    # Indirect / overhead
+    ("Loyer & Charges Locatives",           False, "#6B7280"),
+    ("Télécommunications",                  False, "#0EA5E9"),
+    ("Charges & Honoraires Professionnels", False, "#7C3AED"),
+    ("Fournitures de Bureau",               False, "#64748B"),
+    ("Maintenance & Réparations",           False, "#EF4444"),
+    ("Assurances",                          False, "#94A3B8"),
+    ("Frais Bancaires",                     False, "#A1A1AA"),
+    ("Communication & Publicité",           False, "#EC4899"),
+    ("Divers",                              False, "#9CA3AF"),
 ]
 
 

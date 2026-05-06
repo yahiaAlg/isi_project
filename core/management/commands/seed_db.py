@@ -480,15 +480,25 @@ EQUIPMENT_LIST = [
 ]
 
 EXPENSE_CATEGORIES_DATA = [
-    {"name": "Transport & Déplacements", "is_direct_cost": True, "color": "#3B82F6"},
-    {"name": "Matériel Consommable", "is_direct_cost": True, "color": "#F97316"},
-    {"name": "Sous-traitance", "is_direct_cost": True, "color": "#8B5CF6"},
-    {"name": "Loyer & Charges Locatives", "is_direct_cost": False, "color": "#6B7280"},
-    {"name": "Télécommunications", "is_direct_cost": False, "color": "#06B6D4"},
-    {"name": "Honoraires Formateurs", "is_direct_cost": True, "color": "#EAB308"},
-    {"name": "Fournitures de Bureau", "is_direct_cost": False, "color": "#84CC16"},
-    {"name": "Maintenance & Réparations", "is_direct_cost": False, "color": "#EF4444"},
-    {"name": "Divers", "is_direct_cost": False, "color": "#9CA3AF"},
+    # ── Direct costs (liées aux activités facturables) ─────────────── #
+    {"name": "Honoraires Formateurs",              "is_direct_cost": True,  "color": "#EAB308"},
+    {"name": "Salaires & Charges Sociales",        "is_direct_cost": True,  "color": "#3B82F6"},
+    {"name": "Sous-traitance",                     "is_direct_cost": True,  "color": "#8B5CF6"},
+    {"name": "Hôtellerie & Hébergement",           "is_direct_cost": True,  "color": "#F97316"},
+    {"name": "Transport & Déplacements",           "is_direct_cost": True,  "color": "#06B6D4"},
+    {"name": "Matériel Consommable",               "is_direct_cost": True,  "color": "#10B981"},
+    {"name": "Location de Salles",                 "is_direct_cost": True,  "color": "#F59E0B"},
+    {"name": "Équipements & Matériels",            "is_direct_cost": True,  "color": "#84CC16"},
+    # ── Indirect / overhead costs ──────────────────────────────────── #
+    {"name": "Loyer & Charges Locatives",          "is_direct_cost": False, "color": "#6B7280"},
+    {"name": "Télécommunications",                 "is_direct_cost": False, "color": "#0EA5E9"},
+    {"name": "Charges & Honoraires Professionnels","is_direct_cost": False, "color": "#7C3AED"},
+    {"name": "Fournitures de Bureau",              "is_direct_cost": False, "color": "#64748B"},
+    {"name": "Maintenance & Réparations",          "is_direct_cost": False, "color": "#EF4444"},
+    {"name": "Assurances",                         "is_direct_cost": False, "color": "#94A3B8"},
+    {"name": "Frais Bancaires",                    "is_direct_cost": False, "color": "#A1A1AA"},
+    {"name": "Communication & Publicité",          "is_direct_cost": False, "color": "#EC4899"},
+    {"name": "Divers",                             "is_direct_cost": False, "color": "#9CA3AF"},
 ]
 
 STUDY_PROJECTS = [
