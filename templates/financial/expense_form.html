@@ -804,7 +804,12 @@
             </div>
             <div class="col-md-6">
               <label class="form-label">Numéro / Code</label>
-              <input type="text" name="account_number" class="form-control">
+              <input type="text" name="account_number" id="modal-account-number" class="form-control">
+              <div id="modal-account-number-hint" style="display:none;font-size:11.5px;margin-top:4px;
+                   color:var(--warning,#f59e0b);display:flex;align-items:center;gap:4px;">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <span id="modal-account-number-hint-text"></span>
+              </div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Banque / Établissement</label>
@@ -1247,6 +1252,32 @@
     submitBtn.disabled = false;
     submitBtn.innerHTML = '<i class="bi bi-check-lg"></i> Créer';
   });
+
+  /* ── Payment account number: 20-char soft validation ─────── */
+  /* Applies to: CCP, Virement bancaire, Chèque                 */
+  (function () {
+    const TYPES_20 = new Set(['ccp', 'bank', 'check', 'cheque']);
+    const acctTypeSel  = formAcct && formAcct.querySelector('[name="account_type"]');
+    const acctNumInput = document.getElementById('modal-account-number');
+    const hint         = document.getElementById('modal-account-number-hint');
+    const hintTxt      = document.getElementById('modal-account-number-hint-text');
+
+    function validateAcctNum() {
+      if (!acctTypeSel || !acctNumInput || !hint || !hintTxt) return;
+      const type = acctTypeSel.value;
+      const val  = acctNumInput.value.replace(/\s/g, '');
+      if (TYPES_20.has(type) && val.length > 0 && val.length !== 20) {
+        hintTxt.textContent =
+          'Ce type de compte requiert exactement 20 caractères (' + val.length + '/20).';
+        hint.style.display = 'flex';
+      } else {
+        hint.style.display = 'none';
+      }
+    }
+
+    if (acctTypeSel)  acctTypeSel.addEventListener('change', validateAcctNum);
+    if (acctNumInput) acctNumInput.addEventListener('input',  validateAcctNum);
+  }());
 
 })();
 </script>

@@ -549,6 +549,24 @@ class PaymentAccountForm(ISIFormMixin, forms.ModelForm):
             account.save()
         return account
 
+    def clean(self):
+        cleaned = super().clean()
+        account_type = cleaned.get("account_type")
+        account_number = (cleaned.get("account_number") or "").replace(" ", "")
+        TYPES_REQUIRING_20 = {
+            PaymentAccount.AccountType.BANK,  # virement bancaire
+            PaymentAccount.AccountType.CCP,  # CCP
+            PaymentAccount.AccountType.CHEQUE,  # chèque
+        }
+        if account_type in TYPES_REQUIRING_20 and account_number:
+            if len(account_number) != 20:
+                self.add_error(
+                    "account_number",
+                    f"Le numéro de compte doit comporter exactement 20 caractères "
+                    f"pour ce type ({len(account_number)}/20).",
+                )
+        return cleaned
+
 
 # ---------------------------------------------------------------------------
 # Expense forms  (v4.0)
