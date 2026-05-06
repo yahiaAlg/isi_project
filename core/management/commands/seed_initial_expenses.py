@@ -396,16 +396,14 @@ class Command(BaseCommand):
                 btype_cache[btype_hint] = _get_btype(btype_hint)
             btype = btype_cache[btype_hint]
 
+            is_formateur = csv_cat == "paiment formateur"
             if not dry_run:
                 beneficiary, b_created = Beneficiary.objects.get_or_create(
                     name=supplier,
                     defaults={
                         "beneficiary_type": btype,
-                        "irg_rate": (
-                            Decimal("0.10")
-                            if csv_cat == "paiment formateur"
-                            else Decimal("0")
-                        ),
+                        "irg_rate": Decimal("0.10") if is_formateur else Decimal("0"),
+                        "is_trainer": is_formateur,
                     },
                 )
             else:
@@ -421,11 +419,7 @@ class Command(BaseCommand):
                     category=category,
                     description=row["description"],
                     gross_amount=amount,
-                    irg_rate=(
-                        Decimal("0.10")
-                        if csv_cat == "paiment formateur"
-                        else Decimal("0")
-                    ),
+                    irg_rate=Decimal("0.10") if is_formateur else Decimal("0"),
                     supplier=supplier,  # legacy text fallback
                     beneficiary=beneficiary,
                     payment_reference=pay_ref,

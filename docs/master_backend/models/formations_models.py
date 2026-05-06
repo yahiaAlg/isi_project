@@ -204,7 +204,13 @@ class Trainer(TimeStampedModel):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Keep linked Beneficiary in sync (lazy import to avoid circular)
+
+        # Guard: the reverse signal (Beneficiary → Trainer) sets this flag
+        # before calling save() to prevent an infinite sync loop.
+        if getattr(self, "_skip_beneficiary_sync", False):
+            return
+
+        # Keep linked Beneficiary in sync (lazy import to avoid circular).
         try:
             from financial.models import Beneficiary, BeneficiaryType
 
@@ -212,22 +218,42 @@ class Trainer(TimeStampedModel):
                 slug="formateur",
                 defaults={"name": "Formateur", "is_seeded": True, "color": "#3B82F6"},
             )
-            Beneficiary.objects.update_or_create(
-                trainer=self,
-                defaults={
-                    "name": self.full_name,
-                    "beneficiary_type": btype,
-                    "is_trainer": True,
-                    "is_employee": self.trainer_type == self.TRAINER_TYPE_INTERNAL,
-                    "nif": self.nif,
-                    "rib": self.rib,
-                    "phone": self.phone,
-                    "email": self.email,
-                    "daily_rate": self.daily_rate,
-                    "monthly_rate": self.monthly_rate,
-                    "is_active": self.is_active,
-                },
-            )
+
+            sync_fields = {
+                "name": self.full_name,
+                "beneficiary_type": btype,
+                "is_trainer": True,
+                "is_employee": self.trainer_type == self.TRAINER_TYPE_INTERNAL,
+                "nif": self.nif,
+                "rib": self.rib,
+                "phone": self.phone,
+                "email": self.email,
+                "daily_rate": self.daily_rate,
+                "monthly_rate": self.monthly_rate,
+                "is_active": self.is_active,
+            }
+
+            # Try to find an unlinked Beneficiary with the same name (e.g. created
+            # by seed_initial_expenses before this Trainer existed) and adopt it
+            # rather than creating a duplicate.
+            existing = Beneficiary.objects.filter(
+                beneficiary_type=btype,
+                name=self.full_name,
+                trainer__isnull=True,
+            ).first()
+            if existing:
+                for field, value in sync_fields.items():
+                    setattr(existing, field, value)
+                existing.trainer = self
+                # Flag to prevent the Beneficiary post_save signal from
+                # creating yet another Trainer for this record.
+                existing._skip_trainer_sync = True
+                existing.save()
+            else:
+                Beneficiary.objects.update_or_create(
+                    trainer=self,
+                    defaults=sync_fields,
+                )
         except Exception:
             pass  # financial app may not be migrated yet
 
