@@ -1193,11 +1193,13 @@ class Expense(TimeStampedModel):
 
     IRG (withholding tax on service providers)
     ──────────────────────────────────────────
-    gross_amount        → montant brut before deduction
+    gross_amount        → montant versé au formateur / prestataire
     irg_rate            → snapshotted from Beneficiary.irg_rate at entry time
-    irg_amount          → computed and stored: gross_amount × irg_rate
-    amount              → NET amount paid = gross_amount − irg_amount
+    irg_amount          → computed and stored: gross_amount × irg_rate (versé à l'État)
+    amount              → coût TOTAL pour l'organisme = gross_amount + irg_amount
 
+    IRG (Impôt sur le Revenu Global) est une charge fiscale SUPPLÉMENTAIRE versée à
+    l'État par l'organisme — ce n'est pas une retenue sur le paiement du prestataire.
     For non-trainer expenses irg_rate = 0 so gross_amount == amount.
 
     Trainer payment modes
@@ -1287,8 +1289,8 @@ class Expense(TimeStampedModel):
     amount = models.DecimalField(
         max_digits=14,
         decimal_places=2,
-        verbose_name="Montant net (DA)",
-        help_text="Montant effectivement payé = montant brut − IRG.",
+        verbose_name="Coût total (DA)",
+        help_text="Coût total pour l'organisme = montant prestataire + IRG versé à l'État.",
     )
     payment_reference = models.CharField(
         max_length=100, blank=True, verbose_name="Référence de paiement"
@@ -1422,12 +1424,13 @@ class Expense(TimeStampedModel):
     # ------------------------------------------------------------------ #
 
     def save(self, *args, **kwargs):
-        # Compute IRG and net amount
+        # Compute IRG and total cost
         if self.gross_amount is not None:
             self.irg_amount = (self.gross_amount * self.irg_rate).quantize(
                 Decimal("0.01")
             )
-            self.amount = self.gross_amount - self.irg_amount
+            # IRG is paid ADDITIONALLY to the State — total org cost = gross + IRG
+            self.amount = self.gross_amount + self.irg_amount
         else:
             # gross_amount not provided — treat amount as net (no IRG)
             self.gross_amount = self.amount

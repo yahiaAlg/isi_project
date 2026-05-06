@@ -22,7 +22,7 @@
   <div class="page-header">
     <div class="page-header-left">
       <h1>Formateurs</h1>
-      <p>Gérez les formateurs externes de l'institut</p>
+      <p>Gérez les formateurs internes et externes de l'institut</p>
     </div>
   </div>
 
@@ -54,6 +54,32 @@
         </div>
       </div>
     </div>
+    <div class="col-sm-3">
+      <div class="isi-card">
+        <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+          <div class="card-icon green" style="width:44px;height:44px;font-size:20px;border-radius:12px;">
+            <i class="bi bi-building-fill"></i>
+          </div>
+          <div>
+            <div class="stat-value">{{ trainers_internal_count|default:"0" }}</div>
+            <div class="stat-label">Internes</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-3">
+      <div class="isi-card">
+        <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+          <div class="card-icon purple" style="width:44px;height:44px;font-size:20px;border-radius:12px;">
+            <i class="bi bi-person-workspace"></i>
+          </div>
+          <div>
+            <div class="stat-value">{{ trainers_external_count|default:"0" }}</div>
+            <div class="stat-label">Externes</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ── Main table card ───────────────────────────────────────── -->
@@ -75,6 +101,7 @@
         <thead>
           <tr>
             <th>Formateur</th>
+            <th>Type</th>
             <th>Spécialité</th>
             <th>Téléphone</th>
             <th>Email</th>
@@ -101,6 +128,13 @@
                   </a>
                 </div>
               </div>
+            </td>
+            <td>
+              {% if trainer.is_internal %}
+                <span class="isi-badge green"><i class="bi bi-building" style="font-size:9px;"></i> Interne</span>
+              {% else %}
+                <span class="isi-badge purple"><i class="bi bi-person-workspace" style="font-size:9px;"></i> Externe</span>
+              {% endif %}
             </td>
             <td><span style="color:var(--text-muted);font-size:13px;">{{ trainer.specialty|default:"—" }}</span></td>
             <td><span style="color:var(--text-muted);font-size:13px;">{{ trainer.phone|default:"—" }}</span></td>

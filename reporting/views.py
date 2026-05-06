@@ -27,7 +27,6 @@ from reporting.utils import (
     trainer_utilization_report as _trainer_util_qs,
 )
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -558,6 +557,8 @@ def expense_breakdown_report(request):
     from financial.models import Expense
 
     date_from, date_to = _parse_date_range(request)
+    allocation_filter = request.GET.get("allocation", "")
+
     qs = Expense.objects.filter(
         date__range=[date_from, date_to],
         approval_status=Expense.ApprovalStatus.APPROVED,
@@ -565,33 +566,119 @@ def expense_breakdown_report(request):
         "category", "allocated_to_session__formation", "allocated_to_project__client"
     )
 
+    # Optional allocation filter
+    if allocation_filter == "session":
+        qs = qs.filter(allocated_to_session__isnull=False)
+    elif allocation_filter == "project":
+        qs = qs.filter(allocated_to_project__isnull=False)
+    elif allocation_filter == "overhead":
+        qs = qs.filter(
+            allocated_to_session__isnull=True, allocated_to_project__isnull=True
+        )
+
+    # ── Totals ──────────────────────────────────────────────────── #
+    totals_raw = qs.aggregate(
+        total=Sum("amount"),
+        session_total=Sum("amount", filter=Q(allocated_to_session__isnull=False)),
+        session_count=Count("pk", filter=Q(allocated_to_session__isnull=False)),
+        project_total=Sum("amount", filter=Q(allocated_to_project__isnull=False)),
+        project_count=Count("pk", filter=Q(allocated_to_project__isnull=False)),
+        overhead_total=Sum(
+            "amount",
+            filter=Q(
+                allocated_to_session__isnull=True,
+                allocated_to_project__isnull=True,
+            ),
+        ),
+        overhead_count=Count(
+            "pk",
+            filter=Q(
+                allocated_to_session__isnull=True,
+                allocated_to_project__isnull=True,
+            ),
+        ),
+        grand_count=Count("pk"),
+    )
+    # Coerce Decimal → float for JS serialisation
+    for key in ("total", "session_total", "project_total", "overhead_total"):
+        totals_raw[key] = float(totals_raw[key] or 0)
+
+    def _safe_avg(total_key, count_key):
+        c = totals_raw.get(count_key) or 0
+        return round(totals_raw[total_key] / c, 2) if c else 0.0
+
+    totals = {
+        **totals_raw,
+        "session_avg": _safe_avg("session_total", "session_count"),
+        "project_avg": _safe_avg("project_total", "project_count"),
+        "overhead_avg": _safe_avg("overhead_total", "overhead_count"),
+        "avg": _safe_avg("total", "grand_count"),
+    }
+
+    # ── Per-allocation monthly breakdown ────────────────────────── #
+    # Build three separate month→total maps, then merge
+    def _month_map(extra_filter):
+        return {
+            r["month"].strftime("%m/%Y"): float(r["total"] or 0)
+            for r in qs.filter(extra_filter)
+            .annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total=Sum("amount"))
+        }
+
+    s_map = _month_map(Q(allocated_to_session__isnull=False))
+    p_map = _month_map(Q(allocated_to_project__isnull=False))
+    oh_map = _month_map(
+        Q(allocated_to_session__isnull=True, allocated_to_project__isnull=True)
+    )
+
+    all_months = sorted(set(s_map) | set(p_map) | set(oh_map))
+    by_month = [
+        {
+            "m": m,
+            "s": s_map.get(m, 0.0),
+            "p": p_map.get(m, 0.0),
+            "oh": oh_map.get(m, 0.0),
+            "t": s_map.get(m, 0.0) + p_map.get(m, 0.0) + oh_map.get(m, 0.0),
+        }
+        for m in all_months
+    ]
+
+    # ── Per-allocation summary for the table ────────────────────── #
+    grand = totals["total"] or 1  # avoid division by zero
+    allocation_summary = [
+        {
+            "label": "Sessions",
+            "color": "#f59e0b",
+            "total": totals["session_total"],
+            "pct": round(totals["session_total"] / grand * 100),
+        },
+        {
+            "label": "Projets d'étude",
+            "color": "#3b82f6",
+            "total": totals["project_total"],
+            "pct": round(totals["project_total"] / grand * 100),
+        },
+        {
+            "label": "Frais généraux",
+            "color": "#94a3b8",
+            "total": totals["overhead_total"],
+            "pct": round(totals["overhead_total"] / grand * 100),
+        },
+    ]
+
     return render(
         request,
         "reporting/expense_breakdown.html",
         {
             "expenses": qs.order_by("-date")[:100],
-            "totals": qs.aggregate(
-                total=Sum("amount"),
-                session_total=Sum(
-                    "amount", filter=Q(allocated_to_session__isnull=False)
-                ),
-                project_total=Sum(
-                    "amount", filter=Q(allocated_to_project__isnull=False)
-                ),
-                overhead_total=Sum(
-                    "amount",
-                    filter=Q(
-                        allocated_to_session__isnull=True,
-                        allocated_to_project__isnull=True,
-                    ),
-                ),
-            ),
-            "by_month": qs.annotate(month=TruncMonth("date"))
-            .values("month")
-            .annotate(total=Sum("amount"))
-            .order_by("month"),
+            "totals": totals,
+            "by_month": by_month,
+            "allocation_summary": allocation_summary,
             "date_from": date_from,
             "date_to": date_to,
+            "allocation_filter": allocation_filter,
+            "expense_count": qs.count(),
         },
     )
 
@@ -601,19 +688,47 @@ def expense_by_category(request):
     from financial.models import Expense
 
     date_from, date_to = _parse_date_range(request)
+    base_qs = Expense.objects.filter(
+        date__range=[date_from, date_to],
+        approval_status=Expense.ApprovalStatus.APPROVED,
+    )
+
     by_cat = (
-        Expense.objects.filter(
-            date__range=[date_from, date_to],
-            approval_status=Expense.ApprovalStatus.APPROVED,
-        )
-        .values("category__name")
-        .annotate(count=Count("pk"), total=Sum("amount"))
+        base_qs.values("category__name")
+        .annotate(count=Count("pk"), total=Sum("amount"), avg=Avg("amount"))
         .order_by("-total")
     )
     grand_total = sum(r["total"] for r in by_cat)
     rows = [
         {**r, "pct": round(r["total"] / grand_total * 100, 1) if grand_total else 0}
         for r in by_cat
+    ]
+
+    # ── Monthly trend (top 5 categories) ──────────────────────────── #
+    top5_cats = [r["category__name"] for r in rows[:5]]
+    monthly_raw = (
+        base_qs.filter(category__name__in=top5_cats)
+        .annotate(month=TruncMonth("date"))
+        .values("month", "category__name")
+        .annotate(total=Sum("amount"))
+        .order_by("month")
+    )
+
+    months_set = sorted({r["month"] for r in monthly_raw})
+    pivot = {cat: {} for cat in top5_cats}
+    for r in monthly_raw:
+        m = r["month"].strftime("%Y-%m")
+        cat = r["category__name"]
+        if cat in pivot:
+            pivot[cat][m] = float(r["total"] or 0)
+
+    trend_months = [m.strftime("%Y-%m") for m in months_set]
+    trend_series = [
+        {
+            "label": cat,
+            "values": [pivot[cat].get(m, 0.0) for m in trend_months],
+        }
+        for cat in top5_cats
     ]
 
     return render(
@@ -624,32 +739,107 @@ def expense_by_category(request):
             "grand_total": grand_total,
             "date_from": date_from,
             "date_to": date_to,
+            "trend_months": trend_months,
+            "trend_series": trend_series,
         },
     )
 
 
 @admin_required
 def pending_expenses_report(request):
+    from datetime import date
     from financial.models import Expense
 
-    pending = (
-        Expense.objects.filter(
-            Q(approval_status=Expense.ApprovalStatus.PENDING) | Q(receipt_missing=True)
-        )
-        .select_related(
-            "category",
-            "allocated_to_session__formation",
-            "allocated_to_project__client",
-        )
-        .order_by("-date")
+    pending_qs = Expense.objects.filter(
+        Q(approval_status=Expense.ApprovalStatus.PENDING) | Q(receipt_missing=True)
     )
+
+    expenses = pending_qs.select_related(
+        "category",
+        "beneficiary",
+        "allocated_to_session__formation",
+        "allocated_to_project",
+    ).order_by("-date")
+
+    # ── KPI counts ──────────────────────────────────────────────── #
+    agg = pending_qs.aggregate(
+        total=Sum("amount"),
+        pending_approval_count=Count(
+            "pk", filter=Q(approval_status=Expense.ApprovalStatus.PENDING)
+        ),
+        pending_approval_total=Sum(
+            "amount", filter=Q(approval_status=Expense.ApprovalStatus.PENDING)
+        ),
+        missing_receipt_count=Count("pk", filter=Q(receipt_missing=True)),
+        missing_receipt_total=Sum("amount", filter=Q(receipt_missing=True)),
+        both_issues_count=Count(
+            "pk",
+            filter=Q(
+                approval_status=Expense.ApprovalStatus.PENDING, receipt_missing=True
+            ),
+        ),
+    )
+
+    # ── By category ──────────────────────────────────────────────── #
+    pending_by_category = (
+        pending_qs.values("category__name")
+        .annotate(count=Count("pk"), total=Sum("amount"))
+        .order_by("-total")
+    )
+
+    # ── By allocation ────────────────────────────────────────────── #
+    alloc = pending_qs.aggregate(
+        session=Sum("amount", filter=Q(allocated_to_session__isnull=False)),
+        project=Sum("amount", filter=Q(allocated_to_project__isnull=False)),
+        overhead=Sum(
+            "amount",
+            filter=Q(
+                allocated_to_session__isnull=True, allocated_to_project__isnull=True
+            ),
+        ),
+    )
+
+    # ── Aging buckets ────────────────────────────────────────────── #
+    today = date.today()
+    from datetime import timedelta
+
+    buckets_def = [
+        ("< 7 jours", today - timedelta(days=7), today),
+        ("7–14 jours", today - timedelta(days=14), today - timedelta(days=7)),
+        ("15–30 jours", today - timedelta(days=30), today - timedelta(days=14)),
+        ("31–60 jours", today - timedelta(days=60), today - timedelta(days=30)),
+        ("> 60 jours", date(2000, 1, 1), today - timedelta(days=60)),
+    ]
+    aging_buckets = []
+    for label, d_from, d_to in buckets_def:
+        r = pending_qs.filter(date__gte=d_from, date__lte=d_to).aggregate(
+            count=Count("pk"), total=Sum("amount")
+        )
+        if r["count"]:
+            aging_buckets.append(
+                {
+                    "label": label,
+                    "count": r["count"],
+                    "total": r["total"] or Decimal("0"),
+                }
+            )
 
     return render(
         request,
         "reporting/pending_expenses.html",
         {
-            "expenses": pending,
-            "total_pending": pending.aggregate(t=Sum("amount"))["t"] or Decimal("0"),
+            "expenses": expenses,
+            "total_pending": agg["total"] or Decimal("0"),
+            "pending_approval_count": agg["pending_approval_count"] or 0,
+            "pending_approval_total": agg["pending_approval_total"] or Decimal("0"),
+            "missing_receipt_count": agg["missing_receipt_count"] or 0,
+            "missing_receipt_total": agg["missing_receipt_total"] or Decimal("0"),
+            "both_issues_count": agg["both_issues_count"] or 0,
+            "pending_by_category": pending_by_category,
+            "alloc_session_total": alloc["session"] or Decimal("0"),
+            "alloc_project_total": alloc["project"] or Decimal("0"),
+            "alloc_overhead_total": alloc["overhead"] or Decimal("0"),
+            "aging_buckets": aging_buckets,
         },
     )
 
@@ -932,13 +1122,23 @@ def trainer_cost_analysis(request):
             status=Session.STATUS_COMPLETED,
         )
         total_days = sum((s.date_end - s.date_start).days + 1 for s in period_sessions)
-        cost = total_days * t.daily_rate
+        gross_cost = total_days * t.daily_rate
+        # IRG is an additional org charge paid to the State on top of trainer fee
+        irg_rate = Decimal("0")
+        try:
+            irg_rate = t.beneficiary.irg_rate
+        except Exception:
+            pass
+        irg_amount = (gross_cost * irg_rate).quantize(Decimal("0.01"))
+        cost = gross_cost + irg_amount  # true total cost to the organization
         revenue = sum(s.total_revenue for s in period_sessions)
         data.append(
             {
                 "trainer": t,
                 "sessions": period_sessions.count(),
                 "total_days": total_days,
+                "gross_cost": gross_cost,
+                "irg_amount": irg_amount,
                 "cost": cost,
                 "revenue": revenue,
                 "contribution": revenue - cost,
@@ -1362,7 +1562,10 @@ def export_expenses_csv(request):
         [
             "Date",
             "Catégorie",
-            "Montant",
+            "Montant prestataire (DA)",
+            "Taux IRG",
+            "IRG versé à l'État (DA)",
+            "Coût total organisme (DA)",
             "Description",
             "Affectation",
             "Statut",
@@ -1387,6 +1590,9 @@ def export_expenses_csv(request):
             [
                 e.date,
                 e.category.name if e.category else "",
+                e.gross_amount or e.amount,
+                f"{float(e.irg_rate) * 100:.0f}%" if e.irg_rate else "0%",
+                e.irg_amount,
                 e.amount,
                 e.description,
                 aff,

@@ -10,6 +10,9 @@
 {% block breadcrumb_active %}Dépenses{% endblock %}
 
 {% block topbar_actions %}
+<a href="{% url 'financial:expense_report' %}" class="topbar-btn">
+  <i class="bi bi-bar-chart-fill"></i> Rapports
+</a>
 <a href="{% url 'financial:expense_category_list' %}" class="topbar-btn">
   <i class="bi bi-tags-fill"></i> Catégories
 </a>

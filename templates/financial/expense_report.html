@@ -118,8 +118,8 @@
             <i class="bi bi-percent"></i>
           </div>
           <div>
-            <div class="stat-value" style="font-size:18px;color:#b91c1c;">{{ total_irg|floatformat:0 }}</div>
-            <div class="stat-label">Retenues IRG (DA)</div>
+            <div class="stat-value" style="font-size:18px;color:#b45309;">{{ total_irg|floatformat:0 }}</div>
+            <div class="stat-label">IRG versé à l'État (DA)</div>
           </div>
         </div>
       </div>
@@ -452,37 +452,37 @@
           <div class="card-icon" style="background:rgba(239,68,68,.1);color:#b91c1c;">
             <i class="bi bi-percent"></i>
           </div>
-          <h3>IRG — Retenues à la source</h3>
+          <h3>IRG — Impôt versé à l'État</h3>
         </div>
         <div class="isi-card-body">
 
-          <!-- Gross → IRG → Net waterfall -->
+          <!-- Gross → IRG → Total waterfall -->
           <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">
             <div style="display:flex;justify-content:space-between;align-items:center;
                         padding:8px 12px;background:#f8fafc;border-radius:8px;
                         border:1px solid var(--card-border);">
               <span style="font-size:13px;color:var(--text-muted);">
-                <i class="bi bi-receipt-cutoff" style="margin-right:4px;"></i>Montant brut total
+                <i class="bi bi-receipt-cutoff" style="margin-right:4px;"></i>Montant brut prestataires
               </span>
               <span style="font-weight:700;font-family:var(--font-head);font-size:14px;">
                 {{ total_gross|floatformat:2 }} DA
               </span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;
-                        padding:8px 12px;background:rgba(239,68,68,.06);border-radius:8px;
-                        border:1px solid rgba(239,68,68,.15);">
-              <span style="font-size:13px;color:#b91c1c;">
-                <i class="bi bi-percent" style="margin-right:4px;"></i>Retenues IRG
+                        padding:8px 12px;background:rgba(245,158,11,.06);border-radius:8px;
+                        border:1px solid rgba(245,158,11,.2);">
+              <span style="font-size:13px;color:#b45309;">
+                <i class="bi bi-percent" style="margin-right:4px;"></i>IRG versé à l'État
               </span>
-              <span style="font-weight:700;font-family:var(--font-head);font-size:14px;color:#b91c1c;">
-                − {{ total_irg|floatformat:2 }} DA
+              <span style="font-weight:700;font-family:var(--font-head);font-size:14px;color:#b45309;">
+                + {{ total_irg|floatformat:2 }} DA
               </span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;
                         padding:10px 12px;background:rgba(239,68,68,.08);border-radius:8px;
                         border:1px solid rgba(239,68,68,.2);">
               <span style="font-size:13px;font-weight:600;color:var(--danger);">
-                <i class="bi bi-credit-card-fill" style="margin-right:4px;"></i>Net décaissé
+                <i class="bi bi-credit-card-fill" style="margin-right:4px;"></i>Coût total organisme
               </span>
               <span style="font-weight:700;font-family:var(--font-head);font-size:15px;color:var(--danger);">
                 {{ total|floatformat:2 }} DA
@@ -495,7 +495,7 @@
           <div>
             <div style="display:flex;justify-content:space-between;font-size:11.5px;
                         color:var(--text-muted);margin-bottom:6px;">
-              <span>Part IRG / brut</span>
+              <span>Part IRG / coût prestataire</span>
               <span style="font-weight:600;color:#b91c1c;">
                 {% widthratio total_irg total_gross 100 %}%
               </span>

@@ -24,13 +24,22 @@
     <div class="isi-card-header"><div class="card-icon amber"><i class="bi bi-person-fill-check"></i></div><h3>Contribution par formateur</h3></div>
     <div style="overflow-x:auto;">
       <table class="isi-table">
-        <thead><tr><th>Formateur</th><th style="text-align:center;">Sessions</th><th style="text-align:center;">Jours</th><th style="text-align:right;">Coût</th><th style="text-align:right;">Revenu généré</th><th style="text-align:right;">Contribution</th></tr></thead>
+        <thead><tr><th>Formateur</th><th style="text-align:center;">Sessions</th><th style="text-align:center;">Jours</th><th style="text-align:right;">Coût brut</th><th style="text-align:right;">IRG (10%)</th><th style="text-align:right;">Coût total</th><th style="text-align:right;">Revenu généré</th><th style="text-align:right;">Contribution</th></tr></thead>
         <tbody>
           {% for r in data %}
           <tr>
-            <td><div style="font-weight:600;">{{ r.trainer.full_name }}</div><div style="font-size:12px;color:#94a3b8;">{{ r.trainer.daily_rate|floatformat:0 }} DA/jour</div></td>
+            <td>
+              <div style="font-weight:600;">{{ r.trainer.full_name }}</div>
+              <div style="font-size:12px;color:#94a3b8;margin-top:2px;">
+                {{ r.trainer.daily_rate|floatformat:0 }} DA/jour
+                &nbsp;·&nbsp;
+                {% if r.trainer.is_internal %}<span class="isi-badge green" style="font-size:10px;padding:1px 6px;"><i class="bi bi-building" style="font-size:8px;"></i> Interne</span>{% else %}<span class="isi-badge purple" style="font-size:10px;padding:1px 6px;"><i class="bi bi-person-workspace" style="font-size:8px;"></i> Externe</span>{% endif %}
+              </div>
+            </td>
             <td style="text-align:center;font-weight:600;">{{ r.sessions }}</td>
             <td style="text-align:center;">{{ r.total_days }}</td>
+            <td style="text-align:right;color:#64748b;">{{ r.gross_cost|floatformat:0 }} DA</td>
+            <td style="text-align:right;color:#f59e0b;">{% if r.irg_amount %}{{ r.irg_amount|floatformat:0 }} DA{% else %}<span style="color:#cbd5e1;">—</span>{% endif %}</td>
             <td style="text-align:right;color:#ef4444;font-weight:600;">{{ r.cost|floatformat:0 }} DA</td>
             <td style="text-align:right;color:#10b981;font-weight:600;">{{ r.revenue|floatformat:0 }} DA</td>
             <td style="text-align:right;font-weight:700;font-family:var(--font-head);font-size:16px;color:{% if r.contribution >= 0 %}#10b981{% else %}#ef4444{% endif %};">{{ r.contribution|floatformat:0 }} DA</td>

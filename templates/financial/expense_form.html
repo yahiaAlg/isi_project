@@ -92,6 +92,9 @@
                 <div style="display:flex;gap:8px;align-items:flex-start;">
                   <div style="flex:1;">
                     {{ form.beneficiary }}
+                    {# URL template for the JS AJAX call — pk=0 is replaced client-side #}
+                    <input type="hidden" id="accounts-url-tpl"
+                           value="{% url 'financial:beneficiary_accounts_json' pk=0 %}">
                     {% if form.beneficiary.errors %}
                     <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.beneficiary.errors|join:", " }}</div>
                     {% endif %}
@@ -203,15 +206,15 @@
 
               <!-- Live-computed IRG preview -->
               <div class="col-md-4">
-                <label class="form-label">Aperçu net</label>
+                <label class="form-label">Aperçu coût total</label>
                 <div style="background:#f8fafc;border:1px solid var(--card-border);border-radius:8px;
                             padding:8px 14px;min-height:40px;">
                   <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <span style="font-size:12px;color:var(--text-muted);">IRG retenu</span>
-                    <span id="preview-irg" style="font-weight:600;font-size:13px;color:var(--danger);">— DA</span>
+                    <span style="font-size:12px;color:var(--text-muted);">IRG versé à l'État</span>
+                    <span id="preview-irg" style="font-weight:600;font-size:13px;color:var(--warning);">— DA</span>
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-                    <span style="font-size:12px;color:var(--text-muted);">Montant net</span>
+                    <span style="font-size:12px;color:var(--text-muted);">Coût total organisme</span>
                     <span id="preview-net" style="font-weight:700;font-size:14px;color:var(--success);">— DA</span>
                   </div>
                 </div>
@@ -494,17 +497,17 @@
               <span id="side-irg-rate" style="font-weight:600;font-size:13.5px;">—</span>
             </div>
             <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-              <span style="font-size:13px;color:var(--text-muted);">Retenue IRG</span>
-              <span id="side-irg-amount" style="font-weight:600;font-size:13.5px;color:var(--danger);">—</span>
+              <span style="font-size:13px;color:var(--text-muted);">IRG versé à l'État</span>
+              <span id="side-irg-amount" style="font-weight:600;font-size:13.5px;color:var(--warning);">—</span>
             </div>
             <div style="border-top:1px solid var(--card-border);padding-top:10px;margin-top:4px;
                         display:flex;justify-content:space-between;">
-              <span style="font-size:14px;font-weight:700;">Montant net</span>
+              <span style="font-size:14px;font-weight:700;">Coût total organisme</span>
               <span id="side-net" style="font-weight:700;font-size:16px;color:var(--success);">—</span>
             </div>
             <div style="margin-top:12px;font-size:11.5px;color:#94a3b8;line-height:1.5;">
               <i class="bi bi-info-circle"></i>
-              IRG = retenue à la source sur les prestataires externes (10% pour les formateurs contractuels).
+              IRG = impôt versé en sus à l'État (10% pour les formateurs contractuels externes).
             </div>
           </div>
         </div>
@@ -544,15 +547,15 @@
 
               {% if expense.irg_amount %}
               <div class="col-12">
-                <div class="stat-label mb-1">Retenue IRG ({{ expense.irg_rate|floatformat:0 }}%)</div>
-                <div style="font-weight:700;font-size:16px;color:var(--danger);">
-                  − {{ expense.irg_amount|floatformat:2 }} DA
+                <div class="stat-label mb-1">IRG versé à l'État ({{ expense.irg_rate|floatformat:0 }}%)</div>
+                <div style="font-weight:700;font-size:16px;color:var(--warning);">
+                  + {{ expense.irg_amount|floatformat:2 }} DA
                 </div>
               </div>
               {% endif %}
 
               <div class="col-12">
-                <div class="stat-label mb-1">Montant net payé</div>
+                <div class="stat-label mb-1">Coût total organisme</div>
                 <div class="stat-value" style="font-size:22px;color:var(--success);">{{ expense.amount|floatformat:2 }}</div>
                 <div style="font-size:11px;color:var(--text-muted);">DA</div>
               </div>
@@ -883,17 +886,17 @@
     const gross = parseFloat(grossAmountInput ? grossAmountInput.value : 0) || 0;
     const rate  = parseFloat(irgRateInput ? irgRateInput.value : 0) || 0;
     const irg   = Math.round(gross * rate * 100) / 100;
-    const net   = Math.round((gross - irg) * 100) / 100;
+    const net   = Math.round((gross + irg) * 100) / 100;
     const fmt   = n => n.toLocaleString('fr-DZ', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DA';
 
     const prevIrg = document.getElementById('preview-irg');
     const prevNet = document.getElementById('preview-net');
-    if (prevIrg) prevIrg.textContent = irg > 0 ? ('− ' + fmt(irg)) : '0,00 DA';
+    if (prevIrg) prevIrg.textContent = irg > 0 ? ('+ ' + fmt(irg)) : '0,00 DA';
     if (prevNet) prevNet.textContent = gross > 0 ? fmt(net) : '— DA';
 
     document.getElementById('side-gross')      && (document.getElementById('side-gross').textContent = gross > 0 ? fmt(gross) : '—');
     document.getElementById('side-irg-rate')   && (document.getElementById('side-irg-rate').textContent = rate > 0 ? (rate * 100).toFixed(0) + ' %' : '0 %');
-    document.getElementById('side-irg-amount') && (document.getElementById('side-irg-amount').textContent = irg > 0 ? ('− ' + fmt(irg)) : '0,00 DA');
+    document.getElementById('side-irg-amount') && (document.getElementById('side-irg-amount').textContent = irg > 0 ? ('+ ' + fmt(irg)) : '0,00 DA');
     document.getElementById('side-net')        && (document.getElementById('side-net').textContent = gross > 0 ? fmt(net) : '—');
   }
 
@@ -902,7 +905,9 @@
   updateIRGPreview();
 
   /* ── Beneficiary → accounts + IRG + trainer ─────────────── */
-  const accountsBaseUrl = "{% url 'financial:beneficiary_accounts_json' pk=0 %}".replace('/0/', '/');
+  // Read URL template from a hidden input rendered by Django — no string manipulation needed
+  const _accountsUrlTpl = (document.getElementById('accounts-url-tpl') || {}).value || '';
+  const buildAccountsUrl = pk => _accountsUrlTpl.replace('/0/', '/' + pk + '/');
 
   // Store original session options to restore when switching away from trainer
   let _originalSessionOptions = null;
@@ -971,7 +976,7 @@
     }
 
     try {
-      const resp = await fetch(accountsBaseUrl + pk + '/accounts/');
+      const resp = await fetch(buildAccountsUrl(pk));
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const data = await resp.json();
 
@@ -984,9 +989,15 @@
         });
       }
 
-      // IRG rate auto-fill
-      if (irgRateInput && data.irg_rate !== undefined) {
-        irgRateInput.value = data.irg_rate;
+      // IRG rate auto-fill:
+      // Force 0.10 for trainers; use stored rate for others (editable either way)
+      if (irgRateInput) {
+        const isTrainerForIRG = data.is_trainer === true;
+        if (isTrainerForIRG) {
+          irgRateInput.value = '0.1';
+        } else if (data.irg_rate !== undefined) {
+          irgRateInput.value = data.irg_rate;
+        }
         updateIRGPreview();
       }
 
@@ -1008,7 +1019,13 @@
       }
 
     } catch (e) {
-      console.warn('Could not load beneficiary data:', e);
+      console.error('[ISI] Beneficiary accounts fetch failed:', e);
+      // Reset dropdown so stale accounts from a previous selection are not shown
+      if (paymentAccountSel) {
+        paymentAccountSel.innerHTML = '<option value="">— Sélectionner un compte —</option>';
+      }
+      if (irgRateInput) { irgRateInput.value = '0'; updateIRGPreview(); }
+      if (trainerSection) trainerSection.style.display = 'none';
     }
   }
 
@@ -1099,11 +1116,15 @@
   }
 
   /* ── Date pre-fill ──────────────────────────────────────── */
-  const dateInput = document.getElementById('id_date');
-  if (dateInput && !dateInput.value) {
+  function todayISO() {
     const t = new Date();
-    dateInput.value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   }
+  const dateInput = document.getElementById('id_date');
+  if (dateInput && !dateInput.value) dateInput.value = todayISO();
+
+  const paymentDateInput = document.getElementById('id_payment_date');
+  if (paymentDateInput && !paymentDateInput.value) paymentDateInput.value = todayISO();
 
   /* ── Modal: Quick-add Beneficiary ───────────────────────── */
   const modalBenef   = document.getElementById('modal-beneficiary');

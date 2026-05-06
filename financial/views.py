@@ -960,10 +960,12 @@ def expense_list(request):
         date_to = form.cleaned_data.get("date_to")
         allocation = form.cleaned_data.get("allocation")
         missing_receipt = form.cleaned_data.get("missing_receipt")
+        beneficiary = form.cleaned_data.get("beneficiary")
         beneficiary_type = form.cleaned_data.get("beneficiary_type")
         has_irg = form.cleaned_data.get("has_irg")
         g50_month = form.cleaned_data.get("g50_month")
         trainer_payment_mode = form.cleaned_data.get("trainer_payment_mode")
+        fiscal_year = form.cleaned_data.get("fiscal_year")
         quarter = form.cleaned_data.get("quarter")
 
         if q:
@@ -988,12 +990,16 @@ def expense_list(request):
             qs = qs.filter(is_overhead=True)
         if missing_receipt:
             qs = qs.filter(receipt="", receipt_missing=False)
+        if beneficiary:
+            qs = qs.filter(beneficiary=beneficiary)
         if beneficiary_type:
             qs = qs.filter(beneficiary__beneficiary_type=beneficiary_type)
         if has_irg == "yes":
             qs = qs.filter(irg_rate__gt=0)
         elif has_irg == "no":
             qs = qs.filter(irg_rate=0)
+        if fiscal_year:
+            qs = qs.filter(date__year=fiscal_year)
         if g50_month:
             qs = qs.filter(g50_month=g50_month)
         if trainer_payment_mode:
@@ -1781,12 +1787,12 @@ def beneficiary_accounts_json(request, pk):
     """
     beneficiary = get_object_or_404(Beneficiary, pk=pk)
     accounts = list(
-        beneficiary.accounts.values(
+        beneficiary.payment_accounts.values(
             "id", "account_type", "account_number", "bank_name", "is_default"
         ).order_by("-is_default", "account_type")
     )
     # Build human-readable label for each account
-    type_display = dict(PaymentAccount.ACCOUNT_TYPE_CHOICES)
+    type_display = dict(PaymentAccount.AccountType.choices)
     for acct in accounts:
         parts = [type_display.get(acct["account_type"], acct["account_type"])]
         if acct["account_number"]:
