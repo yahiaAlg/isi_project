@@ -1708,7 +1708,7 @@ def beneficiary_quick_add(request):
     form = BeneficiaryForm(request.POST)
     if form.is_valid():
         beneficiary = form.save()
-        default_acct = beneficiary.default_account
+        default_acct = beneficiary.default_payment_account
         return JsonResponse(
             {
                 "success": True,
