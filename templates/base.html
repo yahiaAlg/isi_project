@@ -482,12 +482,19 @@
 
     /* ── Responsive ──────────────────────────────────────────────── */
     @media (max-width: 991.98px) {
+      body { overflow-x: hidden; }
       #sidebar { transform: translateX(-100%); }
       #sidebar.open { transform: translateX(0); }
       #main-wrap { margin-left: 0; }
       #sidebar-overlay.open { display: block; }
       .topbar-toggle { display: flex; align-items: center; }
       #page-content { padding: 20px 16px; }
+    }
+
+    @media (max-width: 600px) {
+      #page-content { padding: 14px 12px; }
+      #topbar { padding: 0 14px; }
+      #main-wrap, #page-content { max-width: 100vw; overflow-x: hidden; }
     }
 
     /* ── Animations ──────────────────────────────────────────────── */
@@ -678,6 +685,9 @@
   {% csrf_token %}
 </form>
 
+<!-- Mobile sidebar overlay -->
+<div id="sidebar-overlay"></div>
+
 <!-- ═══════════════════ MAIN ═══════════════════ -->
 <div id="main-wrap">
 
@@ -740,7 +750,7 @@
     overlay.classList.remove('open');
   }
   toggleBtn?.addEventListener('click', () => sidebar.classList.contains('open') ? closeSidebar() : openSidebar());
-  overlay.addEventListener('click', closeSidebar);
+  overlay?.addEventListener('click', closeSidebar);
 
   // Auto-dismiss alerts after 4s
   document.querySelectorAll('.alert').forEach(el => {
