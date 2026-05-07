@@ -1749,11 +1749,22 @@ def payment_account_quick_add(request):
     form = PaymentAccountForm(request.POST, beneficiary=beneficiary)
     if form.is_valid():
         account = form.save()
+        # Build the display label using the same logic as beneficiary_accounts_json:
+        # prefer the stored label field; fall back to type + number + bank.
+        if account.label:
+            display_label = account.label
+        else:
+            parts = [account.get_account_type_display()]
+            if account.account_number:
+                parts.append(account.account_number)
+            if account.bank_name:
+                parts.append(f"({account.bank_name})")
+            display_label = " — ".join(parts)
         return JsonResponse(
             {
                 "success": True,
                 "id": account.pk,
-                "label": str(account),
+                "label": display_label,
                 "account_type": account.account_type,
                 "account_type_display": account.get_account_type_display(),
                 "is_default": account.is_default,
@@ -1796,28 +1807,41 @@ def beneficiary_accounts_json(request, pk):
     beneficiary = get_object_or_404(Beneficiary, pk=pk)
     accounts = list(
         beneficiary.payment_accounts.values(
-            "id", "account_type", "account_number", "bank_name", "is_default"
+            "id", "account_type", "label", "account_number", "bank_name", "is_default"
         ).order_by("-is_default", "account_type")
     )
     # Build human-readable label for each account
     type_display = dict(PaymentAccount.AccountType.choices)
     for acct in accounts:
-        parts = [type_display.get(acct["account_type"], acct["account_type"])]
-        if acct["account_number"]:
-            parts.append(acct["account_number"])
-        if acct["bank_name"]:
-            parts.append(f"({acct['bank_name']})")
-        acct["label"] = " — ".join(parts)
+        # Prefer the stored label field; fall back to building one from parts
+        if acct.get("label"):
+            display_label = acct["label"]
+        else:
+            parts = [type_display.get(acct["account_type"], acct["account_type"])]
+            if acct["account_number"]:
+                parts.append(acct["account_number"])
+            if acct["bank_name"]:
+                parts.append(f"({acct['bank_name']})")
+            display_label = " — ".join(parts)
+        acct["label"] = display_label
         acct["account_type_display"] = type_display.get(acct["account_type"], "")
 
     # Trainer-specific data
     trainer_sessions = []
-    if beneficiary.is_trainer and beneficiary.trainer:
+    try:
+        trainer_obj = (
+            beneficiary.trainer
+            if beneficiary.is_trainer and beneficiary.trainer_id
+            else None
+        )
+    except Exception:
+        trainer_obj = None
+    if trainer_obj:
         from formations.models import Session
 
         sessions_qs = (
             Session.objects.filter(
-                trainer=beneficiary.trainer,
+                trainer=trainer_obj,
             )
             .order_by("-date_start")
             .values("id", "formation__title", "date_start")
