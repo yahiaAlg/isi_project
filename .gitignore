@@ -23,6 +23,7 @@ venv.bak/
 .idea/
 *.swp
 *.swo
+*.json
 *~
 
 # OS
