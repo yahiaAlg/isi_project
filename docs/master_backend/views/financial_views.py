@@ -1749,11 +1749,22 @@ def payment_account_quick_add(request):
     form = PaymentAccountForm(request.POST, beneficiary=beneficiary)
     if form.is_valid():
         account = form.save()
+        # Build the display label using the same logic as beneficiary_accounts_json:
+        # prefer the stored label field; fall back to type + number + bank.
+        if account.label:
+            display_label = account.label
+        else:
+            parts = [account.get_account_type_display()]
+            if account.account_number:
+                parts.append(account.account_number)
+            if account.bank_name:
+                parts.append(f"({account.bank_name})")
+            display_label = " — ".join(parts)
         return JsonResponse(
             {
                 "success": True,
                 "id": account.pk,
-                "label": str(account),
+                "label": display_label,
                 "account_type": account.account_type,
                 "account_type_display": account.get_account_type_display(),
                 "is_default": account.is_default,
