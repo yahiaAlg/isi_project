@@ -132,9 +132,13 @@
           </td>
           <td style="text-align:right;font-weight:600;color:#ef4444;white-space:nowrap;">{{ e.amount|floatformat:0 }} DA</td>
           <td style="white-space:nowrap;">
-            <div style="display:flex;gap:6px;">
-              <a href="{% url 'financial:expense_approve' e.pk %}" class="btn btn-sm" style="padding:3px 8px;font-size:11px;background:rgba(16,185,129,.12);color:#059669;border:1px solid rgba(16,185,129,.3);border-radius:6px;" title="Approuver"><i class="bi bi-check-lg"></i></a>
-              <a href="{% url 'financial:expense_reject' e.pk %}" class="btn btn-sm" style="padding:3px 8px;font-size:11px;background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.25);border-radius:6px;" title="Rejeter"><i class="bi bi-x-lg"></i></a>
+            <div style="display:flex;gap:6px;align-items:center;">
+              {% if e.approval_status == 'pending' %}
+              <form method="post" action="{% url 'financial:expense_approve' e.pk %}" style="display:inline;">{% csrf_token %}<button type="submit" class="btn btn-sm" style="padding:3px 8px;font-size:11px;background:rgba(16,185,129,.12);color:#059669;border:1px solid rgba(16,185,129,.3);border-radius:6px;cursor:pointer;" title="Approuver"><i class="bi bi-check-lg"></i></button></form>
+              <form method="post" action="{% url 'financial:expense_reject' e.pk %}" style="display:inline;">{% csrf_token %}<button type="submit" class="btn btn-sm" style="padding:3px 8px;font-size:11px;background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.25);border-radius:6px;cursor:pointer;" title="Rejeter"><i class="bi bi-x-lg"></i></button></form>
+              {% else %}
+              <span style="font-size:11px;padding:3px 8px;border-radius:6px;background:rgba(16,185,129,.12);color:#059669;border:1px solid rgba(16,185,129,.3);white-space:nowrap;"><i class="bi bi-check-circle-fill"></i> {{ e.get_approval_status_display }}</span>
+              {% endif %}
               <a href="{% url 'financial:expense_detail' e.pk %}" class="btn btn-sm" style="padding:3px 8px;font-size:11px;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:6px;" title="Détail"><i class="bi bi-eye"></i></a>
             </div>
           </td>
