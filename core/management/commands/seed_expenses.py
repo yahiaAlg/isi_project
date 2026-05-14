@@ -240,11 +240,7 @@ class Command(BaseCommand):
                 supplier=supplier,
                 payment_reference=row.get("invoice_number") or "",
                 is_overhead=True,
-                approval_status=(
-                    Expense.ApprovalStatus.PENDING
-                    if needs_review
-                    else Expense.ApprovalStatus.APPROVED
-                ),
+                approval_status=Expense.ApprovalStatus.PENDING,
                 receipt_missing=not bool(receipt_relative),
                 notes="\n".join(note_parts),
                 # G50 declaration month — None when --G50 is not supplied
