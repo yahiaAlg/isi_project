@@ -406,3 +406,87 @@ print("=" * 55)
 - Invoices are filtered to `phase=FINALE` and voided ones are excluded, since proformas aren't real revenue
 - Only `Payment.Status.CONFIRMED` payments count toward `payments_total` (pending/reversed excluded)
 - `expenses_difference` = total − approved, meaning it captures pending + rejected expenses
+
+---
+
+```python
+from decimal import Decimal
+from django.db.models import Sum
+from financial.models import Expense, Invoice, Payment
+
+# ── Expenses ──────────────────────────────────────────────────────────────────
+
+approved_expenses = (
+    Expense.objects.filter(approval_status=Expense.ApprovalStatus.APPROVED)
+    .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+)
+
+total_expenses = (
+    Expense.objects.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+)
+
+expenses_difference = total_expenses - approved_expenses  # pending + rejected
+
+# ── Invoices (finale, non-voided) ─────────────────────────────────────────────
+
+invoice_qs = Invoice.objects.filter(
+    phase=Invoice.Phase.FINALE,
+).exclude(status=Invoice.Status.VOIDED)
+
+invoice_totals = invoice_qs.aggregate(
+    ht=Sum("amount_ht"),
+    tva=Sum("amount_tva"),
+    ttc=Sum("amount_ttc"),
+)
+
+invoices_ht_total  = invoice_totals["ht"]  or Decimal("0")
+invoices_tva_total = invoice_totals["tva"] or Decimal("0")
+invoices_ttc_total = invoice_totals["ttc"] or Decimal("0")
+
+# ── Payments (confirmed only) ─────────────────────────────────────────────────
+
+payments_total = (
+    Payment.objects.filter(status=Payment.Status.CONFIRMED)
+    .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+)
+
+# ── Margins — HT base ────────────────────────────────────────────────────────
+
+profit             = invoices_ht_total  - approved_expenses   # billed HT − approved costs
+current_margin     = payments_total     - approved_expenses   # cash received − approved costs
+theoretical_margin = invoices_ht_total  - total_expenses      # total HT − all costs
+
+# ── Margins — TTC base ───────────────────────────────────────────────────────
+
+profit_ttc             = invoices_ttc_total - approved_expenses   # billed TTC − approved costs
+current_margin_ttc     = payments_total     - approved_expenses   # same (payments are TTC amounts)
+theoretical_margin_ttc = invoices_ttc_total - total_expenses      # total TTC − all costs
+
+# ── Report ────────────────────────────────────────────────────────────────────
+
+W = 57
+print("=" * W)
+print(f"  {'EXPENSES'}")
+print(f"  Approved expenses            : {approved_expenses:>14,.2f} DA")
+print(f"  Total expenses               : {total_expenses:>14,.2f} DA")
+print(f"  Difference (non-approved)    : {expenses_difference:>14,.2f} DA")
+print("-" * W)
+print(f"  {'INVOICES (finale, non-voided)'}")
+print(f"  Total HT                     : {invoices_ht_total:>14,.2f} DA")
+print(f"  Total TVA                    : {invoices_tva_total:>14,.2f} DA")
+print(f"  Total TTC                    : {invoices_ttc_total:>14,.2f} DA")
+print(f"  Payments total (confirmed)   : {payments_total:>14,.2f} DA")
+print("-" * W)
+print(f"  {'MARGINS — HT BASE'}")
+print(f"  Profit      (HT  − approved) : {profit:>14,.2f} DA")
+print(f"  Current     (pay − approved) : {current_margin:>14,.2f} DA")
+print(f"  Theoretical (HT  − total)    : {theoretical_margin:>14,.2f} DA")
+print("-" * W)
+print(f"  {'MARGINS — TTC BASE'}")
+print(f"  Profit      (TTC − approved) : {profit_ttc:>14,.2f} DA")
+print(f"  Current     (pay − approved) : {current_margin_ttc:>14,.2f} DA")
+print(f"  Theoretical (TTC − total)    : {theoretical_margin_ttc:>14,.2f} DA")
+print("=" * W)
+```
+
+**Note on TTC margins:** `current_margin` is identical in both bases because `Payment.amount` records the actual cash received (TTC amounts) — it has no separate HT/TTC split. The difference between HT and TTC bases only shows up in `profit` and `theoretical_margin`.
