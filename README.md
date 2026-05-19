@@ -338,3 +338,71 @@ real_result = SUM(Invoice.amount_ht
 ```
 
 This would use only **fully paid invoices (HT)** against **approved expenses** — giving you a true operational result on a revenue-recognition basis. This doesn't exist yet in `reporting_views.py` and would need to be added as a new view/metric.
+
+---
+
+Now I have everything I need. Here's the Django financial summary shell script:
+
+```python
+from decimal import Decimal
+from django.db.models import Sum, Q
+from financial.models import Expense, Invoice, Payment
+
+# ── Expenses ──────────────────────────────────────────────────────────────────
+
+approved_expenses = (
+    Expense.objects.filter(approval_status=Expense.ApprovalStatus.APPROVED)
+    .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+)
+
+total_expenses = (
+    Expense.objects.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+)
+
+expenses_difference = total_expenses - approved_expenses  # pending + rejected
+
+# ── Invoices (finale only) ────────────────────────────────────────────────────
+
+invoices_ht_total = (
+    Invoice.objects.filter(
+        phase=Invoice.Phase.FINALE,
+    )
+    .exclude(status=Invoice.Status.VOIDED)
+    .aggregate(total=Sum("amount_ht"))["total"] or Decimal("0")
+)
+
+# ── Payments (confirmed only) ─────────────────────────────────────────────────
+
+payments_total = (
+    Payment.objects.filter(status=Payment.Status.CONFIRMED)
+    .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+)
+
+# ── Margins ───────────────────────────────────────────────────────────────────
+
+profit                = invoices_ht_total - approved_expenses   # billed HT − approved costs
+current_margin        = payments_total - approved_expenses      # cash received − approved costs
+theoretical_margin    = invoices_ht_total - total_expenses      # total HT − all costs
+
+# ── Report ────────────────────────────────────────────────────────────────────
+
+print("=" * 55)
+print(f"  Approved expenses          : {approved_expenses:>14,.2f} DA")
+print(f"  Total expenses             : {total_expenses:>14,.2f} DA")
+print(f"  Difference (non-approved)  : {expenses_difference:>14,.2f} DA")
+print("-" * 55)
+print(f"  Invoices HT total          : {invoices_ht_total:>14,.2f} DA")
+print(f"  Payments total (confirmed) : {payments_total:>14,.2f} DA")
+print("-" * 55)
+print(f"  Profit (HT − approved)     : {profit:>14,.2f} DA")
+print(f"  Current margin (pay−appr.) : {current_margin:>14,.2f} DA")
+print(f"  Theoretical margin         : {theoretical_margin:>14,.2f} DA")
+print("=" * 55)
+```
+
+**Key choices made:**
+
+- `Expense.amount` is used (the full org cost = gross + IRG), not `gross_amount`
+- Invoices are filtered to `phase=FINALE` and voided ones are excluded, since proformas aren't real revenue
+- Only `Payment.Status.CONFIRMED` payments count toward `payments_total` (pending/reversed excluded)
+- `expenses_difference` = total − approved, meaning it captures pending + rejected expenses
