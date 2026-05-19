@@ -218,3 +218,123 @@ python manage.py seed_db_minimal
 
 python manage.py seed_formations_catalog     # all 505 specialties
 ```
+
+---
+
+Now let me find the `dashboard_kpis` function specifically:
+
+Now let me check the `dashboard_kpis` utility for the gross margin formula:
+
+I now have everything needed. Here's the complete breakdown:
+
+---
+
+## How Each Dashboard Metric is Calculated
+
+### 1. CA HT (Année) — `4 744 661 DA`
+
+**Source:** `dashboard_kpis()` → `financial/utils.py`
+
+```
+CA HT = SUM(Invoice.amount_ht)
+        WHERE phase = FINALE
+          AND status IN [UNPAID, PARTIALLY_PAID, PAID]
+          AND invoice_date IN current year range
+```
+
+This is **billed revenue** — all finalized invoices issued this year, regardless of whether they've been paid. Broken down as `F 4 744 661 · E 0` (Formations · Études).
+
+---
+
+### 2. Encaissé (Année) — `3 591 100 DA`
+
+```
+Encaissé = SUM(Payment.amount)
+           WHERE status = CONFIRMED
+             AND date IN current year range
+```
+
+**Actual cash received** — only confirmed payments. This is always ≤ CA HT because some invoices are still unpaid.
+
+---
+
+### 3. Créances impayées — `1 549 980 DA`
+
+```
+Créances = SUM(Invoice.amount_remaining)
+           WHERE status IN [UNPAID, PARTIALLY_PAID]
+```
+
+`amount_remaining` is a stored field on the `Invoice` model: `amount_ttc − amount_paid`. This is the **outstanding receivables** — money billed but not yet collected.
+
+**Note:** CA HT − Encaissé ≠ Créances exactly, because CA is HT (excl. TVA) while payments and remaining are TTC (incl. TVA).
+
+---
+
+### 4. Marge Brute — `−3 802 180 DA` ⚠️
+
+```python
+# From FinancialPeriod model (master_models.md line 2740):
+gross_margin = total_invoiced_ht - total_expenses
+
+# Where:
+total_invoiced_ht = SUM(Invoice.amount_ht) — finalized invoices, current year
+total_expenses    = SUM(Expense.amount)    — WHERE approval_status = APPROVED
+                                             AND date IN current year
+```
+
+**Why it's negative:** Approved expenses (`8 546 841 DA`) far exceed invoiced HT revenue (`4 744 661 DA`). This is mathematically correct — the institute spent more than it billed.
+
+**Important nuance about `Expense.amount`:**
+
+```python
+# Expense.save():
+amount = gross_amount + irg_amount   # = gross + (gross × irg_rate)
+# IRG is an ADDITIONAL tax paid to the State on top of what's paid to the provider
+```
+
+So expenses include the IRG withholding tax burden.
+
+---
+
+### 5. Flux de trésorerie NET — `−4 955 741 DA`
+
+```python
+# Per month: net = collected - expenses
+# Running balance = cumulative sum of monthly nets
+
+net = SUM(Payment.amount WHERE status=CONFIRMED)
+    − SUM(Expense.amount WHERE approval_status=APPROVED)
+```
+
+This is a **cash basis** calculation (actual payments received vs. actual expenses incurred by date). It's more negative than the gross margin because Encaissé (3 591 100) < CA HT (4 744 661).
+
+---
+
+## What's Missing: The "Real Revenue" Metric You Want
+
+You're looking for:
+
+```
+Real Result = Approved & Paid Invoices (HT) − Approved Expenses
+```
+
+**Currently, no single metric does this cleanly.** Here's the mismatch:
+
+| Metric        | Revenue side         | Expense side      | Problem                            |
+| ------------- | -------------------- | ----------------- | ---------------------------------- |
+| Marge Brute   | Invoiced HT (billed) | Approved expenses | Includes unpaid invoices           |
+| Cash Flow NET | Collected TTC (paid) | Approved expenses | Mixes HT revenue with TTC payments |
+
+The correct formula would be:
+
+```python
+real_result = SUM(Invoice.amount_ht
+                  WHERE status = PAID
+                    AND invoice_date IN period)
+            - SUM(Expense.amount
+                  WHERE approval_status = APPROVED
+                    AND date IN period)
+```
+
+This would use only **fully paid invoices (HT)** against **approved expenses** — giving you a true operational result on a revenue-recognition basis. This doesn't exist yet in `reporting_views.py` and would need to be added as a new view/metric.

@@ -54,13 +54,51 @@
     </div>
   </div>
 
+  {% if is_admin and kpis %}
+  <!-- ══ Date filter ══ -->
+  <form method="get" class="mb-4" id="dashboard-filter-form">
+    <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <label for="date_from" style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Du</label>
+        <input type="date" id="date_from" name="date_from"
+               value="{{ date_from|date:'Y-m-d' }}"
+               style="height:36px;padding:0 10px;border:1px solid var(--card-border);border-radius:8px;font-size:13.5px;color:var(--text-primary);background:#fff;outline:none;"
+               onchange="this.form.submit()">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <label for="date_to" style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Au</label>
+        <input type="date" id="date_to" name="date_to"
+               value="{{ date_to|date:'Y-m-d' }}"
+               style="height:36px;padding:0 10px;border:1px solid var(--card-border);border-radius:8px;font-size:13.5px;color:var(--text-primary);background:#fff;outline:none;"
+               onchange="this.form.submit()">
+      </div>
+      <div style="display:flex;gap:8px;padding-bottom:1px;">
+        <button type="submit" class="btn btn-amber btn-sm" style="height:36px;padding:0 14px;">
+          <i class="bi bi-funnel-fill"></i> Filtrer
+        </button>
+        <a href="{% url 'reporting:dashboard' %}" class="btn btn-ghost btn-sm" style="height:36px;padding:0 14px;">
+          <i class="bi bi-arrow-counterclockwise"></i> Réinitialiser
+        </a>
+      </div>
+      {% if date_from or date_to %}
+      <div style="padding-bottom:4px;">
+        <span style="font-size:12px;color:var(--text-muted);">
+          <i class="bi bi-calendar-range" style="color:var(--accent);"></i>
+          Période : <strong>{{ date_from|date:"d/m/Y" }}</strong> → <strong>{{ date_to|date:"d/m/Y" }}</strong>
+        </span>
+      </div>
+      {% endif %}
+    </div>
+  </form>
+  {% endif %}
+
   <!-- ══════════════════════════════════════════════════════════════
        KPI ROW (admin only)
   ══════════════════════════════════════════════════════════════ -->
   {% if is_admin and kpis %}
   <div class="row g-3 mb-4">
 
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-sm-6 col-lg-4 col-xl-2">
       <a href="{% url 'reporting:revenue_summary' %}" style="text-decoration:none;">
         <div class="isi-card h-100">
           <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
@@ -77,7 +115,7 @@
       </a>
     </div>
 
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-sm-6 col-lg-4 col-xl-2">
       <a href="{% url 'reporting:collections_report' %}" style="text-decoration:none;">
         <div class="isi-card h-100">
           <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
@@ -91,7 +129,7 @@
       </a>
     </div>
 
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-sm-6 col-lg-4 col-xl-2">
       <a href="{% url 'reporting:outstanding_receivables' %}" style="text-decoration:none;">
         <div class="isi-card h-100">
           <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
@@ -108,7 +146,7 @@
       </a>
     </div>
 
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-sm-6 col-lg-4 col-xl-2">
       <a href="{% url 'reporting:combined_margin_report' %}" style="text-decoration:none;">
         <div class="isi-card h-100">
           <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
@@ -116,6 +154,42 @@
             <div>
               <div class="stat-value">{{ kpis.gross_margin|floatformat:0 }} DA</div>
               <div class="stat-label">Marge brute</div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-4 col-xl-2">
+      <a href="{% url 'reporting:expense_breakdown_report' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+            <div class="card-icon red" style="width:44px;height:44px;font-size:20px;border-radius:12px;"><i class="bi bi-arrow-down-circle-fill"></i></div>
+            <div>
+              <div class="stat-value">{{ kpis.expenses_year|floatformat:0 }} DA</div>
+              <div class="stat-label">Dépenses approuvées</div>
+              <div class="kpi-trend" title="Dépenses approuvées pour l'année en cours">
+                <span>Année {{ kpis.year|default:"en cours" }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-4 col-xl-2">
+      <a href="{% url 'reporting:combined_margin_report' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:18px 20px;">
+            <div class="card-icon {% if kpis.real_result >= 0 %}green{% else %}red{% endif %}" style="width:44px;height:44px;font-size:20px;border-radius:12px;">
+              <i class="bi bi-{% if kpis.real_result >= 0 %}check2-circle{% else %}exclamation-triangle-fill{% endif %}"></i>
+            </div>
+            <div>
+              <div class="stat-value" style="{% if kpis.real_result < 0 %}color:#ef4444;{% endif %}">{{ kpis.real_result|floatformat:0 }} DA</div>
+              <div class="stat-label">Résultat réel</div>
+              <div class="kpi-trend" title="Factures entièrement payées (HT) − dépenses approuvées">
+                <span>Payé {{ kpis.paid_ht|floatformat:0 }}</span>
+              </div>
             </div>
           </div>
         </div>

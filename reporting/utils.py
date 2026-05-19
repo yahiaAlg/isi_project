@@ -9,10 +9,12 @@ from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 
 
-def dashboard_kpis():
+def dashboard_kpis(date_from=None, date_to=None):
     """
     Compute all KPIs needed by the dashboard in as few queries as possible.
     Returns a flat dict consumed directly by the dashboard template context.
+    Accepts optional date_from / date_to to filter the period (defaults to
+    current calendar year).
     """
     from clients.models import Client
     from etudes.models import StudyProject
@@ -21,13 +23,15 @@ def dashboard_kpis():
 
     today = date.today()
 
-    # ── Revenue (current year) ────────────────────────────────────────── #
+    # ── Period bounds ──────────────────────────────────────────────────── #
     year_start = date(today.year, 1, 1)
     year_end = date(today.year, 12, 31)
+    date_from = date_from or year_start
+    date_to = date_to or year_end
 
     inv_year = Invoice.objects.filter(
         phase=Invoice.Phase.FINALE,
-        invoice_date__range=[year_start, year_end],
+        invoice_date__range=[date_from, date_to],
         status__in=[
             Invoice.Status.UNPAID,
             Invoice.Status.PARTIALLY_PAID,
@@ -43,7 +47,7 @@ def dashboard_kpis():
 
     # ── Collections ───────────────────────────────────────────────────── #
     collected_year = Payment.objects.filter(
-        date__range=[year_start, year_end],
+        date__range=[date_from, date_to],
         status=Payment.Status.CONFIRMED,
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
@@ -68,7 +72,7 @@ def dashboard_kpis():
             "pk",
             filter=Q(
                 status=Session.STATUS_COMPLETED,
-                date_start__range=[year_start, year_end],
+                date_start__range=[date_from, date_to],
             ),
         ),
     )
@@ -87,7 +91,7 @@ def dashboard_kpis():
 
     # ── Expenses (year) ───────────────────────────────────────────────── #
     expenses_year = Expense.objects.filter(
-        date__range=[year_start, year_end],
+        date__range=[date_from, date_to],
         approval_status=Expense.ApprovalStatus.APPROVED,
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
@@ -97,6 +101,15 @@ def dashboard_kpis():
     ).count()
 
     total_ht = inv_year["total_ht"] or Decimal("0")
+
+    # ── Résultat réel (factures PAYÉES HT − dépenses approuvées) ─────── #
+    paid_ht = Invoice.objects.filter(
+        phase=Invoice.Phase.FINALE,
+        status=Invoice.Status.PAID,
+        invoice_date__range=[date_from, date_to],
+    ).aggregate(total=Sum("amount_ht"))["total"] or Decimal("0")
+
+    real_result = paid_ht - expenses_year
 
     return {
         # Revenue
@@ -118,6 +131,9 @@ def dashboard_kpis():
         "projects_active": projects["active"] or 0,
         "projects_overdue": projects["overdue"] or 0,
         "expenses_need_action": expenses_action,
+        # Résultat réel
+        "paid_ht": paid_ht,
+        "real_result": real_result,
     }
 
 
