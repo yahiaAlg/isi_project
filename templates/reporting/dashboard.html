@@ -168,9 +168,9 @@
             <div>
               <div class="stat-value">{{ kpis.expenses_year|floatformat:0 }} DA</div>
               <div class="stat-label">Dépenses approuvées</div>
-              <div class="kpi-trend" title="Dépenses approuvées pour l'année en cours">
-                <span>Année {{ kpis.year|default:"en cours" }}</span>
-              </div>
+              {% if kpis.expenses_year_non_approved > 0 %}
+              <div class="kpi-trend"><span class="down"><i class="bi bi-hourglass-split"></i> +{{ kpis.expenses_year_non_approved|floatformat:0 }} en attente</span></div>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -247,6 +247,128 @@
           </div>
         </div>
       </a>
+    </div>
+
+  </div>
+
+  <!-- ══ Detailed financial breakdown ══ -->
+  <div class="row g-3 mb-4">
+
+    <!-- Invoices breakdown -->
+    <div class="col-lg-4">
+      <div class="isi-card h-100">
+        <div class="isi-card-header">
+          <div class="card-icon amber"><i class="bi bi-receipt-cutoff"></i></div>
+          <h3>Facturation (période)</h3>
+          <a href="{% url 'reporting:revenue_summary' %}" class="ms-auto btn btn-ghost btn-sm">Détail</a>
+        </div>
+        <div class="isi-card-body" style="padding-top:4px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">Total HT</div>
+              <div style="font-size:11px;color:#94a3b8;">facturé hors taxes</div>
+            </div>
+            <span style="font-weight:700;font-size:14px;">{{ kpis.invoices_ht_total|floatformat:0 }} DA</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">TVA collectée</div>
+              <div style="font-size:11px;color:#94a3b8;">TTC − HT</div>
+            </div>
+            <span style="font-weight:600;font-size:13.5px;">{{ kpis.invoices_tva_total|floatformat:0 }} DA</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">Total TTC</div>
+              <div style="font-size:11px;color:#94a3b8;">HT + TVA (montant client)</div>
+            </div>
+            <span style="font-weight:700;font-size:14px;color:var(--accent);">{{ kpis.invoices_ttc_total|floatformat:0 }} DA</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">Encaissé</div>
+              <div style="font-size:11px;color:#94a3b8;">paiements confirmés reçus</div>
+            </div>
+            <span style="font-weight:700;font-size:14px;color:#10b981;">{{ kpis.payments_total|floatformat:0 }} DA</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Margins HT base -->
+    <div class="col-lg-4">
+      <div class="isi-card h-100">
+        <div class="isi-card-header">
+          <div class="card-icon purple"><i class="bi bi-graph-up-arrow"></i></div>
+          <h3>Marges — base HT</h3>
+          <a href="{% url 'reporting:combined_margin_report' %}" class="ms-auto btn btn-ghost btn-sm">Détail</a>
+        </div>
+        <div class="isi-card-body" style="padding-top:4px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">Profit</div>
+              <div style="font-size:11px;color:#94a3b8;">CA HT − dépenses approuvées</div>
+            </div>
+            <span style="font-weight:700;font-size:14px;{% if kpis.profit < 0 %}color:#ef4444;{% else %}color:#10b981;{% endif %}">
+              {{ kpis.profit|floatformat:0 }} DA
+            </span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">Marge courante</div>
+              <div style="font-size:11px;color:#94a3b8;">encaissé − dépenses approuvées</div>
+            </div>
+            <span style="font-weight:600;font-size:13.5px;{% if kpis.current_margin < 0 %}color:#ef4444;{% endif %}">
+              {{ kpis.current_margin|floatformat:0 }} DA
+            </span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">Marge théorique</div>
+              <div style="font-size:11px;color:#94a3b8;">CA HT − toutes dépenses</div>
+            </div>
+            <span style="font-weight:600;font-size:13.5px;color:#64748b;">{{ kpis.theoretical_margin|floatformat:0 }} DA</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Margins TTC base -->
+    <div class="col-lg-4">
+      <div class="isi-card h-100">
+        <div class="isi-card-header">
+          <div class="card-icon green"><i class="bi bi-graph-up-arrow"></i></div>
+          <h3>Marges — base TTC</h3>
+          <a href="{% url 'reporting:combined_margin_report' %}" class="ms-auto btn btn-ghost btn-sm">Détail</a>
+        </div>
+        <div class="isi-card-body" style="padding-top:4px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">Profit TTC</div>
+              <div style="font-size:11px;color:#94a3b8;">CA TTC − dépenses approuvées</div>
+            </div>
+            <span style="font-weight:700;font-size:14px;{% if kpis.profit_ttc < 0 %}color:#ef4444;{% else %}color:#10b981;{% endif %}">
+              {{ kpis.profit_ttc|floatformat:0 }} DA
+            </span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">Marge courante</div>
+              <div style="font-size:11px;color:#94a3b8;">encaissé − dépenses approuvées</div>
+            </div>
+            <span style="font-weight:600;font-size:13.5px;{% if kpis.current_margin_ttc < 0 %}color:#ef4444;{% endif %}">
+              {{ kpis.current_margin_ttc|floatformat:0 }} DA
+            </span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">Marge théorique</div>
+              <div style="font-size:11px;color:#94a3b8;">CA TTC − toutes dépenses</div>
+            </div>
+            <span style="font-weight:600;font-size:13.5px;color:#64748b;">{{ kpis.theoretical_margin_ttc|floatformat:0 }} DA</span>
+          </div>
+        </div>
+      </div>
     </div>
 
   </div>

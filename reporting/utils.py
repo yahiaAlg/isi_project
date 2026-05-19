@@ -89,11 +89,18 @@ def dashboard_kpis(date_from=None, date_to=None):
         ),
     )
 
-    # ── Expenses (year) ───────────────────────────────────────────────── #
+    # ── Expenses (year — approved) ────────────────────────────────────── #
     expenses_year = Expense.objects.filter(
         date__range=[date_from, date_to],
         approval_status=Expense.ApprovalStatus.APPROVED,
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    # ── Expenses (year — all) ─────────────────────────────────────────── #
+    expenses_year_total = Expense.objects.filter(
+        date__range=[date_from, date_to],
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    expenses_year_non_approved = expenses_year_total - expenses_year
 
     # ── Expenses needing action ───────────────────────────────────────── #
     expenses_action = Expense.objects.filter(
@@ -101,6 +108,30 @@ def dashboard_kpis(date_from=None, date_to=None):
     ).count()
 
     total_ht = inv_year["total_ht"] or Decimal("0")
+
+    # ── Invoices — full breakdown (finale, non-voided, period) ────────── #
+    inv_full = (
+        Invoice.objects.filter(
+            phase=Invoice.Phase.FINALE,
+            invoice_date__range=[date_from, date_to],
+        )
+        .exclude(status=Invoice.Status.VOIDED)
+        .aggregate(
+            ht=Sum("amount_ht"),
+            tva=Sum("amount_tva"),
+            ttc=Sum("amount_ttc"),
+        )
+    )
+
+    invoices_ht_total = inv_full["ht"] or Decimal("0")
+    invoices_tva_total = inv_full["tva"] or Decimal("0")
+    invoices_ttc_total = inv_full["ttc"] or Decimal("0")
+
+    # ── Payments — confirmed, period ──────────────────────────────────── #
+    payments_total = Payment.objects.filter(
+        status=Payment.Status.CONFIRMED,
+        date__range=[date_from, date_to],
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
     # ── Résultat réel (factures PAYÉES HT − dépenses approuvées) ─────── #
     paid_ht = Invoice.objects.filter(
@@ -111,14 +142,46 @@ def dashboard_kpis(date_from=None, date_to=None):
 
     real_result = paid_ht - expenses_year
 
+    # ── Margins — HT base ─────────────────────────────────────────────── #
+    # profit             : billed HT    − approved costs
+    # current_margin     : cash received − approved costs
+    # theoretical_margin : total HT     − all costs (approved + non-approved)
+    profit = invoices_ht_total - expenses_year
+    current_margin = payments_total - expenses_year
+    theoretical_margin = invoices_ht_total - expenses_year_total
+
+    # ── Margins — TTC base ────────────────────────────────────────────── #
+    # payments are already TTC amounts, so current_margin_ttc == current_margin
+    profit_ttc = invoices_ttc_total - expenses_year
+    current_margin_ttc = payments_total - expenses_year
+    theoretical_margin_ttc = invoices_ttc_total - expenses_year_total
+
     return {
         # Revenue
         "ca_ht": total_ht,
         "ca_formation_ht": inv_year["formation_ht"] or Decimal("0"),
         "ca_etude_ht": inv_year["etude_ht"] or Decimal("0"),
         "collected_year": collected_year,
-        "expenses_year": expenses_year,
-        "gross_margin": total_ht - expenses_year,
+        # Expenses
+        "expenses_year": expenses_year,  # approved only
+        "expenses_year_total": expenses_year_total,  # all statuses
+        "expenses_year_non_approved": expenses_year_non_approved,  # pending + rejected
+        "expenses_need_action": expenses_action,
+        # Invoices full breakdown
+        "invoices_ht_total": invoices_ht_total,
+        "invoices_tva_total": invoices_tva_total,
+        "invoices_ttc_total": invoices_ttc_total,
+        # Payments
+        "payments_total": payments_total,
+        # Margins — HT base
+        "gross_margin": total_ht - expenses_year,  # legacy alias
+        "profit": profit,
+        "current_margin": current_margin,
+        "theoretical_margin": theoretical_margin,
+        # Margins — TTC base
+        "profit_ttc": profit_ttc,
+        "current_margin_ttc": current_margin_ttc,
+        "theoretical_margin_ttc": theoretical_margin_ttc,
         # Outstanding
         "outstanding_count": outstanding["count"] or 0,
         "outstanding_total": outstanding["total"] or Decimal("0"),
@@ -130,7 +193,6 @@ def dashboard_kpis(date_from=None, date_to=None):
         "sessions_completed_year": sessions["completed_year"] or 0,
         "projects_active": projects["active"] or 0,
         "projects_overdue": projects["overdue"] or 0,
-        "expenses_need_action": expenses_action,
         # Résultat réel
         "paid_ht": paid_ht,
         "real_result": real_result,
