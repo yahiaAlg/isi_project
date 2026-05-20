@@ -63,10 +63,10 @@ def dashboard_kpis(date_from=None, date_to=None):
     )
 
     # ── Formations actives (référencées dans des lignes de facture) ───── #
-    from financial.models import InvoiceLine
+    from financial.models import InvoiceItem
 
     active_formations_count = (
-        InvoiceLine.objects.filter(
+        InvoiceItem.objects.filter(
             invoice__phase=Invoice.Phase.FINALE,
             invoice__invoice_date__range=[date_from, date_to],
         )
