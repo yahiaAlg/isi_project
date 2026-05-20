@@ -154,6 +154,7 @@
             <div>
               <div class="stat-value">{{ kpis.gross_margin|floatformat:0 }} DA</div>
               <div class="stat-label">Marge brute</div>
+              <div class="kpi-trend" style="font-size:11px;color:#94a3b8;">CA HT − dépenses approuvées</div>
             </div>
           </div>
         </div>
@@ -201,7 +202,7 @@
   <!-- Secondary KPI row -->
   <div class="row g-3 mb-4">
 
-    <div class="col-sm-4">
+    <div class="col-sm-6 col-lg">
       <a href="{% url 'formations:session_list' %}" style="text-decoration:none;">
         <div class="isi-card h-100">
           <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
@@ -218,7 +219,22 @@
       </a>
     </div>
 
-    <div class="col-sm-4">
+    <div class="col-sm-6 col-lg">
+      <a href="{% url 'formations:formation_list' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+            <div class="card-icon green" style="width:40px;height:40px;font-size:18px;border-radius:10px;"><i class="bi bi-mortarboard-fill"></i></div>
+            <div>
+              <div class="stat-value" style="font-size:20px;">{{ kpis.active_formations_count }}</div>
+              <div class="stat-label">Formations facturées</div>
+              <div class="kpi-trend" style="font-size:11px;color:#94a3b8;">Référencées en factures</div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg">
       <a href="{% url 'etudes:project_list' %}" style="text-decoration:none;">
         <div class="isi-card h-100">
           <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
@@ -235,7 +251,7 @@
       </a>
     </div>
 
-    <div class="col-sm-4">
+    <div class="col-sm-6 col-lg">
       <a href="{% url 'financial:expense_list' %}" style="text-decoration:none;">
         <div class="isi-card h-100">
           <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
@@ -243,6 +259,39 @@
             <div>
               <div class="stat-value" style="font-size:20px;">{{ kpis.expenses_need_action }}</div>
               <div class="stat-label">Dépenses à traiter</div>
+              <div class="kpi-trend" style="font-size:11px;color:#94a3b8;">{{ kpis.expenses_need_action_total|floatformat:0 }} DA</div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg">
+      <a href="{% url 'reporting:pending_expenses_report' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+            <div class="card-icon amber" style="width:40px;height:40px;font-size:18px;border-radius:10px;"><i class="bi bi-hourglass-split"></i></div>
+            <div>
+              <div class="stat-value" style="font-size:20px;color:#f59e0b;">{{ kpis.expenses_non_approved_count }}</div>
+              <div class="stat-label">Non approuvées</div>
+              <div class="kpi-trend" style="font-size:11px;color:#94a3b8;">{{ kpis.expenses_year_non_approved|floatformat:0 }} DA</div>
+              <div class="kpi-trend" style="font-size:11px;color:#94a3b8;">en attente / rejetées</div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg">
+      <a href="{% url 'reporting:expense_breakdown_report' %}" style="text-decoration:none;">
+        <div class="isi-card h-100">
+          <div class="isi-card-body" style="display:flex;align-items:center;gap:16px;padding:16px 20px;">
+            <div class="card-icon" style="width:40px;height:40px;font-size:18px;border-radius:10px;background:rgba(148,163,184,.15);color:#64748b;display:flex;align-items:center;justify-content:center;"><i class="bi bi-receipt"></i></div>
+            <div>
+              <div class="stat-value" style="font-size:20px;color:#64748b;">{{ kpis.expenses_total_count }}</div>
+              <div class="stat-label">Toutes dépenses</div>
+              <div class="kpi-trend" style="font-size:11px;color:#94a3b8;">{{ kpis.expenses_year_total|floatformat:0 }} DA</div>
+              <div class="kpi-trend" style="font-size:11px;color:#94a3b8;">approuvées + en attente</div>
             </div>
           </div>
         </div>
@@ -315,11 +364,11 @@
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
             <div>
-              <div style="font-size:13px;color:var(--text-muted);">Marge courante</div>
-              <div style="font-size:11px;color:#94a3b8;">encaissé − dépenses approuvées</div>
+              <div style="font-size:13px;color:var(--text-muted);">Résultat réel</div>
+              <div style="font-size:11px;color:#94a3b8;">facturé payé HT − dépenses approuvées</div>
             </div>
-            <span style="font-weight:600;font-size:13.5px;{% if kpis.current_margin < 0 %}color:#ef4444;{% endif %}">
-              {{ kpis.current_margin|floatformat:0 }} DA
+            <span style="font-weight:600;font-size:13.5px;{% if kpis.real_result < 0 %}color:#ef4444;{% endif %}">
+              {{ kpis.real_result|floatformat:0 }} DA
             </span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">

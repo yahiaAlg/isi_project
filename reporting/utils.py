@@ -62,6 +62,21 @@ def dashboard_kpis(date_from=None, date_to=None):
         overdue_total=Sum("amount_remaining", filter=Q(due_date__lt=today)),
     )
 
+    # ── Formations actives (référencées dans des lignes de facture) ───── #
+    from financial.models import InvoiceLine
+
+    active_formations_count = (
+        InvoiceLine.objects.filter(
+            invoice__phase=Invoice.Phase.FINALE,
+            invoice__invoice_date__range=[date_from, date_to],
+        )
+        .exclude(invoice__status=Invoice.Status.VOIDED)
+        .filter(linked_formation__isnull=False)
+        .values("linked_formation")
+        .distinct()
+        .count()
+    )
+
     # ── Sessions ──────────────────────────────────────────────────────── #
     sessions = Session.objects.aggregate(
         upcoming=Count(
@@ -89,23 +104,40 @@ def dashboard_kpis(date_from=None, date_to=None):
         ),
     )
 
-    # ── Expenses (year — approved) ────────────────────────────────────── #
-    expenses_year = Expense.objects.filter(
+    # -- Expenses (year - approved) --
+    exp_approved = Expense.objects.filter(
         date__range=[date_from, date_to],
         approval_status=Expense.ApprovalStatus.APPROVED,
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    ).aggregate(total=Sum("amount"), count=Count("pk"))
+    expenses_year = exp_approved["total"] or Decimal("0")
+    expenses_approved_count = exp_approved["count"] or 0
 
-    # ── Expenses (year — all) ─────────────────────────────────────────── #
-    expenses_year_total = Expense.objects.filter(
+    # -- Expenses (year - all) --
+    exp_all = Expense.objects.filter(
         date__range=[date_from, date_to],
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    ).aggregate(total=Sum("amount"), count=Count("pk"))
+    expenses_year_total = exp_all["total"] or Decimal("0")
+    expenses_total_count = exp_all["count"] or 0
 
-    expenses_year_non_approved = expenses_year_total - expenses_year
+    # -- Expenses (year - non-approved) --
+    exp_non_approved = (
+        Expense.objects.filter(
+            date__range=[date_from, date_to],
+        )
+        .exclude(
+            approval_status=Expense.ApprovalStatus.APPROVED,
+        )
+        .aggregate(total=Sum("amount"), count=Count("pk"))
+    )
+    expenses_year_non_approved = exp_non_approved["total"] or Decimal("0")
+    expenses_non_approved_count = exp_non_approved["count"] or 0
 
-    # ── Expenses needing action ───────────────────────────────────────── #
-    expenses_action = Expense.objects.filter(
+    # -- Expenses needing action --
+    _exp_action = Expense.objects.filter(
         Q(receipt_missing=True) | Q(approval_status=Expense.ApprovalStatus.PENDING)
-    ).count()
+    ).aggregate(count=Count("pk"), total=Sum("amount"))
+    expenses_action = _exp_action["count"] or 0
+    expenses_action_total = _exp_action["total"] or Decimal("0")
 
     total_ht = inv_year["total_ht"] or Decimal("0")
 
@@ -163,10 +195,14 @@ def dashboard_kpis(date_from=None, date_to=None):
         "ca_etude_ht": inv_year["etude_ht"] or Decimal("0"),
         "collected_year": collected_year,
         # Expenses
-        "expenses_year": expenses_year,  # approved only
-        "expenses_year_total": expenses_year_total,  # all statuses
-        "expenses_year_non_approved": expenses_year_non_approved,  # pending + rejected
+        "expenses_year": expenses_year,
+        "expenses_approved_count": expenses_approved_count,
+        "expenses_year_total": expenses_year_total,
+        "expenses_total_count": expenses_total_count,
+        "expenses_year_non_approved": expenses_year_non_approved,
+        "expenses_non_approved_count": expenses_non_approved_count,
         "expenses_need_action": expenses_action,
+        "expenses_need_action_total": expenses_action_total,
         # Invoices full breakdown
         "invoices_ht_total": invoices_ht_total,
         "invoices_tva_total": invoices_tva_total,
@@ -188,6 +224,7 @@ def dashboard_kpis(date_from=None, date_to=None):
         "overdue_count": outstanding["overdue_count"] or 0,
         "overdue_total": outstanding["overdue_total"] or Decimal("0"),
         # Operations
+        "active_formations_count": active_formations_count,
         "sessions_upcoming": sessions["upcoming"] or 0,
         "sessions_in_progress": sessions["in_progress"] or 0,
         "sessions_completed_year": sessions["completed_year"] or 0,
