@@ -62,19 +62,13 @@ def dashboard_kpis(date_from=None, date_to=None):
         overdue_total=Sum("amount_remaining", filter=Q(due_date__lt=today)),
     )
 
-    # ── Formations actives (référencées dans des factures de la période) ─ #
-    active_formations_count = (
-        Invoice.objects.filter(
-            phase=Invoice.Phase.FINALE,
-            invoice_date__range=[date_from, date_to],
-            invoice_type=Invoice.InvoiceType.FORMATION,
-            session__isnull=False,
-        )
-        .exclude(status=Invoice.Status.VOIDED)
-        .values("session__formation")
-        .distinct()
-        .count()
-    )
+    # ── Formations actives (is_active + base_price > 0) ──────────────── #
+    from formations.models import Formation
+
+    active_formations_count = Formation.objects.filter(
+        is_active=True,
+        base_price__gt=0,
+    ).count()
 
     # ── Sessions ──────────────────────────────────────────────────────── #
     sessions = Session.objects.aggregate(
