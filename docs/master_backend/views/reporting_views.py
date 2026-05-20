@@ -80,6 +80,9 @@ def dashboard(request):
     from formations.models import Session
     from etudes.models import StudyProject
 
+    # ── Date-range filter (admin only) ──────────────────────────────── #
+    date_from, date_to = _parse_date_range(request) if is_admin else (None, None)
+
     ctx = {
         "is_admin": is_admin,
         "upcoming_sessions": (
@@ -101,7 +104,9 @@ def dashboard(request):
         from financial.models import Invoice
         from resources.models import Equipment
 
-        ctx["kpis"] = dashboard_kpis()
+        ctx["kpis"] = dashboard_kpis(date_from=date_from, date_to=date_to)
+        ctx["date_from"] = date_from
+        ctx["date_to"] = date_to
         ctx["unpaid_invoices"] = (
             Invoice.objects.filter(
                 status__in=[Invoice.Status.UNPAID, Invoice.Status.PARTIALLY_PAID]
@@ -1736,7 +1741,7 @@ def export_clients_csv(request):
 
 @admin_required
 def chart_revenue_trend(request):
-    date_from, date_to = _current_year_range()
+    date_from, date_to = _parse_date_range(request)
     monthly = _monthly_revenue(date_from, date_to)
     return JsonResponse(
         {
@@ -1757,7 +1762,7 @@ def chart_revenue_trend(request):
 def chart_business_line_split(request):
     from financial.utils import revenue_summary as _rev
 
-    date_from, date_to = _current_year_range()
+    date_from, date_to = _parse_date_range(request)
     return JsonResponse(
         {
             "formation_ht": _float(
@@ -1829,7 +1834,7 @@ def chart_session_fill_rates(request):
 def chart_expense_by_category(request):
     from financial.models import Expense
 
-    date_from, date_to = _current_year_range()
+    date_from, date_to = _parse_date_range(request)
     data = (
         Expense.objects.filter(
             date__range=[date_from, date_to],
@@ -1853,7 +1858,7 @@ def chart_expense_by_category(request):
 def chart_top_clients(request):
     from financial.utils import top_clients_by_revenue
 
-    date_from, date_to = _current_year_range()
+    date_from, date_to = _parse_date_range(request)
     clients = top_clients_by_revenue(limit=10, date_from=date_from, date_to=date_to)
     return JsonResponse(
         {
@@ -1878,7 +1883,7 @@ def chart_project_status(request):
 def chart_monthly_participants(request):
     from formations.models import Participant
 
-    date_from, date_to = _current_year_range()
+    date_from, date_to = _parse_date_range(request)
     data = (
         Participant.objects.filter(
             session__date_start__range=[date_from, date_to], session__status="completed"
@@ -1916,7 +1921,7 @@ def chart_equipment_status(request):
 def chart_trainer_workload(request):
     from formations.models import Trainer, Session
 
-    date_from, date_to = _current_year_range()
+    date_from, date_to = _parse_date_range(request)
     trainers = (
         Trainer.objects.filter(is_active=True)
         .annotate(
@@ -1944,7 +1949,7 @@ def chart_trainer_workload(request):
 def chart_cash_flow(request):
     from financial.models import Expense, Payment
 
-    date_from, date_to = _current_year_range()
+    date_from, date_to = _parse_date_range(request)
     c_map = {
         r["month"].strftime("%Y-%m"): _float(r["total"])
         for r in Payment.objects.filter(
@@ -1984,7 +1989,7 @@ def chart_cash_flow(request):
 def chart_formation_category_split(request):
     from formations.models import FormationCategory, Session
 
-    date_from, date_to = _current_year_range()
+    date_from, date_to = _parse_date_range(request)
     cats = FormationCategory.objects.annotate(
         session_count=Count(
             "formations__sessions",

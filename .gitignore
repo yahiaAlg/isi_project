@@ -8,7 +8,7 @@ db.sqlite3
 db.sqlite3-journal
 media/
 staticfiles/
-docs/
+docs/*
 # Environments
 .env
 .venv
@@ -17,7 +17,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
 # IDE
 .vscode/
 .idea/

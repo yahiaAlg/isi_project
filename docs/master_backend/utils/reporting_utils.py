@@ -9,10 +9,12 @@ from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 
 
-def dashboard_kpis():
+def dashboard_kpis(date_from=None, date_to=None):
     """
     Compute all KPIs needed by the dashboard in as few queries as possible.
     Returns a flat dict consumed directly by the dashboard template context.
+    Accepts optional date_from / date_to to filter the period (defaults to
+    current calendar year).
     """
     from clients.models import Client
     from etudes.models import StudyProject
@@ -21,13 +23,15 @@ def dashboard_kpis():
 
     today = date.today()
 
-    # ── Revenue (current year) ────────────────────────────────────────── #
+    # ── Period bounds ──────────────────────────────────────────────────── #
     year_start = date(today.year, 1, 1)
     year_end = date(today.year, 12, 31)
+    date_from = date_from or year_start
+    date_to = date_to or year_end
 
     inv_year = Invoice.objects.filter(
         phase=Invoice.Phase.FINALE,
-        invoice_date__range=[year_start, year_end],
+        invoice_date__range=[date_from, date_to],
         status__in=[
             Invoice.Status.UNPAID,
             Invoice.Status.PARTIALLY_PAID,
@@ -43,7 +47,7 @@ def dashboard_kpis():
 
     # ── Collections ───────────────────────────────────────────────────── #
     collected_year = Payment.objects.filter(
-        date__range=[year_start, year_end],
+        date__range=[date_from, date_to],
         status=Payment.Status.CONFIRMED,
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
@@ -58,6 +62,21 @@ def dashboard_kpis():
         overdue_total=Sum("amount_remaining", filter=Q(due_date__lt=today)),
     )
 
+    # ── Formations actives (référencées dans des lignes de facture) ───── #
+    from financial.models import InvoiceItem
+
+    active_formations_count = (
+        InvoiceItem.objects.filter(
+            invoice__phase=Invoice.Phase.FINALE,
+            invoice__invoice_date__range=[date_from, date_to],
+        )
+        .exclude(invoice__status=Invoice.Status.VOIDED)
+        .filter(linked_formation__isnull=False)
+        .values("linked_formation")
+        .distinct()
+        .count()
+    )
+
     # ── Sessions ──────────────────────────────────────────────────────── #
     sessions = Session.objects.aggregate(
         upcoming=Count(
@@ -68,7 +87,7 @@ def dashboard_kpis():
             "pk",
             filter=Q(
                 status=Session.STATUS_COMPLETED,
-                date_start__range=[year_start, year_end],
+                date_start__range=[date_from, date_to],
             ),
         ),
     )
@@ -85,18 +104,89 @@ def dashboard_kpis():
         ),
     )
 
-    # ── Expenses (year) ───────────────────────────────────────────────── #
-    expenses_year = Expense.objects.filter(
-        date__range=[year_start, year_end],
+    # -- Expenses (year - approved) --
+    exp_approved = Expense.objects.filter(
+        date__range=[date_from, date_to],
         approval_status=Expense.ApprovalStatus.APPROVED,
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    ).aggregate(total=Sum("amount"), count=Count("pk"))
+    expenses_year = exp_approved["total"] or Decimal("0")
+    expenses_approved_count = exp_approved["count"] or 0
 
-    # ── Expenses needing action ───────────────────────────────────────── #
-    expenses_action = Expense.objects.filter(
+    # -- Expenses (year - all) --
+    exp_all = Expense.objects.filter(
+        date__range=[date_from, date_to],
+    ).aggregate(total=Sum("amount"), count=Count("pk"))
+    expenses_year_total = exp_all["total"] or Decimal("0")
+    expenses_total_count = exp_all["count"] or 0
+
+    # -- Expenses (year - non-approved) --
+    exp_non_approved = (
+        Expense.objects.filter(
+            date__range=[date_from, date_to],
+        )
+        .exclude(
+            approval_status=Expense.ApprovalStatus.APPROVED,
+        )
+        .aggregate(total=Sum("amount"), count=Count("pk"))
+    )
+    expenses_year_non_approved = exp_non_approved["total"] or Decimal("0")
+    expenses_non_approved_count = exp_non_approved["count"] or 0
+
+    # -- Expenses needing action --
+    _exp_action = Expense.objects.filter(
         Q(receipt_missing=True) | Q(approval_status=Expense.ApprovalStatus.PENDING)
-    ).count()
+    ).aggregate(count=Count("pk"), total=Sum("amount"))
+    expenses_action = _exp_action["count"] or 0
+    expenses_action_total = _exp_action["total"] or Decimal("0")
 
     total_ht = inv_year["total_ht"] or Decimal("0")
+
+    # ── Invoices — full breakdown (finale, non-voided, period) ────────── #
+    inv_full = (
+        Invoice.objects.filter(
+            phase=Invoice.Phase.FINALE,
+            invoice_date__range=[date_from, date_to],
+        )
+        .exclude(status=Invoice.Status.VOIDED)
+        .aggregate(
+            ht=Sum("amount_ht"),
+            tva=Sum("amount_tva"),
+            ttc=Sum("amount_ttc"),
+        )
+    )
+
+    invoices_ht_total = inv_full["ht"] or Decimal("0")
+    invoices_tva_total = inv_full["tva"] or Decimal("0")
+    invoices_ttc_total = inv_full["ttc"] or Decimal("0")
+
+    # ── Payments — confirmed, period ──────────────────────────────────── #
+    payments_total = Payment.objects.filter(
+        status=Payment.Status.CONFIRMED,
+        date__range=[date_from, date_to],
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    # ── Résultat réel (factures PAYÉES HT − dépenses approuvées) ─────── #
+    paid_ht = Invoice.objects.filter(
+        phase=Invoice.Phase.FINALE,
+        status=Invoice.Status.PAID,
+        invoice_date__range=[date_from, date_to],
+    ).aggregate(total=Sum("amount_ht"))["total"] or Decimal("0")
+
+    real_result = paid_ht - expenses_year
+
+    # ── Margins — HT base ─────────────────────────────────────────────── #
+    # profit             : billed HT    − approved costs
+    # current_margin     : cash received − approved costs
+    # theoretical_margin : total HT     − all costs (approved + non-approved)
+    profit = invoices_ht_total - expenses_year
+    current_margin = payments_total - expenses_year
+    theoretical_margin = invoices_ht_total - expenses_year_total
+
+    # ── Margins — TTC base ────────────────────────────────────────────── #
+    # payments are already TTC amounts, so current_margin_ttc == current_margin
+    profit_ttc = invoices_ttc_total - expenses_year
+    current_margin_ttc = payments_total - expenses_year
+    theoretical_margin_ttc = invoices_ttc_total - expenses_year_total
 
     return {
         # Revenue
@@ -104,20 +194,45 @@ def dashboard_kpis():
         "ca_formation_ht": inv_year["formation_ht"] or Decimal("0"),
         "ca_etude_ht": inv_year["etude_ht"] or Decimal("0"),
         "collected_year": collected_year,
+        # Expenses
         "expenses_year": expenses_year,
-        "gross_margin": total_ht - expenses_year,
+        "expenses_approved_count": expenses_approved_count,
+        "expenses_year_total": expenses_year_total,
+        "expenses_total_count": expenses_total_count,
+        "expenses_year_non_approved": expenses_year_non_approved,
+        "expenses_non_approved_count": expenses_non_approved_count,
+        "expenses_need_action": expenses_action,
+        "expenses_need_action_total": expenses_action_total,
+        # Invoices full breakdown
+        "invoices_ht_total": invoices_ht_total,
+        "invoices_tva_total": invoices_tva_total,
+        "invoices_ttc_total": invoices_ttc_total,
+        # Payments
+        "payments_total": payments_total,
+        # Margins — HT base
+        "gross_margin": total_ht - expenses_year,  # legacy alias
+        "profit": profit,
+        "current_margin": current_margin,
+        "theoretical_margin": theoretical_margin,
+        # Margins — TTC base
+        "profit_ttc": profit_ttc,
+        "current_margin_ttc": current_margin_ttc,
+        "theoretical_margin_ttc": theoretical_margin_ttc,
         # Outstanding
         "outstanding_count": outstanding["count"] or 0,
         "outstanding_total": outstanding["total"] or Decimal("0"),
         "overdue_count": outstanding["overdue_count"] or 0,
         "overdue_total": outstanding["overdue_total"] or Decimal("0"),
         # Operations
+        "active_formations_count": active_formations_count,
         "sessions_upcoming": sessions["upcoming"] or 0,
         "sessions_in_progress": sessions["in_progress"] or 0,
         "sessions_completed_year": sessions["completed_year"] or 0,
         "projects_active": projects["active"] or 0,
         "projects_overdue": projects["overdue"] or 0,
-        "expenses_need_action": expenses_action,
+        # Résultat réel
+        "paid_ht": paid_ht,
+        "real_result": real_result,
     }
 
 
