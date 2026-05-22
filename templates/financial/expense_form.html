@@ -204,16 +204,31 @@
                 {% endif %}
               </div>
 
-              <!-- Live-computed IRG preview -->
+              <!-- TVA rate field -->
               <div class="col-md-4">
-                <label class="form-label">Aperçu coût total</label>
+                <label class="form-label" for="{{ form.tva_rate.id_for_label }}">Taux TVA</label>
+                {{ form.tva_rate }}
+                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">{{ form.tva_rate.help_text }}</div>
+                {% if form.tva_rate.errors %}
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.tva_rate.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <!-- Live-computed preview (IRG + TVA) -->
+              <div class="col-md-4">
+                <label class="form-label">Aperçu montants</label>
                 <div style="background:#f8fafc;border:1px solid var(--card-border);border-radius:8px;
                             padding:8px 14px;min-height:40px;">
                   <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:12px;color:var(--text-muted);">TVA (déduite du TTC)</span>
+                    <span id="preview-tva" style="font-weight:600;font-size:13px;color:#3b82f6;">— DA</span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
                     <span style="font-size:12px;color:var(--text-muted);">IRG versé à l'État</span>
                     <span id="preview-irg" style="font-weight:600;font-size:13px;color:var(--warning);">— DA</span>
                   </div>
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;
+                              border-top:1px solid var(--card-border);padding-top:4px;">
                     <span style="font-size:12px;color:var(--text-muted);">Coût total organisme</span>
                     <span id="preview-net" style="font-weight:700;font-size:14px;color:var(--success);">— DA</span>
                   </div>
@@ -886,27 +901,35 @@
     }
   }
 
-  /* ── IRG preview ────────────────────────────────────────── */
-  function updateIRGPreview() {
-    const gross = parseFloat(grossAmountInput ? grossAmountInput.value : 0) || 0;
-    const rate  = parseFloat(irgRateInput ? irgRateInput.value : 0) || 0;
-    const irg   = Math.round(gross * rate * 100) / 100;
-    const net   = Math.round((gross + irg) * 100) / 100;
-    const fmt   = n => n.toLocaleString('fr-DZ', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DA';
+  /* ── IRG + TVA preview ──────────────────────────────────── */
+  const tvaRateInput = document.getElementById('id_tva_rate');
 
+  function updateIRGPreview() {
+    const gross    = parseFloat(grossAmountInput ? grossAmountInput.value : 0) || 0;
+    const irgRate  = parseFloat(irgRateInput ? irgRateInput.value : 0) || 0;
+    const tvaRate  = parseFloat(tvaRateInput ? tvaRateInput.value : 0) || 0;
+    const irg      = Math.round(gross * irgRate * 100) / 100;
+    const net      = Math.round((gross + irg) * 100) / 100;
+    // TVA extracted from TTC: tva = gross * rate / (1 + rate)
+    const tva      = tvaRate > 0 ? Math.round((gross * tvaRate / (1 + tvaRate)) * 100) / 100 : 0;
+    const fmt      = n => n.toLocaleString('fr-DZ', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DA';
+
+    const prevTva = document.getElementById('preview-tva');
     const prevIrg = document.getElementById('preview-irg');
     const prevNet = document.getElementById('preview-net');
+    if (prevTva) prevTva.textContent = tva > 0 ? fmt(tva) : '0,00 DA';
     if (prevIrg) prevIrg.textContent = irg > 0 ? ('+ ' + fmt(irg)) : '0,00 DA';
     if (prevNet) prevNet.textContent = gross > 0 ? fmt(net) : '— DA';
 
     document.getElementById('side-gross')      && (document.getElementById('side-gross').textContent = gross > 0 ? fmt(gross) : '—');
-    document.getElementById('side-irg-rate')   && (document.getElementById('side-irg-rate').textContent = rate > 0 ? (rate * 100).toFixed(0) + ' %' : '0 %');
+    document.getElementById('side-irg-rate')   && (document.getElementById('side-irg-rate').textContent = irgRate > 0 ? (irgRate * 100).toFixed(0) + ' %' : '0 %');
     document.getElementById('side-irg-amount') && (document.getElementById('side-irg-amount').textContent = irg > 0 ? ('+ ' + fmt(irg)) : '0,00 DA');
     document.getElementById('side-net')        && (document.getElementById('side-net').textContent = gross > 0 ? fmt(net) : '—');
   }
 
   if (grossAmountInput) grossAmountInput.addEventListener('input', updateIRGPreview);
   if (irgRateInput)     irgRateInput.addEventListener('input', updateIRGPreview);
+  if (tvaRateInput)     tvaRateInput.addEventListener('input', updateIRGPreview);
   updateIRGPreview();
 
   /* ── Beneficiary → accounts + IRG + trainer ─────────────── */

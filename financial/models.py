@@ -1286,6 +1286,29 @@ class Expense(TimeStampedModel):
         verbose_name="Montant IRG (DA)",
         help_text="Calculé automatiquement : montant brut × taux IRG.",
     )
+
+    # ---- TVA (on the TTC expense amount) ----------------------------- #
+    tva_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0"),
+        verbose_name="Taux TVA",
+        help_text=(
+            "Taux TVA applicable sur cette dépense (ex. 0.09 = 9%, 0.19 = 19%). "
+            "Laissez à 0 si exonéré ou inconnu."
+        ),
+    )
+    tva_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal("0"),
+        verbose_name="Montant TVA (DA)",
+        help_text=(
+            "Calculé automatiquement : montant TTC × taux / (1 + taux). "
+            "Représente la TVA récupérable / déductible sur cette dépense."
+        ),
+    )
+
     amount = models.DecimalField(
         max_digits=14,
         decimal_places=2,
@@ -1436,6 +1459,15 @@ class Expense(TimeStampedModel):
             self.gross_amount = self.amount
             self.irg_amount = Decimal("0")
 
+        # Compute TVA extracted from the TTC amount (gross_amount = TTC paid)
+        tva_rate = self.tva_rate or Decimal("0")
+        if tva_rate > 0 and self.gross_amount:
+            self.tva_amount = (self.gross_amount * tva_rate / (1 + tva_rate)).quantize(
+                Decimal("0.01")
+            )
+        else:
+            self.tva_amount = Decimal("0")
+
         # Auto-fill fiscal metadata
         if self.date:
             self.fiscal_year = self.date.year
@@ -1502,6 +1534,15 @@ class Expense(TimeStampedModel):
     @property
     def has_irg(self) -> bool:
         return self.irg_amount > Decimal("0")
+
+    @property
+    def has_tva(self) -> bool:
+        return self.tva_amount > Decimal("0")
+
+    @property
+    def amount_ht(self) -> Decimal:
+        """HT portion of the expense (TTC gross_amount minus TVA)."""
+        return (self.gross_amount or Decimal("0")) - self.tva_amount
 
 
 # ======================================================================= #
@@ -1643,6 +1684,13 @@ class FinancialPeriod(TimeStampedModel):
             date__range=[self.date_start, self.date_end],
             approval_status=Expense.ApprovalStatus.APPROVED,
         ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+
+    @property
+    def total_expense_tva(self) -> Decimal:
+        return Expense.objects.filter(
+            date__range=[self.date_start, self.date_end],
+            approval_status=Expense.ApprovalStatus.APPROVED,
+        ).aggregate(t=Sum("tva_amount"))["t"] or Decimal("0")
 
     @property
     def gross_margin(self) -> Decimal:

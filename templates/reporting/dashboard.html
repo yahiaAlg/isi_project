@@ -321,10 +321,26 @@
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
             <div>
-              <div style="font-size:13px;color:var(--text-muted);">TVA collectée</div>
-              <div style="font-size:11px;color:#94a3b8;">TTC − HT</div>
+              <div style="font-size:13px;color:var(--text-muted);">TVA collectée <span style="font-size:10px;color:#3b82f6;font-weight:600;">ventes</span></div>
+              <div style="font-size:11px;color:#94a3b8;">TTC − HT (factures finales)</div>
             </div>
-            <span style="font-weight:600;font-size:13.5px;">{{ kpis.invoices_tva_total|floatformat:0 }} DA</span>
+            <span style="font-weight:600;font-size:13.5px;color:#3b82f6;">{{ kpis.invoices_tva_total|floatformat:0 }} DA</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">TVA déductible <span style="font-size:10px;color:#f59e0b;font-weight:600;">achats</span></div>
+              <div style="font-size:11px;color:#94a3b8;">TVA récupérée sur dépenses approuvées</div>
+            </div>
+            <span style="font-weight:600;font-size:13.5px;color:#f59e0b;">{{ kpis.expenses_tva_year|floatformat:0 }} DA</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+            <div>
+              <div style="font-size:13px;color:var(--text-muted);">TVA nette à reverser</div>
+              <div style="font-size:11px;color:#94a3b8;">collectée − déductible</div>
+            </div>
+            <span style="font-weight:700;font-size:14px;{% if kpis.tva_net < 0 %}color:#ef4444;{% else %}color:#10b981;{% endif %}">
+              {{ kpis.tva_net|floatformat:0 }} DA
+            </span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
             <div>

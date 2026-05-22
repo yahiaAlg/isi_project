@@ -9,7 +9,6 @@ from decimal import Decimal
 from django.db.models import Q, Sum
 from django.db.models.functions import TruncMonth
 
-
 # ── Reference generation ─────────────────────────────────────────────────── #
 
 
@@ -111,7 +110,9 @@ def revenue_summary(date_from, date_to, invoice_type=None):
         outstanding=Sum("amount_remaining"),
     )
     collected = pay_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    expenses = exp_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    exp_agg = exp_qs.aggregate(total=Sum("amount"), tva=Sum("tva_amount"))
+    expenses = exp_agg["total"] or Decimal("0")
+    expense_tva = exp_agg["tva"] or Decimal("0")
 
     invoiced_ht = totals["invoiced_ht"] or Decimal("0")
     return {
@@ -120,6 +121,7 @@ def revenue_summary(date_from, date_to, invoice_type=None):
         "outstanding": totals["outstanding"] or Decimal("0"),
         "collected": collected,
         "expenses": expenses,
+        "expense_tva": expense_tva,
         "gross_margin": invoiced_ht - expenses,
         "margin_rate": (
             round(((invoiced_ht - expenses) / invoiced_ht) * 100, 1)

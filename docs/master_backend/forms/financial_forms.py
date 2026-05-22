@@ -618,6 +618,7 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             # Amounts & IRG
             "gross_amount",
             "irg_rate",
+            "tva_rate",
             "payment_reference",
             "payment_date",
             # Trainer-specific
@@ -647,6 +648,7 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "supplier": "Fournisseur libre (si non enregistré)",
             "gross_amount": "Montant brut (DA)",
             "irg_rate": "Taux IRG",
+            "tva_rate": "Taux TVA",
             "payment_reference": "Réf. paiement",
             "payment_date": "Date de règlement",
             "trainer_payment_mode": "Mode de paiement formateur",
@@ -673,10 +675,14 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "irg_rate": forms.NumberInput(
                 attrs={"step": "0.01", "min": "0", "max": "1"}
             ),
+            "tva_rate": forms.NumberInput(
+                attrs={"step": "0.01", "min": "0", "max": "1"}
+            ),
         }
         help_texts = {
             "gross_amount": "Montant avant retenue IRG. Si IRG = 0, identique au montant net.",
             "irg_rate": "0 = pas de retenue ; 0.10 = 10% (prestataires externes).",
+            "tva_rate": "0 = exonere ou inconnu ; 0.09 = 9% ; 0.19 = 19%.",
             "g50_month": "Premier jour du mois de déclaration G50 (ex. 2026-01-01).",
             "training_period_label": "Ex. « 22-24/12/2023 » — description libre de la période.",
             "supplier": "Utilisez ce champ uniquement si le bénéficiaire n'est pas enregistré.",
@@ -691,6 +697,7 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "payment_account",
             "supplier",
             "irg_rate",
+            "tva_rate",
             "payment_reference",
             "payment_date",
             "trainer_payment_mode",
@@ -743,6 +750,14 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             return Decimal("0")
         if not (Decimal("0") <= rate <= Decimal("1")):
             raise ValidationError("Le taux IRG doit être compris entre 0 et 1.")
+        return rate
+
+    def clean_tva_rate(self):
+        rate = self.cleaned_data.get("tva_rate")
+        if rate is None:
+            return Decimal("0")
+        if not (Decimal("0") <= rate <= Decimal("1")):
+            raise ValidationError("Le taux TVA doit être compris entre 0 et 1.")
         return rate
 
     def clean_gross_amount(self):

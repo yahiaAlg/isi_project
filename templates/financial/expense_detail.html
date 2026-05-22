@@ -90,17 +90,29 @@
                 {{ expense.amount|floatformat:2 }}
                 <span style="font-size:14px;color:var(--text-muted);font-weight:400;">DA</span>
               </div>
-              {% if expense.has_irg %}
+              {% if expense.has_tva or expense.has_irg %}
               <div style="margin-top:8px;padding:10px 12px;background:rgba(245,158,11,.05);
                           border-radius:8px;border:1px solid rgba(245,158,11,.2);">
                 <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-muted);margin-bottom:4px;">
-                  <span>Montant prestataire</span>
+                  <span>Montant TTC (payé)</span>
                   <span style="font-weight:600;">{{ expense.gross_amount|floatformat:2 }} DA</span>
                 </div>
+                {% if expense.has_tva %}
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#3b82f6;margin-bottom:4px;">
+                  <span>TVA déductible ({% widthratio expense.tva_rate 0.01 1 %}%)</span>
+                  <span style="font-weight:600;">{{ expense.tva_amount|floatformat:2 }} DA</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-muted);margin-bottom:4px;">
+                  <span>Montant HT</span>
+                  <span style="font-weight:600;">{{ expense.amount_ht|floatformat:2 }} DA</span>
+                </div>
+                {% endif %}
+                {% if expense.has_irg %}
                 <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#b45309;margin-bottom:4px;">
                   <span>IRG versé à l'État ({% widthratio expense.irg_rate 0.01 1 %}%)</span>
                   <span style="font-weight:600;">+ {{ expense.irg_amount|floatformat:2 }} DA</span>
                 </div>
+                {% endif %}
                 <div style="border-top:1px solid rgba(245,158,11,.25);padding-top:4px;
                             display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;">
                   <span>Coût total organisme</span>

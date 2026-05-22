@@ -62,20 +62,13 @@ def dashboard_kpis(date_from=None, date_to=None):
         overdue_total=Sum("amount_remaining", filter=Q(due_date__lt=today)),
     )
 
-    # ── Formations actives (référencées dans des lignes de facture) ───── #
-    from financial.models import InvoiceItem
+    # ── Formations actives (is_active + base_price > 0) ──────────────── #
+    from formations.models import Formation
 
-    active_formations_count = (
-        InvoiceItem.objects.filter(
-            invoice__phase=Invoice.Phase.FINALE,
-            invoice__invoice_date__range=[date_from, date_to],
-        )
-        .exclude(invoice__status=Invoice.Status.VOIDED)
-        .filter(linked_formation__isnull=False)
-        .values("linked_formation")
-        .distinct()
-        .count()
-    )
+    active_formations_count = Formation.objects.filter(
+        is_active=True,
+        base_price__gt=0,
+    ).count()
 
     # ── Sessions ──────────────────────────────────────────────────────── #
     sessions = Session.objects.aggregate(
@@ -108,9 +101,10 @@ def dashboard_kpis(date_from=None, date_to=None):
     exp_approved = Expense.objects.filter(
         date__range=[date_from, date_to],
         approval_status=Expense.ApprovalStatus.APPROVED,
-    ).aggregate(total=Sum("amount"), count=Count("pk"))
+    ).aggregate(total=Sum("amount"), count=Count("pk"), tva=Sum("tva_amount"))
     expenses_year = exp_approved["total"] or Decimal("0")
     expenses_approved_count = exp_approved["count"] or 0
+    expenses_tva_year = exp_approved["tva"] or Decimal("0")
 
     # -- Expenses (year - all) --
     exp_all = Expense.objects.filter(
@@ -188,6 +182,9 @@ def dashboard_kpis(date_from=None, date_to=None):
     current_margin_ttc = payments_total - expenses_year
     theoretical_margin_ttc = invoices_ttc_total - expenses_year_total
 
+    # TVA nette à reverser = TVA collectée (ventes) − TVA déductible (achats)
+    tva_net = invoices_tva_total - expenses_tva_year
+
     return {
         # Revenue
         "ca_ht": total_ht,
@@ -207,6 +204,9 @@ def dashboard_kpis(date_from=None, date_to=None):
         "invoices_ht_total": invoices_ht_total,
         "invoices_tva_total": invoices_tva_total,
         "invoices_ttc_total": invoices_ttc_total,
+        # TVA
+        "expenses_tva_year": expenses_tva_year,
+        "tva_net": tva_net,
         # Payments
         "payments_total": payments_total,
         # Margins — HT base
