@@ -688,6 +688,14 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
             "supplier": "Utilisez ce champ uniquement si le bénéficiaire n'est pas enregistré.",
         }
 
+    # Extra non-model field — controls HT↔TTC interpretation
+    amount_is_ttc = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="Montant saisi en TTC",
+        help_text="Cochez si le montant entré est TTC. Décoché = montant HT (défaut).",
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -716,6 +724,10 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
         for f in optional:
             if f in self.fields:
                 self.fields[f].required = False
+
+        # On edit: gross_amount is already stored TTC → pre-tick the checkbox
+        if self.instance and self.instance.pk:
+            self.fields["amount_is_ttc"].initial = True
 
         # Beneficiary — active only
         self.fields["beneficiary"].queryset = (
@@ -773,6 +785,13 @@ class ExpenseForm(ISIFormMixin, forms.ModelForm):
         gross = cleaned.get("gross_amount")
         if gross is None:
             raise ValidationError({"gross_amount": "Le montant brut est requis."})
+
+        # HT → TTC conversion when amount_is_ttc is unchecked
+        amount_is_ttc = cleaned.get("amount_is_ttc", False)
+        tva_rate = cleaned.get("tva_rate") or Decimal("0")
+        if not amount_is_ttc and tva_rate > 0 and gross is not None:
+            # User entered HT — convert to TTC for storage in gross_amount
+            cleaned["gross_amount"] = (gross * (1 + tva_rate)).quantize(Decimal("0.01"))
 
         # Payment account must belong to selected beneficiary
         beneficiary = cleaned.get("beneficiary")

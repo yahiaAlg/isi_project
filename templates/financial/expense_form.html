@@ -183,13 +183,25 @@
 
             <div class="row g-3">
 
+              <!-- Amount field with HT/TTC toggle -->
               <div class="col-md-5">
-                <label class="form-label" for="{{ form.gross_amount.id_for_label }}">Montant brut (DA) *</label>
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+                  <label class="form-label mb-0" for="{{ form.gross_amount.id_for_label }}" id="gross-amount-label">
+                    Montant HT (DA) *
+                  </label>
+                  <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;
+                                color:var(--text-muted);user-select:none;">
+                    {{ form.amount_is_ttc }}
+                    <span id="ttc-toggle-label">saisie TTC</span>
+                  </label>
+                </div>
                 <div class="input-icon-wrap">
                   <i class="bi bi-cash-coin"></i>
                   {{ form.gross_amount }}
                 </div>
-                <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">{{ form.gross_amount.help_text }}</div>
+                <div id="gross-amount-hint" style="font-size:11.5px;color:#94a3b8;margin-top:4px;">
+                  Entrez le montant HT — la TVA sera calculée automatiquement.
+                </div>
                 {% if form.gross_amount.errors %}
                 <div style="color:var(--danger);font-size:12px;margin-top:4px;">{{ form.gross_amount.errors|join:", " }}</div>
                 {% endif %}
@@ -214,24 +226,41 @@
                 {% endif %}
               </div>
 
-              <!-- Live-computed preview (IRG + TVA) -->
-              <div class="col-md-4">
-                <label class="form-label">Aperçu montants</label>
-                <div style="background:#f8fafc;border:1px solid var(--card-border);border-radius:8px;
-                            padding:8px 14px;min-height:40px;">
-                  <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <span style="font-size:12px;color:var(--text-muted);">TVA (déduite du TTC)</span>
-                    <span id="preview-tva" style="font-weight:600;font-size:13px;color:#3b82f6;">— DA</span>
+              <!-- Live-computed preview (HT/TTC toggle + IRG + TVA) -->
+              <div class="col-md-12">
+                <div style="background:#f8fafc;border:1px solid var(--card-border);border-radius:10px;
+                            padding:10px 16px;display:flex;flex-wrap:wrap;gap:0;">
+
+                  <!-- HT -->
+                  <div style="flex:1;min-width:120px;padding:4px 12px 4px 0;border-right:1px solid var(--card-border);">
+                    <div id="preview-ht-label" style="font-size:11px;color:#94a3b8;margin-bottom:2px;">Montant HT</div>
+                    <div id="preview-ht" style="font-weight:700;font-size:14px;color:var(--text);">— DA</div>
                   </div>
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-                    <span style="font-size:12px;color:var(--text-muted);">IRG versé à l'État</span>
-                    <span id="preview-irg" style="font-weight:600;font-size:13px;color:var(--warning);">— DA</span>
+
+                  <!-- TVA -->
+                  <div style="flex:1;min-width:120px;padding:4px 12px;border-right:1px solid var(--card-border);">
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px;">TVA (<span id="preview-tva-pct">0</span>%)</div>
+                    <div id="preview-tva" style="font-weight:600;font-size:14px;color:#3b82f6;">0,00 DA</div>
                   </div>
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;
-                              border-top:1px solid var(--card-border);padding-top:4px;">
-                    <span style="font-size:12px;color:var(--text-muted);">Coût total organisme</span>
-                    <span id="preview-net" style="font-weight:700;font-size:14px;color:var(--success);">— DA</span>
+
+                  <!-- TTC -->
+                  <div style="flex:1;min-width:120px;padding:4px 12px;border-right:1px solid var(--card-border);">
+                    <div id="preview-ttc-label" style="font-size:11px;color:#94a3b8;margin-bottom:2px;">Montant TTC</div>
+                    <div id="preview-ttc" style="font-weight:700;font-size:14px;color:var(--accent);">— DA</div>
                   </div>
+
+                  <!-- IRG -->
+                  <div style="flex:1;min-width:120px;padding:4px 12px 4px 12px;border-right:1px solid var(--card-border);">
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px;">IRG État (<span id="preview-irg-pct">0</span>%)</div>
+                    <div id="preview-irg" style="font-weight:600;font-size:14px;color:var(--warning);">0,00 DA</div>
+                  </div>
+
+                  <!-- Coût total -->
+                  <div style="flex:1;min-width:120px;padding:4px 0 4px 12px;">
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px;">Coût total organisme</div>
+                    <div id="preview-net" style="font-weight:700;font-size:14px;color:var(--success);">— DA</div>
+                  </div>
+
                 </div>
               </div>
 
@@ -901,35 +930,68 @@
     }
   }
 
-  /* ── IRG + TVA preview ──────────────────────────────────── */
-  const tvaRateInput = document.getElementById('id_tva_rate');
+  /* ── Bidirectional HT ↔ TTC preview ─────────────────────── */
+  const tvaRateInput  = document.getElementById('id_tva_rate');
+  const ttcCheckbox   = document.getElementById('id_amount_is_ttc');
+  const amountLabel   = document.getElementById('gross-amount-label');
+  const amountHint    = document.getElementById('gross-amount-hint');
 
-  function updateIRGPreview() {
-    const gross    = parseFloat(grossAmountInput ? grossAmountInput.value : 0) || 0;
-    const irgRate  = parseFloat(irgRateInput ? irgRateInput.value : 0) || 0;
-    const tvaRate  = parseFloat(tvaRateInput ? tvaRateInput.value : 0) || 0;
-    const irg      = Math.round(gross * irgRate * 100) / 100;
-    const net      = Math.round((gross + irg) * 100) / 100;
-    // TVA extracted from TTC: tva = gross * rate / (1 + rate)
-    const tva      = tvaRate > 0 ? Math.round((gross * tvaRate / (1 + tvaRate)) * 100) / 100 : 0;
-    const fmt      = n => n.toLocaleString('fr-DZ', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DA';
-
-    const prevTva = document.getElementById('preview-tva');
-    const prevIrg = document.getElementById('preview-irg');
-    const prevNet = document.getElementById('preview-net');
-    if (prevTva) prevTva.textContent = tva > 0 ? fmt(tva) : '0,00 DA';
-    if (prevIrg) prevIrg.textContent = irg > 0 ? ('+ ' + fmt(irg)) : '0,00 DA';
-    if (prevNet) prevNet.textContent = gross > 0 ? fmt(net) : '— DA';
-
-    document.getElementById('side-gross')      && (document.getElementById('side-gross').textContent = gross > 0 ? fmt(gross) : '—');
-    document.getElementById('side-irg-rate')   && (document.getElementById('side-irg-rate').textContent = irgRate > 0 ? (irgRate * 100).toFixed(0) + ' %' : '0 %');
-    document.getElementById('side-irg-amount') && (document.getElementById('side-irg-amount').textContent = irg > 0 ? ('+ ' + fmt(irg)) : '0,00 DA');
-    document.getElementById('side-net')        && (document.getElementById('side-net').textContent = gross > 0 ? fmt(net) : '—');
+  function updateAmountLabel() {
+    const isTTC = ttcCheckbox && ttcCheckbox.checked;
+    if (amountLabel) amountLabel.textContent = isTTC ? 'Montant TTC (DA) *' : 'Montant HT (DA) *';
+    if (amountHint) amountHint.textContent = isTTC
+      ? 'Montant TTC — la TVA et le HT seront calculés automatiquement.'
+      : 'Montant HT — la TVA et le TTC seront calculés automatiquement.';
   }
 
+  function updateIRGPreview() {
+    const entered  = parseFloat(grossAmountInput ? grossAmountInput.value : 0) || 0;
+    const irgRate  = parseFloat(irgRateInput ? irgRateInput.value : 0) || 0;
+    const tvaRate  = parseFloat(tvaRateInput ? tvaRateInput.value : 0) || 0;
+    const isTTC    = ttcCheckbox && ttcCheckbox.checked;
+    const fmt      = n => n.toLocaleString('fr-DZ', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DA';
+
+    let ht, tva, ttc;
+    if (isTTC) {
+      // User entered TTC — extract HT and TVA
+      ttc = entered;
+      tva = tvaRate > 0 ? Math.round(ttc * tvaRate / (1 + tvaRate) * 100) / 100 : 0;
+      ht  = Math.round((ttc - tva) * 100) / 100;
+    } else {
+      // User entered HT — compute TTC and TVA
+      ht  = entered;
+      tva = tvaRate > 0 ? Math.round(ht * tvaRate * 100) / 100 : 0;
+      ttc = Math.round((ht + tva) * 100) / 100;
+    }
+
+    // IRG applied on TTC (amount actually paid)
+    const irg = Math.round(ttc * irgRate * 100) / 100;
+    const net = Math.round((ttc + irg) * 100) / 100;  // total org cost
+
+    // Update preview bar
+    const el = id => document.getElementById(id);
+    el('preview-ht')      && (el('preview-ht').textContent      = entered > 0 ? fmt(ht)  : '— DA');
+    el('preview-tva')     && (el('preview-tva').textContent     = fmt(tva));
+    el('preview-tva-pct') && (el('preview-tva-pct').textContent = tvaRate > 0 ? (tvaRate * 100).toFixed(0) : '0');
+    el('preview-ttc')     && (el('preview-ttc').textContent     = entered > 0 ? fmt(ttc) : '— DA');
+    el('preview-irg')     && (el('preview-irg').textContent     = irg > 0 ? fmt(irg) : '0,00 DA');
+    el('preview-irg-pct') && (el('preview-irg-pct').textContent = irgRate > 0 ? (irgRate * 100).toFixed(0) : '0');
+    el('preview-net')     && (el('preview-net').textContent     = entered > 0 ? fmt(net) : '— DA');
+
+    // Side panel (if present)
+    el('side-gross')      && (el('side-gross').textContent      = entered > 0 ? fmt(isTTC ? ttc : ht) : '—');
+    el('side-irg-rate')   && (el('side-irg-rate').textContent   = irgRate > 0 ? (irgRate * 100).toFixed(0) + ' %' : '0 %');
+    el('side-irg-amount') && (el('side-irg-amount').textContent = irg > 0 ? fmt(irg) : '0,00 DA');
+    el('side-net')        && (el('side-net').textContent        = entered > 0 ? fmt(net) : '—');
+  }
+
+  if (ttcCheckbox) ttcCheckbox.addEventListener('change', () => { updateAmountLabel(); updateIRGPreview(); });
   if (grossAmountInput) grossAmountInput.addEventListener('input', updateIRGPreview);
   if (irgRateInput)     irgRateInput.addEventListener('input', updateIRGPreview);
   if (tvaRateInput)     tvaRateInput.addEventListener('input', updateIRGPreview);
+
+  // Init
+  updateAmountLabel();
   updateIRGPreview();
 
   /* ── Beneficiary → accounts + IRG + trainer ─────────────── */
