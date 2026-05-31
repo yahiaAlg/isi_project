@@ -323,6 +323,14 @@ class ExpenseCategoryAdmin(ImportExportModelAdmin):
 @admin.register(Expense)
 class ExpenseAdmin(ImportExportModelAdmin):
     resource_class = ExpenseResource
+    actions = ["approve_selected"]
+
+    @admin.action(description="✔ Approuver les dépenses sélectionnées")
+    def approve_selected(self, request, queryset):
+        updated = queryset.exclude(
+            approval_status=Expense.ApprovalStatus.APPROVED
+        ).update(approval_status=Expense.ApprovalStatus.APPROVED)
+        self.message_user(request, f"{updated} dépense(s) approuvée(s).")
 
     list_display = [
         "date",
@@ -334,6 +342,7 @@ class ExpenseAdmin(ImportExportModelAdmin):
         "amount",
         "payment_date",
         "cost_centre_label",
+        "g50_month",
         "approval_status",
         "receipt_missing",
         "needs_action",
@@ -344,6 +353,7 @@ class ExpenseAdmin(ImportExportModelAdmin):
         "receipt_missing",
         "fiscal_year",
         "quarter",
+        "g50_month",
     ]
     search_fields = ["description", "supplier", "beneficiary__name"]
     raw_id_fields = [
